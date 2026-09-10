@@ -21,6 +21,7 @@ export interface Database {
           id: string;
         };
         Update: Partial<Database["public"]["Tables"]["profiles"]["Row"]>;
+        Relationships: [];
       };
       cards: {
         Row: {
@@ -35,6 +36,7 @@ export interface Database {
           profile_id: string;
         };
         Update: Partial<Database["public"]["Tables"]["cards"]["Row"]>;
+        Relationships: [];
       };
       connections: {
         Row: {
@@ -48,6 +50,7 @@ export interface Database {
           connected_user_id: string;
         };
         Update: Partial<Database["public"]["Tables"]["connections"]["Row"]>;
+        Relationships: [];
       };
       posts: {
         Row: {
@@ -65,6 +68,7 @@ export interface Database {
           post_type: PostType;
         };
         Update: Partial<Database["public"]["Tables"]["posts"]["Row"]>;
+        Relationships: [];
       };
     };
   };

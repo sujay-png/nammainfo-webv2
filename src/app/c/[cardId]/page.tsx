@@ -5,7 +5,7 @@ import { createPublicClient } from "@/lib/supabase/server";
 import CardPreview from "@/components/CardPreview";
 import ContactButtons from "@/components/ContactButtons";
 import AppCta from "@/components/AppCta";
-import type { Profile } from "@/lib/supabase/types";
+import type { Card, Profile } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
 
@@ -17,12 +17,16 @@ async function getCardAndProfile(cardId: string) {
       cardId
     );
 
-  const { data: card } = await supabase
+  const { data: cardRow } = await supabase
     .from("cards")
     .select("*")
     .eq(isUuid ? "id" : "public_slug", cardId)
     .maybeSingle();
 
+  // Cast to the concrete row type — Supabase's generic `.select("*")`
+  // result type doesn't always narrow cleanly through this project's
+  // hand-written Database type.
+  const card = cardRow as Card | null;
   if (!card || !card.is_active) return null;
 
   const { data: profile } = await supabase
