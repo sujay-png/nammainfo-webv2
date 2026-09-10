@@ -19,5 +19,5 @@ export function profileDeepLink(profileId: string) {
 }
 
 export function cardUniversalLink(cardSlugOrId: string) {
-  return `${siteUrl}/c/${cardSlugOrId}`;
+  return `${siteUrl}/${cardSlugOrId}`;
 }
