@@ -30,7 +30,7 @@ export default function CardPageView({
           Save Contact (.vcf)
         </a>
 
-        <AppCta profileId={profile.id} />
+        <AppCta profileId={profile.id} cardSlug={card.public_slug} />
       </div>
 
       {profile.website && (
