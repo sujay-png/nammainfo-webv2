@@ -1,225 +1,363 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import type { Profile } from "@/lib/supabase/types";
+import { slugify } from "@/lib/utils";
+import {
+  ArrowRight,
+  Loader2,
+  CheckCircle2,
+  User,
+  Building2,
+  Briefcase,
+  Phone,
+  Globe,
+  MapPin,
+} from "lucide-react";
 
-type SavedConnectionState = "idle" | "saving" | "saved" | "skipped";
-
-function OnboardingForm() {
+export default function OnboardingPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const ref = searchParams.get("ref");
+  const [step, setStep] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(
+    null
+  );
+  const [checkingUsername, setCheckingUsername] = useState(false);
 
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [connectionState, setConnectionState] = useState<SavedConnectionState>("idle");
-  const [connectedBusinessName, setConnectedBusinessName] = useState<string | null>(null);
-
-  const [businessName, setBusinessName] = useState("");
-  const [ownerName, setOwnerName] = useState("");
-  const [jobTitle, setJobTitle] = useState("");
-  const [phone, setPhone] = useState("");
-  const [website, setWebsite] = useState("");
-  const [bio, setBio] = useState("");
-  const [cardSlug, setCardSlug] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    owner_name: "",
+    business_name: "",
+    job_title: "",
+    phone: "",
+    email: "",
+    website: "",
+    address: "",
+    username: "",
+    bio: "",
+  });
 
   useEffect(() => {
+    // Pre-fill email from auth
     (async () => {
       const supabase = createClient();
       const {
         data: { user },
       } = await supabase.auth.getUser();
-
-      if (!user) {
-        router.replace(`/signup${ref ? `?ref=${encodeURIComponent(ref)}` : ""}`);
-        return;
+      if (user?.email) {
+        setForm((f) => ({ ...f, email: user.email! }));
       }
-
-      // The signup trigger already created a profile + card row for this
-      // user — just load it to prefill the form.
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (profile) {
-        const p = profile as Profile;
-        setBusinessName(p.business_name ?? "");
-        setOwnerName(p.owner_name ?? "");
-        setJobTitle(p.job_title ?? "");
-        setPhone(p.phone ?? "");
-        setWebsite(p.website ?? "");
-        setBio(p.bio ?? "");
-      }
-
-      const { data: card } = await supabase
-        .from("cards")
-        .select("public_slug")
-        .eq("profile_id", user.id)
-        .maybeSingle();
-      if (card) setCardSlug((card as { public_slug: string }).public_slug);
-
-      // Auto-save the connection to whoever's card sent them here.
-      if (ref) {
-        setConnectionState("saving");
-        const { data: referringCard } = await supabase
-          .from("cards")
-          .select("profile_id")
-          .eq("public_slug", ref)
-          .maybeSingle();
-
-        const connectedUserId = (referringCard as { profile_id: string } | null)
-          ?.profile_id;
-
-        if (connectedUserId && connectedUserId !== user.id) {
-          const { error: connErr } = await supabase.from("connections").upsert(
-            { user_id: user.id, connected_user_id: connectedUserId },
-            { onConflict: "user_id,connected_user_id", ignoreDuplicates: true }
-          );
-          if (!connErr) {
-            setConnectionState("saved");
-            const { data: referringProfile } = await supabase
-              .from("profiles")
-              .select("business_name, owner_name")
-              .eq("id", connectedUserId)
-              .maybeSingle();
-            const rp = referringProfile as
-              | { business_name: string | null; owner_name: string | null }
-              | null;
-            setConnectedBusinessName(rp?.business_name ?? rp?.owner_name ?? "their card");
-          } else {
-            setConnectionState("skipped");
-          }
-        } else {
-          setConnectionState("skipped");
-        }
-      }
-
-      setLoading(false);
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ref]);
+  }, []);
 
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    setError(null);
-    const supabase = createClient();
-
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Session expired — please sign in again.");
-
-      const { error: updateError } = await supabase
-        .from("profiles")
-        .update({
-          business_name: businessName.trim() || null,
-          owner_name: ownerName.trim() || null,
-          job_title: jobTitle.trim() || null,
-          phone: phone.trim() || null,
-          website: website.trim() || null,
-          bio: bio.trim() || null,
-        })
-        .eq("id", user.id);
-
-      if (updateError) throw updateError;
-
-      router.push(cardSlug ? `/${cardSlug}` : "/");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't save — try again.");
-    } finally {
-      setSaving(false);
+  // Check username availability
+  useEffect(() => {
+    if (!form.username || form.username.length < 3) {
+      setUsernameAvailable(null);
+      return;
     }
+
+    const timeout = setTimeout(async () => {
+      setCheckingUsername(true);
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("username", form.username.toLowerCase())
+        .maybeSingle();
+      setUsernameAvailable(!data);
+      setCheckingUsername(false);
+    }, 500);
+
+    return () => clearTimeout(timeout);
+  }, [form.username]);
+
+  function updateField(field: string, value: string) {
+    setForm((f) => ({ ...f, [field]: value }));
   }
 
-  if (loading) {
-    return (
-      <main className="flex min-h-dvh items-center justify-center">
-        <p className="text-sm text-ink-700/70">Setting up your card…</p>
-      </main>
-    );
+  async function handleSubmit() {
+    setLoading(true);
+
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const username = form.username.toLowerCase().replace(/[^a-z0-9-]/g, "");
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        owner_name: form.owner_name.trim(),
+        business_name: form.business_name.trim() || null,
+        job_title: form.job_title.trim() || null,
+        phone: form.phone.trim() || null,
+        email: form.email.trim() || null,
+        website: form.website.trim() || null,
+        address: form.address.trim() || null,
+        username: username || null,
+        bio: form.bio.trim() || null,
+      })
+      .eq("id", user.id);
+
+    if (error) {
+      console.error("Onboarding error:", error);
+      alert("Something went wrong. Please try again.");
+      setLoading(false);
+      return;
+    }
+
+    // Create a default card for the user
+    await supabase.from("cards").insert({
+      profile_id: user.id,
+      public_slug: username || slugify(form.owner_name || form.business_name || "card"),
+      is_active: true,
+    });
+
+    router.push("/dashboard");
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-sm flex-col gap-5 px-6 py-12">
-      <div>
-        <h1 className="font-display text-2xl font-medium">Your card is ready</h1>
-        <p className="mt-1.5 text-sm text-ink-700/70">
-          Fill in your details — you can always edit these later.
-        </p>
+    <main className="flex min-h-dvh items-center justify-center bg-white px-4 py-8">
+      <div className="w-full max-w-sm">
+        {/* Progress */}
+        <div className="mb-8">
+          <div className="flex gap-2">
+            {[1, 2, 3].map((s) => (
+              <div
+                key={s}
+                className={`h-1 flex-1 rounded-full transition-colors ${
+                  s <= step ? "bg-ink-950" : "bg-ink-100"
+                }`}
+              />
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-ink-400">Step {step} of 3</p>
+        </div>
+
+        {/* Step 1: Personal */}
+        {step === 1 && (
+          <div className="animate-fade-in">
+            <h2 className="mb-1 text-xl font-semibold text-ink-950">
+              Tell us about you
+            </h2>
+            <p className="mb-6 text-sm text-ink-400">
+              This appears on your digital business card
+            </p>
+
+            <div className="space-y-3">
+              <InputField
+                icon={<User size={16} />}
+                placeholder="Your full name *"
+                value={form.owner_name}
+                onChange={(v) => updateField("owner_name", v)}
+                required
+              />
+              <InputField
+                icon={<Building2 size={16} />}
+                placeholder="Business name"
+                value={form.business_name}
+                onChange={(v) => updateField("business_name", v)}
+              />
+              <InputField
+                icon={<Briefcase size={16} />}
+                placeholder="Job title / designation"
+                value={form.job_title}
+                onChange={(v) => updateField("job_title", v)}
+              />
+            </div>
+
+            <button
+              onClick={() => {
+                if (!form.owner_name.trim()) return;
+                setStep(2);
+              }}
+              disabled={!form.owner_name.trim()}
+              className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-ink-950 py-3.5 text-sm font-semibold text-white transition hover:bg-ink-800 disabled:opacity-40"
+            >
+              Continue
+              <ArrowRight size={15} />
+            </button>
+          </div>
+        )}
+
+        {/* Step 2: Contact */}
+        {step === 2 && (
+          <div className="animate-fade-in">
+            <h2 className="mb-1 text-xl font-semibold text-ink-950">
+              Contact details
+            </h2>
+            <p className="mb-6 text-sm text-ink-400">
+              How people can reach you
+            </p>
+
+            <div className="space-y-3">
+              <InputField
+                icon={<Phone size={16} />}
+                placeholder="Phone number"
+                value={form.phone}
+                onChange={(v) => updateField("phone", v)}
+                type="tel"
+              />
+              <InputField
+                icon={<Globe size={16} />}
+                placeholder="Website (optional)"
+                value={form.website}
+                onChange={(v) => updateField("website", v)}
+                type="url"
+              />
+              <InputField
+                icon={<MapPin size={16} />}
+                placeholder="Business address (optional)"
+                value={form.address}
+                onChange={(v) => updateField("address", v)}
+              />
+            </div>
+
+            <div className="mt-6 flex gap-2">
+              <button
+                onClick={() => setStep(1)}
+                className="flex-1 rounded-2xl border border-ink-200 py-3.5 text-sm font-medium text-ink-600 transition hover:bg-ink-50"
+              >
+                Back
+              </button>
+              <button
+                onClick={() => setStep(3)}
+                className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-ink-950 py-3.5 text-sm font-semibold text-white transition hover:bg-ink-800"
+              >
+                Continue
+                <ArrowRight size={15} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3: Username + Bio */}
+        {step === 3 && (
+          <div className="animate-fade-in">
+            <h2 className="mb-1 text-xl font-semibold text-ink-950">
+              Claim your URL
+            </h2>
+            <p className="mb-6 text-sm text-ink-400">
+              This is your unique profile link
+            </p>
+
+            <div className="space-y-3">
+              <div>
+                <div className="flex items-center rounded-2xl border border-ink-200 bg-white transition focus-within:border-ink-400 focus-within:ring-1 focus-within:ring-ink-400">
+                  <span className="pl-4 text-sm text-ink-300">
+                    nammainfo.in/
+                  </span>
+                  <input
+                    value={form.username}
+                    onChange={(e) =>
+                      updateField(
+                        "username",
+                        e.target.value
+                          .toLowerCase()
+                          .replace(/[^a-z0-9-]/g, "")
+                      )
+                    }
+                    placeholder="yourname"
+                    className="w-full rounded-r-2xl bg-transparent py-3.5 pr-4 text-sm outline-none placeholder:text-ink-300"
+                  />
+                </div>
+                {form.username && form.username.length >= 3 && (
+                  <div className="mt-1.5 flex items-center gap-1 px-1">
+                    {checkingUsername ? (
+                      <Loader2 size={12} className="animate-spin text-ink-400" />
+                    ) : usernameAvailable ? (
+                      <>
+                        <CheckCircle2
+                          size={12}
+                          className="text-emerald-500"
+                        />
+                        <span className="text-xs text-emerald-600">
+                          Available
+                        </span>
+                      </>
+                    ) : usernameAvailable === false ? (
+                      <span className="text-xs text-red-500">
+                        Already taken — try another
+                      </span>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <textarea
+                  value={form.bio}
+                  onChange={(e) => updateField("bio", e.target.value)}
+                  placeholder="Short bio about you or your business (optional)"
+                  rows={3}
+                  className="w-full resize-none rounded-2xl border border-ink-200 bg-white px-4 py-3.5 text-sm outline-none transition placeholder:text-ink-300 focus:border-ink-400 focus:ring-1 focus:ring-ink-400"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-2">
+              <button
+                onClick={() => setStep(2)}
+                className="flex-1 rounded-2xl border border-ink-200 py-3.5 text-sm font-medium text-ink-600 transition hover:bg-ink-50"
+              >
+                Back
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={
+                  loading ||
+                  !form.owner_name.trim() ||
+                  (form.username.length > 0 &&
+                    (form.username.length < 3 || usernameAvailable === false))
+                }
+                className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-ink-950 py-3.5 text-sm font-semibold text-white transition hover:bg-ink-800 disabled:opacity-40"
+              >
+                {loading ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <>
+                    Launch Profile
+                    <ArrowRight size={15} />
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
-
-      {connectionState === "saved" && (
-        <p className="rounded-xl bg-emerald-50 px-4 py-3 text-xs text-emerald-700">
-          Saved {connectedBusinessName ?? "the card you tapped"} to your contacts.
-        </p>
-      )}
-
-      <form onSubmit={handleSave} className="flex flex-col gap-3">
-        <input
-          placeholder="Business name"
-          value={businessName}
-          onChange={(e) => setBusinessName(e.target.value)}
-          className="rounded-xl border border-ink-900/10 bg-white px-4 py-3 text-sm outline-none focus:border-ink-900"
-        />
-        <input
-          placeholder="Your name"
-          value={ownerName}
-          onChange={(e) => setOwnerName(e.target.value)}
-          className="rounded-xl border border-ink-900/10 bg-white px-4 py-3 text-sm outline-none focus:border-ink-900"
-        />
-        <input
-          placeholder="Job title"
-          value={jobTitle}
-          onChange={(e) => setJobTitle(e.target.value)}
-          className="rounded-xl border border-ink-900/10 bg-white px-4 py-3 text-sm outline-none focus:border-ink-900"
-        />
-        <input
-          type="tel"
-          placeholder="Phone"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          className="rounded-xl border border-ink-900/10 bg-white px-4 py-3 text-sm outline-none focus:border-ink-900"
-        />
-        <input
-          type="url"
-          placeholder="Website"
-          value={website}
-          onChange={(e) => setWebsite(e.target.value)}
-          className="rounded-xl border border-ink-900/10 bg-white px-4 py-3 text-sm outline-none focus:border-ink-900"
-        />
-        <textarea
-          placeholder="Short bio"
-          rows={3}
-          value={bio}
-          onChange={(e) => setBio(e.target.value)}
-          className="resize-none rounded-xl border border-ink-900/10 bg-white px-4 py-3 text-sm outline-none focus:border-ink-900"
-        />
-
-        {error && <p className="text-xs text-red-600">{error}</p>}
-
-        <button
-          type="submit"
-          disabled={saving}
-          className="mt-1 rounded-xl bg-ink-950 px-5 py-3 text-sm font-medium text-white shadow-card transition hover:opacity-90 disabled:opacity-50"
-        >
-          {saving ? "Saving…" : "Save my card"}
-        </button>
-      </form>
     </main>
   );
 }
 
-export default function OnboardingPage() {
+function InputField({
+  icon,
+  placeholder,
+  value,
+  onChange,
+  type = "text",
+  required,
+}: {
+  icon: React.ReactNode;
+  placeholder: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+  required?: boolean;
+}) {
   return (
-    <Suspense>
-      <OnboardingForm />
-    </Suspense>
+    <div className="flex items-center gap-3 rounded-2xl border border-ink-200 bg-white px-4 transition focus-within:border-ink-400 focus-within:ring-1 focus-within:ring-ink-400">
+      <span className="text-ink-400">{icon}</span>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        required={required}
+        className="w-full bg-transparent py-3.5 text-sm outline-none placeholder:text-ink-300"
+      />
+    </div>
   );
 }
