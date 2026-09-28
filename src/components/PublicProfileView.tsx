@@ -212,10 +212,10 @@ export default function PublicProfileView({
   }
 
   return (
-    <main className="mx-auto min-h-dvh max-w-lg bg-white">
+    <main className="mx-auto min-h-dvh max-w-lg bg-[var(--card)]">
       {/* Hero — Cover + Avatar */}
       <div className="relative">
-        <div className="h-44 w-full overflow-hidden bg-ink-950">
+        <div className="h-44 w-full overflow-hidden bg-[var(--foreground)]">
           {profile.cover_url ? (
             <img
               src={profile.cover_url}
@@ -223,11 +223,11 @@ export default function PublicProfileView({
               className="h-full w-full object-cover"
             />
           ) : (
-            <div className="h-full w-full bg-ink-950" />
+            <div className="h-full w-full bg-[var(--foreground)]" />
           )}
         </div>
         <div className="absolute -bottom-12 left-5">
-          <div className="h-24 w-24 overflow-hidden rounded-2xl border-4 border-white bg-ink-100 shadow-card">
+          <div className="h-24 w-24 overflow-hidden rounded-2xl border-4 border-[var(--card)] bg-[var(--accent)] shadow-card">
             {profile.logo_url ? (
               <img
                 src={profile.logo_url}
@@ -235,7 +235,7 @@ export default function PublicProfileView({
                 className="h-full w-full object-cover"
               />
             ) : (
-              <div className="flex h-full w-full items-center justify-center bg-ink-950 font-headline text-2xl font-bold text-white">
+              <div className="flex h-full w-full items-center justify-center bg-[var(--foreground)] font-headline text-2xl font-bold text-[var(--background)]">
                 {initials(profile.owner_name || profile.business_name)}
               </div>
             )}
@@ -247,10 +247,10 @@ export default function PublicProfileView({
       <div className="mt-14 px-5">
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="font-headline text-xl font-bold text-ink-950">
+            <h1 className="font-headline text-xl font-bold text-[var(--foreground)]">
               {profile.owner_name || "Namma Info Member"}
             </h1>
-            <p className="text-sm text-ink-500">
+            <p className="text-sm text-[var(--muted-foreground)]">
               {[profile.job_title, profile.business_name]
                 .filter(Boolean)
                 .join(" · ")}
@@ -258,9 +258,9 @@ export default function PublicProfileView({
           </div>
           <button
             onClick={shareProfile}
-            className="rounded-xl border border-ink-200 p-2.5 transition hover:bg-ink-50"
+            className="rounded-xl border border-[var(--border)] p-2.5 transition hover:bg-[var(--accent)]"
           >
-            <Share2 size={16} className="text-ink-700" />
+            <Share2 size={16} className="text-[var(--foreground)]" />
           </button>
         </div>
 
@@ -270,25 +270,25 @@ export default function PublicProfileView({
           reviews.length > 0) && (
           <div className="mt-4 flex gap-3">
             {profile.years_in_business && (
-              <div className="flex items-center gap-1.5 rounded-lg bg-ink-50 px-3 py-1.5">
-                <Clock size={12} className="text-ink-400" />
-                <span className="font-mono text-xs font-medium text-ink-700">
+              <div className="flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-1.5">
+                <Clock size={12} className="text-[var(--muted-foreground)]" />
+                <span className="font-mono text-xs font-medium text-[var(--foreground)]">
                   {profile.years_in_business} yrs
                 </span>
               </div>
             )}
             {profile.clients_served && (
-              <div className="flex items-center gap-1.5 rounded-lg bg-ink-50 px-3 py-1.5">
-                <Users size={12} className="text-ink-400" />
-                <span className="font-mono text-xs font-medium text-ink-700">
+              <div className="flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-1.5">
+                <Users size={12} className="text-[var(--muted-foreground)]" />
+                <span className="font-mono text-xs font-medium text-[var(--foreground)]">
                   {profile.clients_served}+ clients
                 </span>
               </div>
             )}
             {reviews.length > 0 && (
-              <div className="flex items-center gap-1.5 rounded-lg bg-ink-50 px-3 py-1.5">
-                <Star size={12} className="fill-ink-950 text-ink-950" />
-                <span className="font-mono text-xs font-medium text-ink-700">
+              <div className="flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-1.5">
+                <Star size={12} className="fill-[var(--foreground)] text-[var(--foreground)]" />
+                <span className="font-mono text-xs font-medium text-[var(--foreground)]">
                   {avgRating.toFixed(1)}
                 </span>
               </div>
@@ -301,14 +301,14 @@ export default function PublicProfileView({
       <div className="mt-5 flex gap-2 px-5">
         <button
           onClick={saveContact}
-          className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-ink-950 py-3.5 text-xs font-semibold text-white shadow-card-lg transition hover:bg-ink-800"
+          className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[var(--foreground)] py-3.5 text-xs font-semibold text-[var(--background)] shadow-card-lg transition hover:opacity-90"
         >
           <Download size={15} />
           Add to Contacts
         </button>
         <a
           href="#details"
-          className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-ink-200 bg-white py-3.5 text-xs font-semibold text-ink-900 shadow-card transition hover:shadow-card-hover"
+          className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] py-3.5 text-xs font-semibold text-[var(--foreground)] shadow-card transition hover:shadow-card-hover"
         >
           <Eye size={15} />
           View Profile
@@ -340,10 +340,10 @@ export default function PublicProfileView({
         )}
         <button
           onClick={shareProfile}
-          className="flex flex-col items-center gap-1 rounded-2xl border border-ink-100 bg-white p-3 transition hover:shadow-card"
+          className="flex flex-col items-center gap-1 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 transition hover:shadow-card"
         >
-          <Share2 size={18} className="text-ink-700" />
-          <span className="text-[10px] font-medium text-ink-500">Share</span>
+          <Share2 size={18} className="text-[var(--foreground)]" />
+          <span className="text-[10px] font-medium text-[var(--muted-foreground)]">Share</span>
         </button>
       </div>
 
@@ -357,17 +357,17 @@ export default function PublicProfileView({
             isOpen={openSections.about}
             onToggle={() => toggleSection("about")}
           >
-            <p className="text-sm leading-relaxed text-ink-600">
+            <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
               {profile.bio}
             </p>
             {profile.address && (
-              <div className="mt-3 flex items-start gap-2 text-xs text-ink-500">
+              <div className="mt-3 flex items-start gap-2 text-xs text-[var(--muted-foreground)]">
                 <MapPin size={13} className="mt-0.5 shrink-0" />
                 {profile.address}
               </div>
             )}
             {profile.coverage_area && (
-              <div className="mt-1.5 flex items-start gap-2 text-xs text-ink-500">
+              <div className="mt-1.5 flex items-start gap-2 text-xs text-[var(--muted-foreground)]">
                 <Globe size={13} className="mt-0.5 shrink-0" />
                 Serves: {profile.coverage_area}
               </div>
@@ -386,23 +386,23 @@ export default function PublicProfileView({
           >
             {(profile.services as { name: string; description?: string; price?: string; emoji?: string }[] ?? []).length > 0 && (
               <>
-                <p className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-widest text-ink-400">
+                <p className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
                   Services
                 </p>
                 <div className="grid grid-cols-2 gap-2">
                   {(profile.services as { name: string; description?: string; price?: string; emoji?: string }[]).map((s, i) => (
-                    <div key={i} className="rounded-xl border border-ink-100 p-3">
-                      <div className="mb-1.5 flex h-8 w-8 items-center justify-center rounded-lg bg-ink-50 text-base">
+                    <div key={i} className="rounded-xl border border-[var(--border)] p-3">
+                      <div className="mb-1.5 flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent)] text-base">
                         {s.emoji || "⚡"}
                       </div>
                       <p className="text-xs font-semibold">{s.name}</p>
                       {s.description && (
-                        <p className="mt-0.5 text-[10px] text-ink-400">
+                        <p className="mt-0.5 text-[10px] text-[var(--muted-foreground)]">
                           {s.description}
                         </p>
                       )}
                       {s.price && (
-                        <p className="mt-1 font-mono text-[10px] font-semibold text-ink-600">
+                        <p className="mt-1 font-mono text-[10px] font-semibold text-[var(--muted-foreground)]">
                           {s.price}
                         </p>
                       )}
@@ -413,23 +413,23 @@ export default function PublicProfileView({
             )}
             {(profile.products as { name: string; image_url?: string; price?: string; emoji?: string }[] ?? []).length > 0 && (
               <>
-                <p className="mb-2 mt-4 font-mono text-[10px] font-semibold uppercase tracking-widest text-ink-400">
+                <p className="mb-2 mt-4 font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
                   Products
                 </p>
                 <div className="grid grid-cols-2 gap-2">
                   {(profile.products as { name: string; image_url?: string; price?: string; emoji?: string }[]).map((p, i) => (
-                    <div key={i} className="overflow-hidden rounded-xl border border-ink-100">
+                    <div key={i} className="overflow-hidden rounded-xl border border-[var(--border)]">
                       {p.image_url ? (
                         <img src={p.image_url} alt={p.name} className="aspect-square w-full object-cover" />
                       ) : (
-                        <div className="flex aspect-square w-full items-center justify-center bg-ink-50 text-2xl">
+                        <div className="flex aspect-square w-full items-center justify-center bg-[var(--accent)] text-2xl">
                           {p.emoji || "📦"}
                         </div>
                       )}
                       <div className="p-2.5">
                         <p className="text-xs font-semibold">{p.name}</p>
                         {p.price && (
-                          <p className="mt-0.5 font-mono text-[10px] font-semibold text-ink-500">{p.price}</p>
+                          <p className="mt-0.5 font-mono text-[10px] font-semibold text-[var(--muted-foreground)]">{p.price}</p>
                         )}
                       </div>
                     </div>
@@ -469,10 +469,10 @@ export default function PublicProfileView({
                   href={ensureProtocol(link.url)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-2.5 rounded-xl border border-ink-100 px-3 py-2.5 transition hover:bg-ink-50"
+                  className="flex items-center gap-2.5 rounded-xl border border-[var(--border)] px-3 py-2.5 transition hover:bg-[var(--accent)]"
                 >
                   <SocialIcon platform={link.platform} />
-                  <span className="text-xs font-medium text-ink-700">
+                  <span className="text-xs font-medium text-[var(--foreground)]">
                     {link.platform}
                   </span>
                 </a>
@@ -491,25 +491,25 @@ export default function PublicProfileView({
           >
             <div className="space-y-3">
               {(profile.bank_accounts as { bank_name?: string; account_number?: string; ifsc?: string; upi_id?: string; qr_url?: string }[]).map((acc, i) => (
-                <div key={i} className="rounded-xl border border-ink-100 p-3">
+                <div key={i} className="rounded-xl border border-[var(--border)] p-3">
                   {acc.bank_name && (
                     <div className="mb-2 flex items-center gap-2">
-                      <CreditCard size={14} className="text-ink-400" />
+                      <CreditCard size={14} className="text-[var(--muted-foreground)]" />
                       <span className="text-sm font-semibold">{acc.bank_name}</span>
                     </div>
                   )}
                   {acc.account_number && (
                     <div className="flex items-center justify-between py-1">
-                      <span className="font-mono text-xs text-ink-500">A/C: {acc.account_number}</span>
-                      <button onClick={() => navigator.clipboard.writeText(acc.account_number!)} className="p-1 text-ink-400"><Copy size={12} /></button>
+                      <span className="font-mono text-xs text-[var(--muted-foreground)]">A/C: {acc.account_number}</span>
+                      <button onClick={() => navigator.clipboard.writeText(acc.account_number!)} className="p-1 text-[var(--muted-foreground)]"><Copy size={12} /></button>
                     </div>
                   )}
-                  {acc.ifsc && <p className="font-mono text-xs text-ink-500">IFSC: {acc.ifsc}</p>}
+                  {acc.ifsc && <p className="font-mono text-xs text-[var(--muted-foreground)]">IFSC: {acc.ifsc}</p>}
                   {acc.upi_id && (
-                    <div className="mt-2 flex items-center gap-2 rounded-lg bg-ink-50 px-3 py-2">
-                      <Wallet size={14} className="text-ink-400" />
+                    <div className="mt-2 flex items-center gap-2 rounded-lg bg-[var(--accent)] px-3 py-2">
+                      <Wallet size={14} className="text-[var(--muted-foreground)]" />
                       <span className="font-mono text-xs font-medium">{acc.upi_id}</span>
-                      <button onClick={() => navigator.clipboard.writeText(acc.upi_id!)} className="ml-auto p-1 text-ink-400"><Copy size={12} /></button>
+                      <button onClick={() => navigator.clipboard.writeText(acc.upi_id!)} className="ml-auto p-1 text-[var(--muted-foreground)]"><Copy size={12} /></button>
                     </div>
                   )}
                   {acc.qr_url && (
@@ -540,18 +540,18 @@ export default function PublicProfileView({
                       ? `/${profile.username}/${emp.slug}`
                       : "#"
                   }
-                  className="flex items-center gap-3 rounded-xl bg-ink-50 p-3 transition hover:bg-ink-100"
+                  className="flex items-center gap-3 rounded-xl bg-[var(--accent)] p-3 transition hover:bg-[var(--accent)]"
                 >
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-ink-200 font-headline text-xs font-semibold">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--accent)] font-headline text-xs font-semibold">
                     {initials(emp.name)}
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{emp.name}</p>
-                    <p className="font-mono text-[10px] text-ink-400">
+                    <p className="font-mono text-[10px] text-[var(--muted-foreground)]">
                       {emp.designation}
                     </p>
                   </div>
-                  <ChevronRight size={14} className="text-ink-300" />
+                  <ChevronRight size={14} className="text-[var(--muted-foreground)]" />
                 </Link>
               ))}
             </div>
@@ -559,10 +559,10 @@ export default function PublicProfileView({
         )}
 
         {/* ===== REVIEWS — AI-generated suggestions that redirect to Google ===== */}
-        <section className="rounded-2xl border border-ink-100 bg-white p-4">
+        <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2 font-headline text-sm font-semibold">
-              <Star size={15} className="text-ink-400" />
+              <Star size={15} className="text-[var(--muted-foreground)]" />
               Reviews
             </div>
             {profile.google_place_id && (
@@ -570,7 +570,7 @@ export default function PublicProfileView({
                 href={googleReviewUrl(profile.google_place_id)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 rounded-lg bg-ink-50 px-2 py-1 text-[10px] font-medium text-ink-600 transition hover:bg-ink-100"
+                className="flex items-center gap-1 rounded-lg bg-[var(--accent)] px-2 py-1 text-[10px] font-medium text-[var(--muted-foreground)] transition hover:bg-[var(--accent)]"
               >
                 Google Reviews
                 <ExternalLink size={10} />
@@ -592,13 +592,13 @@ export default function PublicProfileView({
                       size={14}
                       className={
                         s <= Math.round(avgRating)
-                          ? "fill-ink-950 text-ink-950"
-                          : "text-ink-200"
+                          ? "fill-[var(--foreground)] text-[var(--foreground)]"
+                          : "text-[var(--muted-foreground)]"
                       }
                     />
                   ))}
                 </div>
-                <p className="font-mono text-[10px] text-ink-400">
+                <p className="font-mono text-[10px] text-[var(--muted-foreground)]">
                   {reviews.length} review{reviews.length !== 1 && "s"}
                 </p>
               </div>
@@ -609,12 +609,12 @@ export default function PublicProfileView({
           {profile.google_place_id && (
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-ink-400">
+                <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
                   Tap to review on Google
                 </p>
                 <button
                   onClick={refreshSuggestions}
-                  className="flex items-center gap-1 rounded-lg p-1.5 text-ink-400 transition hover:bg-ink-50 hover:text-ink-600"
+                  className="flex items-center gap-1 rounded-lg p-1.5 text-[var(--muted-foreground)] transition hover:bg-[var(--accent)] hover:text-[var(--muted-foreground)]"
                   title="Get new suggestions"
                 >
                   <RefreshCw size={12} />
@@ -625,21 +625,21 @@ export default function PublicProfileView({
                   <button
                     key={i}
                     onClick={() => openGoogleReviewWithText(text)}
-                    className="w-full rounded-xl border border-ink-100 p-3 text-left transition hover:border-ink-300 hover:shadow-card"
+                    className="w-full rounded-xl border border-[var(--border)] p-3 text-left transition hover:border-[var(--border)] hover:shadow-card"
                   >
                     <div className="mb-1.5 flex gap-0.5">
                       {[1, 2, 3, 4, 5].map((s) => (
                         <Star
                           key={s}
                           size={10}
-                          className="fill-ink-950 text-ink-950"
+                          className="fill-[var(--foreground)] text-[var(--foreground)]"
                         />
                       ))}
                     </div>
-                    <p className="text-xs leading-relaxed text-ink-600">
+                    <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
                       {text}
                     </p>
-                    <p className="mt-2 flex items-center gap-1 font-mono text-[9px] font-medium text-ink-400">
+                    <p className="mt-2 flex items-center gap-1 font-mono text-[9px] font-medium text-[var(--muted-foreground)]">
                       <Copy size={8} />
                       Tap to copy & open Google Reviews
                     </p>
@@ -650,29 +650,29 @@ export default function PublicProfileView({
           )}
 
           {!profile.google_place_id && reviews.length === 0 && (
-            <p className="text-sm text-ink-400">No reviews yet</p>
+            <p className="text-sm text-[var(--muted-foreground)]">No reviews yet</p>
           )}
         </section>
 
         {/* Downloads */}
-        <section className="rounded-2xl border border-ink-100 bg-white p-4">
+        <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
           <div className="mb-3 flex items-center gap-2 font-headline text-sm font-semibold">
-            <Download size={15} className="text-ink-400" />
+            <Download size={15} className="text-[var(--muted-foreground)]" />
             Quick Actions
           </div>
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={saveContact}
-              className="flex items-center gap-2.5 rounded-xl border border-ink-100 px-3 py-3 text-left transition hover:bg-ink-50"
+              className="flex items-center gap-2.5 rounded-xl border border-[var(--border)] px-3 py-3 text-left transition hover:bg-[var(--accent)]"
             >
-              <BookUser size={16} className="text-ink-400" />
+              <BookUser size={16} className="text-[var(--muted-foreground)]" />
               <span className="text-xs font-medium">Save Contact</span>
             </button>
             <button
               onClick={shareProfile}
-              className="flex items-center gap-2.5 rounded-xl border border-ink-100 px-3 py-3 text-left transition hover:bg-ink-50"
+              className="flex items-center gap-2.5 rounded-xl border border-[var(--border)] px-3 py-3 text-left transition hover:bg-[var(--accent)]"
             >
-              <Share2 size={16} className="text-ink-400" />
+              <Share2 size={16} className="text-[var(--muted-foreground)]" />
               <span className="text-xs font-medium">Share Profile</span>
             </button>
             {profile.brochure_url && (
@@ -680,9 +680,9 @@ export default function PublicProfileView({
                 href={profile.brochure_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2.5 rounded-xl border border-ink-100 px-3 py-3 transition hover:bg-ink-50"
+                className="flex items-center gap-2.5 rounded-xl border border-[var(--border)] px-3 py-3 transition hover:bg-[var(--accent)]"
               >
-                <FileText size={16} className="text-ink-400" />
+                <FileText size={16} className="text-[var(--muted-foreground)]" />
                 <span className="text-xs font-medium">Brochure</span>
               </a>
             )}
@@ -691,19 +691,19 @@ export default function PublicProfileView({
 
         {/* GST & Address footer */}
         {(profile.gst_number || profile.address) && (
-          <div className="rounded-2xl border border-ink-100 bg-white p-4">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
             {profile.gst_number && (
               <div className="flex items-center gap-2">
-                <FileText size={12} className="text-ink-400" />
-                <span className="font-mono text-[11px] text-ink-500">
+                <FileText size={12} className="text-[var(--muted-foreground)]" />
+                <span className="font-mono text-[11px] text-[var(--muted-foreground)]">
                   GST: {profile.gst_number}
                 </span>
               </div>
             )}
             {profile.address && (
               <div className="mt-1 flex items-start gap-2">
-                <MapPin size={12} className="mt-0.5 shrink-0 text-ink-400" />
-                <span className="text-[11px] text-ink-500">
+                <MapPin size={12} className="mt-0.5 shrink-0 text-[var(--muted-foreground)]" />
+                <span className="text-[11px] text-[var(--muted-foreground)]">
                   {profile.address}
                 </span>
               </div>
@@ -714,13 +714,13 @@ export default function PublicProfileView({
         {/* CTA */}
         <Link
           href="/signup"
-          className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-ink-200 py-4 text-sm font-medium text-ink-600 transition hover:border-ink-400 hover:text-ink-900"
+          className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[var(--border)] py-4 text-sm font-medium text-[var(--muted-foreground)] transition hover:border-[var(--foreground)] hover:text-[var(--foreground)]"
         >
           <UserPlus size={16} />
           Create your own Namma Info profile
         </Link>
 
-        <p className="pt-4 text-center font-mono text-[11px] text-ink-300">
+        <p className="pt-4 text-center font-mono text-[11px] text-[var(--muted-foreground)]">
           Powered by Namma Info
         </p>
       </div>
@@ -746,22 +746,22 @@ function PublicCollapsible({
   children: React.ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-ink-100 bg-white">
+    <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]">
       <button
         onClick={onToggle}
         className="flex w-full items-center justify-between px-4 py-3.5"
       >
         <div className="flex items-center gap-2 font-headline text-sm font-semibold">
-          <span className="text-ink-400">{icon}</span>
+          <span className="text-[var(--muted-foreground)]">{icon}</span>
           {title}
         </div>
         <ChevronDown
           size={16}
-          className={`text-ink-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
+          className={`text-[var(--muted-foreground)] transition-transform ${isOpen ? "rotate-180" : ""}`}
         />
       </button>
       {isOpen && (
-        <div className="animate-fade-in border-t border-ink-100 px-4 py-3">
+        <div className="animate-fade-in border-t border-[var(--border)] px-4 py-3">
           {children}
         </div>
       )}
@@ -794,8 +794,8 @@ function PublicGallery({
               onClick={() => setActiveTab(cat)}
               className={`whitespace-nowrap rounded-full px-3 py-1 font-mono text-[10px] font-medium transition ${
                 activeTab === cat
-                  ? "bg-ink-950 text-white"
-                  : "bg-ink-50 text-ink-500"
+                  ? "bg-[var(--foreground)] text-[var(--background)]"
+                  : "bg-[var(--accent)] text-[var(--muted-foreground)]"
               }`}
             >
               {cat}
@@ -831,17 +831,17 @@ function QuickAction({
       href={href}
       target={href.startsWith("http") ? "_blank" : undefined}
       rel={href.startsWith("http") ? "noopener noreferrer" : undefined}
-      className="flex flex-col items-center gap-1 rounded-2xl border border-ink-100 bg-white p-3 transition hover:shadow-card"
+      className="flex flex-col items-center gap-1 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 transition hover:shadow-card"
     >
-      <span className="text-ink-700">{icon}</span>
-      <span className="text-[10px] font-medium text-ink-500">{label}</span>
+      <span className="text-[var(--foreground)]">{icon}</span>
+      <span className="text-[10px] font-medium text-[var(--muted-foreground)]">{label}</span>
     </a>
   );
 }
 
 function SocialIcon({ platform }: { platform: string }) {
   const p = platform.toLowerCase();
-  const cls = "h-4 w-4 text-ink-500";
+  const cls = "h-4 w-4 text-[var(--muted-foreground)]";
   if (p.includes("instagram")) return <Instagram className={cls} />;
   if (p.includes("youtube")) return <Youtube className={cls} />;
   if (p.includes("facebook")) return <Facebook className={cls} />;
