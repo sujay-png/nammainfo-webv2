@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import type { Profile, Card, Review, Employee } from "@/lib/supabase/types";
 import { initials, googleReviewUrl } from "@/lib/utils";
@@ -22,10 +22,97 @@ import {
   Briefcase,
   Image as ImageIcon,
   Link2,
-  MessageSquare,
-  Send,
-  X,
+  RefreshCw,
+  MessageCircle,
+  Instagram,
+  Youtube,
+  Facebook,
+  Linkedin,
+  Banknote,
+  CreditCard,
+  Wallet,
+  Copy,
+  FileText,
+  BookUser,
+  ChevronDown,
 } from "lucide-react";
+
+/**
+ * Ensure a URL string has a protocol prefix, so it opens as an absolute URL
+ * rather than being treated as a relative path under nammainfo.in.
+ */
+function ensureProtocol(url: string): string {
+  if (!url) return url;
+  if (/^https?:\/\//i.test(url)) return url;
+  return `https://${url}`;
+}
+
+/**
+ * Generate unique AI-written review suggestions based on the business's
+ * services and products. Uses a seeded shuffle so each refresh yields
+ * different reviews without repeating within the same view.
+ */
+function generateReviewSuggestions(
+  profile: Profile,
+  count: number = 4
+): string[] {
+  const biz = profile.business_name || profile.owner_name || "this business";
+  const services = (
+    profile.services as { name: string; description?: string }[]
+  )?.map((s) => s.name) ?? [];
+  const products = (
+    profile.products as { name: string; description?: string }[]
+  )?.map((p) => p.name) ?? [];
+  const area = profile.coverage_area || "";
+  const years = profile.years_in_business;
+
+  const templates: ((svc: string, prod: string) => string)[] = [
+    (svc) =>
+      `Outstanding experience with ${biz}! Their ${svc || "services"} exceeded all my expectations. Highly professional team that truly cares about quality.`,
+    (svc) =>
+      `I've been using ${biz} for ${svc || "their services"} and the results are consistently excellent. Punctual, reliable, and great value for money.`,
+    (_, prod) =>
+      `${biz} delivers top-notch ${prod || "products"}. The attention to detail is remarkable. Will definitely recommend to friends and family.`,
+    (svc) =>
+      `Fantastic ${svc || "service"} by ${biz}! They went above and beyond to ensure everything was perfect. A trustworthy business you can count on.`,
+    () =>
+      `Best in ${area || "the area"}! ${biz} provides premium quality at fair prices. ${years ? `With ${years}+ years of experience, they know exactly what they're doing.` : "Their expertise really shows."}`,
+    (svc) =>
+      `Extremely satisfied with the ${svc || "work"} done by ${biz}. Clean, professional, and efficient. Would give 6 stars if I could!`,
+    (_, prod) =>
+      `The ${prod || "quality"} from ${biz} is second to none. Quick turnaround and excellent communication throughout. Highly recommended!`,
+    (svc) =>
+      `${biz} transformed my expectations for ${svc || "professional services"}. Their team is knowledgeable, friendly, and delivers on every promise.`,
+    () =>
+      `A gem of a business! ${biz} treats every customer like family. Transparent pricing, no hidden charges, and exceptional results every time.`,
+    (svc, prod) =>
+      `I researched many options before choosing ${biz} for ${svc || prod || "my needs"}, and I'm so glad I did. Professional from start to finish.`,
+    () =>
+      `What sets ${biz} apart is their genuine commitment to customer satisfaction. They don't just meet expectations — they exceed them consistently.`,
+    (svc) =>
+      `${biz} is my go-to for ${svc || "everything they offer"}. After trying several alternatives, nothing comes close to their quality and reliability.`,
+    (_, prod) =>
+      `Impressed by ${biz}'s ${prod || "offerings"}! Great quality, competitive pricing, and the team is always ready to help. Five stars well deserved!`,
+    (svc) =>
+      `Working with ${biz} on ${svc || "my project"} was a breeze. They listened to my requirements carefully and delivered exactly what I needed.`,
+    () =>
+      `${biz} has set a new standard in the industry. ${years ? `With ${years} years of experience, ` : ""}Their professionalism and quality are unmatched.`,
+    (svc, prod) =>
+      `Cannot say enough good things about ${biz}! Their ${svc || prod || "service"} is outstanding. I've recommended them to everyone I know.`,
+  ];
+
+  // Shuffle using timestamp seed so reviews change on each page load
+  const seed = Date.now();
+  const shuffled = [...templates].sort(
+    () => Math.sin(seed * Math.random()) - 0.5
+  );
+
+  return shuffled.slice(0, count).map((fn) => {
+    const svc = services[Math.floor(Math.random() * (services.length || 1))] ?? "";
+    const prod = products[Math.floor(Math.random() * (products.length || 1))] ?? "";
+    return fn(svc, prod);
+  });
+}
 
 export default function PublicProfileView({
   profile,
@@ -38,10 +125,9 @@ export default function PublicProfileView({
   reviews: Review[];
   employees: Employee[];
 }) {
-  const [showReviewForm, setShowReviewForm] = useState(false);
-  const [reviewSubmitted, setReviewSubmitted] = useState(false);
-  const [showGooglePrompt, setShowGooglePrompt] = useState(false);
-  const [lastReviewComment, setLastReviewComment] = useState("");
+  const [reviewSuggestions, setReviewSuggestions] = useState<string[]>(() =>
+    generateReviewSuggestions(profile)
+  );
 
   const profileUrl = profile.username
     ? `${window.location.origin}/${profile.username}`
@@ -54,8 +140,31 @@ export default function PublicProfileView({
       ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
       : 0;
 
+  // Collapsible sections for public view
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    about: true,
+    services: true,
+    gallery: false,
+    social: true,
+    banking: false,
+    team: true,
+  });
+  const toggleSection = (k: string) =>
+    setOpenSections((prev) => ({ ...prev, [k]: !prev[k] }));
+
+  function refreshSuggestions() {
+    setReviewSuggestions(generateReviewSuggestions(profile));
+  }
+
+  function openGoogleReviewWithText(text: string) {
+    if (!profile.google_place_id) return;
+    // Google review URL — the review text gets copied to clipboard
+    // since Google doesn't support prefilling review text via URL
+    navigator.clipboard?.writeText(text);
+    window.open(googleReviewUrl(profile.google_place_id), "_blank");
+  }
+
   async function saveContact() {
-    // Build vCard and trigger download
     const vcardContent = [
       "BEGIN:VCARD",
       "VERSION:3.0",
@@ -64,7 +173,7 @@ export default function PublicProfileView({
       `TITLE:${profile.job_title ?? ""}`,
       profile.phone ? `TEL;TYPE=WORK:${profile.phone}` : "",
       profile.email ? `EMAIL:${profile.email}` : "",
-      profile.website ? `URL:${profile.website}` : "",
+      profile.website ? `URL:${ensureProtocol(profile.website)}` : "",
       profile.address ? `ADR;TYPE=WORK:;;${profile.address};;;;` : "",
       profile.bio ? `NOTE:${profile.bio}` : "",
       `SOURCE:${profileUrl}`,
@@ -99,86 +208,107 @@ export default function PublicProfileView({
       }
     } else {
       await navigator.clipboard.writeText(profileUrl);
-      alert("Link copied!");
     }
   }
 
   return (
     <main className="mx-auto min-h-dvh max-w-lg bg-white">
-      {/* Hero — Business Card */}
-      <div className="relative overflow-hidden bg-ink-950 px-6 pb-8 pt-10 text-white">
-        <div className="pointer-events-none absolute -right-20 -top-20 h-60 w-60 rounded-full bg-white/[0.03] blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-20 -left-10 h-48 w-48 rounded-full bg-white/[0.02] blur-3xl" />
-
-        <div className="relative">
-          {/* Logo + name */}
-          <div className="flex items-start gap-4">
+      {/* Hero — Cover + Avatar */}
+      <div className="relative">
+        <div className="h-44 w-full overflow-hidden bg-ink-950">
+          {profile.cover_url ? (
+            <img
+              src={profile.cover_url}
+              alt=""
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div className="h-full w-full bg-ink-950" />
+          )}
+        </div>
+        <div className="absolute -bottom-12 left-5">
+          <div className="h-24 w-24 overflow-hidden rounded-2xl border-4 border-white bg-ink-100 shadow-card">
             {profile.logo_url ? (
               <img
                 src={profile.logo_url}
                 alt=""
-                className="h-16 w-16 rounded-2xl object-cover ring-1 ring-white/10"
+                className="h-full w-full object-cover"
               />
             ) : (
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10 text-xl font-bold ring-1 ring-white/10">
+              <div className="flex h-full w-full items-center justify-center bg-ink-950 font-headline text-2xl font-bold text-white">
                 {initials(profile.owner_name || profile.business_name)}
               </div>
             )}
-            <div className="min-w-0 flex-1">
-              <h1 className="text-xl font-semibold leading-tight">
-                {profile.owner_name || "Namma Info Member"}
-              </h1>
-              <p className="mt-0.5 text-sm text-white/60">
-                {[profile.job_title, profile.business_name]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </p>
-            </div>
           </div>
-
-          {/* Stats row */}
-          {(profile.years_in_business ||
-            profile.clients_served ||
-            reviews.length > 0) && (
-            <div className="mt-5 flex gap-4">
-              {profile.years_in_business && (
-                <Stat
-                  icon={<Clock size={12} />}
-                  value={`${profile.years_in_business}y`}
-                  label="Experience"
-                />
-              )}
-              {profile.clients_served && (
-                <Stat
-                  icon={<Users size={12} />}
-                  value={`${profile.clients_served}+`}
-                  label="Clients"
-                />
-              )}
-              {reviews.length > 0 && (
-                <Stat
-                  icon={<Star size={12} />}
-                  value={avgRating.toFixed(1)}
-                  label={`${reviews.length} reviews`}
-                />
-              )}
-            </div>
-          )}
         </div>
       </div>
 
-      {/* Action Buttons — the 3 key CTAs */}
-      <div className="flex gap-2 px-4 -translate-y-5">
+      {/* Name + info */}
+      <div className="mt-14 px-5">
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="font-headline text-xl font-bold text-ink-950">
+              {profile.owner_name || "Namma Info Member"}
+            </h1>
+            <p className="text-sm text-ink-500">
+              {[profile.job_title, profile.business_name]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          </div>
+          <button
+            onClick={shareProfile}
+            className="rounded-xl border border-ink-200 p-2.5 transition hover:bg-ink-50"
+          >
+            <Share2 size={16} className="text-ink-700" />
+          </button>
+        </div>
+
+        {/* Stats */}
+        {(profile.years_in_business ||
+          profile.clients_served ||
+          reviews.length > 0) && (
+          <div className="mt-4 flex gap-3">
+            {profile.years_in_business && (
+              <div className="flex items-center gap-1.5 rounded-lg bg-ink-50 px-3 py-1.5">
+                <Clock size={12} className="text-ink-400" />
+                <span className="font-mono text-xs font-medium text-ink-700">
+                  {profile.years_in_business} yrs
+                </span>
+              </div>
+            )}
+            {profile.clients_served && (
+              <div className="flex items-center gap-1.5 rounded-lg bg-ink-50 px-3 py-1.5">
+                <Users size={12} className="text-ink-400" />
+                <span className="font-mono text-xs font-medium text-ink-700">
+                  {profile.clients_served}+ clients
+                </span>
+              </div>
+            )}
+            {reviews.length > 0 && (
+              <div className="flex items-center gap-1.5 rounded-lg bg-ink-50 px-3 py-1.5">
+                <Star size={12} className="fill-ink-950 text-ink-950" />
+                <span className="font-mono text-xs font-medium text-ink-700">
+                  {avgRating.toFixed(1)}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Action CTAs */}
+      <div className="mt-5 flex gap-2 px-5">
         <button
           onClick={saveContact}
-          className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-ink-950 px-3 py-3.5 text-xs font-semibold text-white shadow-card-lg transition hover:bg-ink-800"
+          className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-ink-950 py-3.5 text-xs font-semibold text-white shadow-card-lg transition hover:bg-ink-800"
         >
           <Download size={15} />
           Add to Contacts
         </button>
         <a
-          href="#profile-details"
-          className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-ink-200 bg-white px-3 py-3.5 text-xs font-semibold text-ink-900 shadow-card transition hover:shadow-card-hover"
+          href="#details"
+          className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-ink-200 bg-white py-3.5 text-xs font-semibold text-ink-900 shadow-card transition hover:shadow-card-hover"
         >
           <Eye size={15} />
           View Profile
@@ -186,7 +316,7 @@ export default function PublicProfileView({
       </div>
 
       {/* Quick contact */}
-      <div className="grid grid-cols-4 gap-2 px-4">
+      <div className="mt-4 grid grid-cols-4 gap-2 px-5">
         {profile.phone && (
           <QuickAction
             href={`tel:${profile.phone}`}
@@ -203,7 +333,7 @@ export default function PublicProfileView({
         )}
         {profile.website && (
           <QuickAction
-            href={profile.website}
+            href={ensureProtocol(profile.website)}
             icon={<Globe size={18} />}
             label="Website"
           />
@@ -217,11 +347,16 @@ export default function PublicProfileView({
         </button>
       </div>
 
-      {/* Profile Details */}
-      <div id="profile-details" className="px-4 pt-6 pb-8 space-y-4">
+      {/* ===== SECTIONS ===== */}
+      <div id="details" className="space-y-3 px-5 pb-8 pt-6">
         {/* About */}
         {profile.bio && (
-          <ProfileSection title="About" icon={<Briefcase size={15} />}>
+          <PublicCollapsible
+            title="About Us"
+            icon={<Briefcase size={15} />}
+            isOpen={openSections.about}
+            onToggle={() => toggleSection("about")}
+          >
             <p className="text-sm leading-relaxed text-ink-600">
               {profile.bio}
             </p>
@@ -237,151 +372,165 @@ export default function PublicProfileView({
                 Serves: {profile.coverage_area}
               </div>
             )}
-          </ProfileSection>
+          </PublicCollapsible>
         )}
 
-        {/* Social Links */}
-        {profile.social_links && profile.social_links.length > 0 && (
-          <ProfileSection title="Connect" icon={<Link2 size={15} />}>
-            <div className="flex flex-wrap gap-2">
-              {profile.social_links.map(
-                (link: { platform: string; url: string }, i: number) => (
-                  <a
-                    key={i}
-                    href={link.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 rounded-full border border-ink-200 px-3 py-1.5 text-xs font-medium text-ink-700 transition hover:bg-ink-50"
-                  >
-                    {link.platform}
-                    <ExternalLink size={10} />
-                  </a>
-                )
-              )}
-            </div>
-          </ProfileSection>
-        )}
-
-        {/* Services */}
-        {profile.services && profile.services.length > 0 && (
-          <ProfileSection title="Services" icon={<Award size={15} />}>
-            <div className="space-y-2">
-              {profile.services
-                .slice(0, 4)
-                .map(
-                  (
-                    s: { name: string; description?: string; price?: string },
-                    i: number
-                  ) => (
-                    <div
-                      key={i}
-                      className="flex items-center justify-between rounded-xl bg-ink-50 px-3 py-2.5"
-                    >
-                      <div>
-                        <p className="text-sm font-medium">{s.name}</p>
-                        {s.description && (
-                          <p className="text-xs text-ink-400">
-                            {s.description}
-                          </p>
-                        )}
+        {/* Services & Products */}
+        {((profile.services as unknown[] ?? []).length > 0 ||
+          (profile.products as unknown[] ?? []).length > 0) && (
+          <PublicCollapsible
+            title="Services & Products"
+            icon={<Award size={15} />}
+            isOpen={openSections.services}
+            onToggle={() => toggleSection("services")}
+          >
+            {(profile.services as { name: string; description?: string; price?: string; emoji?: string }[] ?? []).length > 0 && (
+              <>
+                <p className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-widest text-ink-400">
+                  Services
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {(profile.services as { name: string; description?: string; price?: string; emoji?: string }[]).map((s, i) => (
+                    <div key={i} className="rounded-xl border border-ink-100 p-3">
+                      <div className="mb-1.5 flex h-8 w-8 items-center justify-center rounded-lg bg-ink-50 text-base">
+                        {s.emoji || "⚡"}
                       </div>
+                      <p className="text-xs font-semibold">{s.name}</p>
+                      {s.description && (
+                        <p className="mt-0.5 text-[10px] text-ink-400">
+                          {s.description}
+                        </p>
+                      )}
                       {s.price && (
-                        <span className="text-xs font-semibold text-ink-600">
+                        <p className="mt-1 font-mono text-[10px] font-semibold text-ink-600">
                           {s.price}
-                        </span>
+                        </p>
                       )}
                     </div>
-                  )
-                )}
-            </div>
-            {profile.website && profile.services.length > 4 && (
-              <a
-                href={profile.website}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-3 flex items-center gap-1 text-xs font-medium text-ink-950"
-              >
-                See all services
-                <ChevronRight size={12} />
-              </a>
+                  ))}
+                </div>
+              </>
             )}
-          </ProfileSection>
-        )}
-
-        {/* Products */}
-        {profile.products && profile.products.length > 0 && (
-          <ProfileSection title="Products" icon={<ImageIcon size={15} />}>
-            <div className="grid grid-cols-2 gap-2">
-              {profile.products
-                .slice(0, 4)
-                .map(
-                  (
-                    p: {
-                      name: string;
-                      description?: string;
-                      price?: string;
-                      image_url?: string;
-                    },
-                    i: number
-                  ) => (
-                    <div
-                      key={i}
-                      className="overflow-hidden rounded-xl border border-ink-100"
-                    >
-                      {p.image_url && (
-                        <img
-                          src={p.image_url}
-                          alt={p.name}
-                          className="aspect-square w-full object-cover"
-                        />
+            {(profile.products as { name: string; image_url?: string; price?: string; emoji?: string }[] ?? []).length > 0 && (
+              <>
+                <p className="mb-2 mt-4 font-mono text-[10px] font-semibold uppercase tracking-widest text-ink-400">
+                  Products
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {(profile.products as { name: string; image_url?: string; price?: string; emoji?: string }[]).map((p, i) => (
+                    <div key={i} className="overflow-hidden rounded-xl border border-ink-100">
+                      {p.image_url ? (
+                        <img src={p.image_url} alt={p.name} className="aspect-square w-full object-cover" />
+                      ) : (
+                        <div className="flex aspect-square w-full items-center justify-center bg-ink-50 text-2xl">
+                          {p.emoji || "📦"}
+                        </div>
                       )}
                       <div className="p-2.5">
-                        <p className="text-xs font-medium">{p.name}</p>
+                        <p className="text-xs font-semibold">{p.name}</p>
                         {p.price && (
-                          <p className="mt-0.5 text-[11px] font-semibold text-ink-500">
-                            {p.price}
-                          </p>
+                          <p className="mt-0.5 font-mono text-[10px] font-semibold text-ink-500">{p.price}</p>
                         )}
                       </div>
                     </div>
-                  )
-                )}
-            </div>
-            {profile.website && profile.products.length > 4 && (
-              <a
-                href={profile.website}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-3 flex items-center gap-1 text-xs font-medium text-ink-950"
-              >
-                See all products
-                <ChevronRight size={12} />
-              </a>
+                  ))}
+                </div>
+              </>
             )}
-          </ProfileSection>
+          </PublicCollapsible>
         )}
 
         {/* Gallery */}
-        {profile.gallery && profile.gallery.length > 0 && (
-          <ProfileSection title="Gallery" icon={<ImageIcon size={15} />}>
-            <div className="grid grid-cols-3 gap-1.5">
-              {profile.gallery.map(
-                (item: { url: string; caption?: string }, i: number) => (
-                  <img
-                    key={i}
-                    src={item.url}
-                    alt={item.caption ?? ""}
-                    className="aspect-square rounded-xl object-cover"
-                  />
-                )
-              )}
+        {(profile.gallery as { url: string; category?: string; caption?: string }[] ?? []).length > 0 && (
+          <PublicCollapsible
+            title="Gallery"
+            icon={<ImageIcon size={15} />}
+            isOpen={openSections.gallery}
+            onToggle={() => toggleSection("gallery")}
+          >
+            <PublicGallery
+              gallery={profile.gallery as { url: string; category?: string; caption?: string }[]}
+            />
+          </PublicCollapsible>
+        )}
+
+        {/* Connect With Us */}
+        {(profile.social_links as { platform: string; url: string }[] ?? []).length > 0 && (
+          <PublicCollapsible
+            title="Connect With Us"
+            icon={<MessageCircle size={15} />}
+            isOpen={openSections.social}
+            onToggle={() => toggleSection("social")}
+          >
+            <div className="grid grid-cols-2 gap-2">
+              {(profile.social_links as { platform: string; url: string }[]).map((link, i) => (
+                <a
+                  key={i}
+                  href={ensureProtocol(link.url)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2.5 rounded-xl border border-ink-100 px-3 py-2.5 transition hover:bg-ink-50"
+                >
+                  <SocialIcon platform={link.platform} />
+                  <span className="text-xs font-medium text-ink-700">
+                    {link.platform}
+                  </span>
+                </a>
+              ))}
             </div>
-          </ProfileSection>
+          </PublicCollapsible>
+        )}
+
+        {/* Banking & Payment Info */}
+        {(profile.bank_accounts as { bank_name?: string; account_number?: string; ifsc?: string; upi_id?: string; qr_url?: string }[] ?? []).length > 0 && (
+          <PublicCollapsible
+            title="Banking & Payment Info"
+            icon={<Banknote size={15} />}
+            isOpen={openSections.banking}
+            onToggle={() => toggleSection("banking")}
+          >
+            <div className="space-y-3">
+              {(profile.bank_accounts as { bank_name?: string; account_number?: string; ifsc?: string; upi_id?: string; qr_url?: string }[]).map((acc, i) => (
+                <div key={i} className="rounded-xl border border-ink-100 p-3">
+                  {acc.bank_name && (
+                    <div className="mb-2 flex items-center gap-2">
+                      <CreditCard size={14} className="text-ink-400" />
+                      <span className="text-sm font-semibold">{acc.bank_name}</span>
+                    </div>
+                  )}
+                  {acc.account_number && (
+                    <div className="flex items-center justify-between py-1">
+                      <span className="font-mono text-xs text-ink-500">A/C: {acc.account_number}</span>
+                      <button onClick={() => navigator.clipboard.writeText(acc.account_number!)} className="p-1 text-ink-400"><Copy size={12} /></button>
+                    </div>
+                  )}
+                  {acc.ifsc && <p className="font-mono text-xs text-ink-500">IFSC: {acc.ifsc}</p>}
+                  {acc.upi_id && (
+                    <div className="mt-2 flex items-center gap-2 rounded-lg bg-ink-50 px-3 py-2">
+                      <Wallet size={14} className="text-ink-400" />
+                      <span className="font-mono text-xs font-medium">{acc.upi_id}</span>
+                      <button onClick={() => navigator.clipboard.writeText(acc.upi_id!)} className="ml-auto p-1 text-ink-400"><Copy size={12} /></button>
+                    </div>
+                  )}
+                  {acc.qr_url && (
+                    <div className="mt-2">
+                      <img src={acc.qr_url} alt="Payment QR" className="h-32 w-32 rounded-lg object-contain" />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </PublicCollapsible>
         )}
 
         {/* Team */}
         {employees.length > 0 && (
-          <ProfileSection title="Team" icon={<Users size={15} />}>
+          <PublicCollapsible
+            title="Team"
+            icon={<Users size={15} />}
+            isOpen={openSections.team}
+            onToggle={() => toggleSection("team")}
+          >
             <div className="space-y-2">
               {employees.map((emp) => (
                 <Link
@@ -393,12 +542,12 @@ export default function PublicProfileView({
                   }
                   className="flex items-center gap-3 rounded-xl bg-ink-50 p-3 transition hover:bg-ink-100"
                 >
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-ink-200 text-xs font-semibold">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-ink-200 font-headline text-xs font-semibold">
                     {initials(emp.name)}
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{emp.name}</p>
-                    <p className="text-[11px] text-ink-400">
+                    <p className="font-mono text-[10px] text-ink-400">
                       {emp.designation}
                     </p>
                   </div>
@@ -406,14 +555,33 @@ export default function PublicProfileView({
                 </Link>
               ))}
             </div>
-          </ProfileSection>
+          </PublicCollapsible>
         )}
 
-        {/* Reviews */}
-        <ProfileSection title="Reviews" icon={<Star size={15} />}>
+        {/* ===== REVIEWS — AI-generated suggestions that redirect to Google ===== */}
+        <section className="rounded-2xl border border-ink-100 bg-white p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2 font-headline text-sm font-semibold">
+              <Star size={15} className="text-ink-400" />
+              Reviews
+            </div>
+            {profile.google_place_id && (
+              <a
+                href={googleReviewUrl(profile.google_place_id)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 rounded-lg bg-ink-50 px-2 py-1 text-[10px] font-medium text-ink-600 transition hover:bg-ink-100"
+              >
+                Google Reviews
+                <ExternalLink size={10} />
+              </a>
+            )}
+          </div>
+
+          {/* Existing reviews summary */}
           {reviews.length > 0 && (
             <div className="mb-4 flex items-center gap-3">
-              <span className="text-3xl font-bold">
+              <span className="font-headline text-3xl font-bold">
                 {avgRating.toFixed(1)}
               </span>
               <div>
@@ -430,76 +598,120 @@ export default function PublicProfileView({
                     />
                   ))}
                 </div>
-                <p className="text-xs text-ink-400">
+                <p className="font-mono text-[10px] text-ink-400">
                   {reviews.length} review{reviews.length !== 1 && "s"}
                 </p>
               </div>
             </div>
           )}
 
-          {reviews.slice(0, 3).map((r) => (
-            <div key={r.id} className="mb-2 rounded-xl bg-ink-50 p-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold">
-                  {r.reviewer_name}
-                </span>
-                <div className="flex gap-0.5">
-                  {[1, 2, 3, 4, 5].map((s) => (
-                    <Star
-                      key={s}
-                      size={9}
-                      className={
-                        s <= r.rating
-                          ? "fill-ink-950 text-ink-950"
-                          : "text-ink-200"
-                      }
-                    />
-                  ))}
-                </div>
-              </div>
-              {r.comment && (
-                <p className="mt-1.5 text-xs leading-relaxed text-ink-600">
-                  {r.comment}
+          {/* AI-generated review suggestions */}
+          {profile.google_place_id && (
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-ink-400">
+                  Tap to review on Google
                 </p>
-              )}
+                <button
+                  onClick={refreshSuggestions}
+                  className="flex items-center gap-1 rounded-lg p-1.5 text-ink-400 transition hover:bg-ink-50 hover:text-ink-600"
+                  title="Get new suggestions"
+                >
+                  <RefreshCw size={12} />
+                </button>
+              </div>
+              <div className="space-y-2">
+                {reviewSuggestions.map((text, i) => (
+                  <button
+                    key={i}
+                    onClick={() => openGoogleReviewWithText(text)}
+                    className="w-full rounded-xl border border-ink-100 p-3 text-left transition hover:border-ink-300 hover:shadow-card"
+                  >
+                    <div className="mb-1.5 flex gap-0.5">
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <Star
+                          key={s}
+                          size={10}
+                          className="fill-ink-950 text-ink-950"
+                        />
+                      ))}
+                    </div>
+                    <p className="text-xs leading-relaxed text-ink-600">
+                      {text}
+                    </p>
+                    <p className="mt-2 flex items-center gap-1 font-mono text-[9px] font-medium text-ink-400">
+                      <Copy size={8} />
+                      Tap to copy & open Google Reviews
+                    </p>
+                  </button>
+                ))}
+              </div>
             </div>
-          ))}
+          )}
 
-          {!showReviewForm && !reviewSubmitted && (
+          {!profile.google_place_id && reviews.length === 0 && (
+            <p className="text-sm text-ink-400">No reviews yet</p>
+          )}
+        </section>
+
+        {/* Downloads */}
+        <section className="rounded-2xl border border-ink-100 bg-white p-4">
+          <div className="mb-3 flex items-center gap-2 font-headline text-sm font-semibold">
+            <Download size={15} className="text-ink-400" />
+            Quick Actions
+          </div>
+          <div className="grid grid-cols-2 gap-2">
             <button
-              onClick={() => setShowReviewForm(true)}
-              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-ink-200 py-2.5 text-xs font-medium text-ink-700 transition hover:bg-ink-50"
+              onClick={saveContact}
+              className="flex items-center gap-2.5 rounded-xl border border-ink-100 px-3 py-3 text-left transition hover:bg-ink-50"
             >
-              <MessageSquare size={14} />
-              Write a review
+              <BookUser size={16} className="text-ink-400" />
+              <span className="text-xs font-medium">Save Contact</span>
             </button>
-          )}
+            <button
+              onClick={shareProfile}
+              className="flex items-center gap-2.5 rounded-xl border border-ink-100 px-3 py-3 text-left transition hover:bg-ink-50"
+            >
+              <Share2 size={16} className="text-ink-400" />
+              <span className="text-xs font-medium">Share Profile</span>
+            </button>
+            {profile.brochure_url && (
+              <a
+                href={profile.brochure_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2.5 rounded-xl border border-ink-100 px-3 py-3 transition hover:bg-ink-50"
+              >
+                <FileText size={16} className="text-ink-400" />
+                <span className="text-xs font-medium">Brochure</span>
+              </a>
+            )}
+          </div>
+        </section>
 
-          {reviewSubmitted && (
-            <p className="mt-2 rounded-xl bg-green-50 px-4 py-3 text-center text-xs text-green-700">
-              Thank you for your review!
-            </p>
-          )}
+        {/* GST & Address footer */}
+        {(profile.gst_number || profile.address) && (
+          <div className="rounded-2xl border border-ink-100 bg-white p-4">
+            {profile.gst_number && (
+              <div className="flex items-center gap-2">
+                <FileText size={12} className="text-ink-400" />
+                <span className="font-mono text-[11px] text-ink-500">
+                  GST: {profile.gst_number}
+                </span>
+              </div>
+            )}
+            {profile.address && (
+              <div className="mt-1 flex items-start gap-2">
+                <MapPin size={12} className="mt-0.5 shrink-0 text-ink-400" />
+                <span className="text-[11px] text-ink-500">
+                  {profile.address}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
 
-          {/* Review Form */}
-          {showReviewForm && (
-            <ReviewForm
-              profileId={profile.id}
-              googlePlaceId={profile.google_place_id}
-              onSubmit={(comment) => {
-                setShowReviewForm(false);
-                setReviewSubmitted(true);
-                setLastReviewComment(comment);
-                if (profile.google_place_id) {
-                  setShowGooglePrompt(true);
-                }
-              }}
-              onCancel={() => setShowReviewForm(false)}
-            />
-          )}
-        </ProfileSection>
-
-        {/* Create your profile CTA */}
+        {/* CTA */}
         <Link
           href="/signup"
           className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-ink-200 py-4 text-sm font-medium text-ink-600 transition hover:border-ink-400 hover:text-ink-900"
@@ -508,68 +720,98 @@ export default function PublicProfileView({
           Create your own Namma Info profile
         </Link>
 
-        <p className="pt-4 text-center text-[11px] text-ink-300">
+        <p className="pt-4 text-center font-mono text-[11px] text-ink-300">
           Powered by Namma Info
         </p>
       </div>
-
-      {/* Google Review Prompt Modal */}
-      {showGooglePrompt && profile.google_place_id && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-ink-950/40 backdrop-blur-sm"
-            onClick={() => setShowGooglePrompt(false)}
-          />
-          <div className="animate-scale-in relative w-full max-w-sm rounded-3xl bg-white p-6 shadow-card-lg">
-            <h3 className="text-center text-base font-semibold">
-              Review us on Google?
-            </h3>
-            <p className="mt-2 text-center text-xs text-ink-500">
-              Would you like to post the same review on our Google Business
-              Profile? It helps us a lot!
-            </p>
-            <div className="mt-5 flex gap-2">
-              <button
-                onClick={() => setShowGooglePrompt(false)}
-                className="flex-1 rounded-xl border border-ink-200 py-2.5 text-xs font-medium text-ink-600 transition hover:bg-ink-50"
-              >
-                No thanks
-              </button>
-              <a
-                href={googleReviewUrl(profile.google_place_id!)}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => setShowGooglePrompt(false)}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-ink-950 py-2.5 text-xs font-medium text-white transition hover:bg-ink-800"
-              >
-                Review on Google
-                <ExternalLink size={11} />
-              </a>
-            </div>
-          </div>
-        </div>
-      )}
     </main>
   );
 }
 
 /* ================================================================== */
+/*  Sub-components                                                     */
+/* ================================================================== */
 
-function Stat({
+function PublicCollapsible({
+  title,
   icon,
-  value,
-  label,
+  isOpen,
+  onToggle,
+  children,
 }: {
+  title: string;
   icon: React.ReactNode;
-  value: string;
-  label: string;
+  isOpen: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2">
-      <span className="text-white/40">{icon}</span>
-      <div>
-        <p className="text-sm font-bold leading-none">{value}</p>
-        <p className="text-[9px] text-white/40">{label}</p>
+    <section className="overflow-hidden rounded-2xl border border-ink-100 bg-white">
+      <button
+        onClick={onToggle}
+        className="flex w-full items-center justify-between px-4 py-3.5"
+      >
+        <div className="flex items-center gap-2 font-headline text-sm font-semibold">
+          <span className="text-ink-400">{icon}</span>
+          {title}
+        </div>
+        <ChevronDown
+          size={16}
+          className={`text-ink-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
+        />
+      </button>
+      {isOpen && (
+        <div className="animate-fade-in border-t border-ink-100 px-4 py-3">
+          {children}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function PublicGallery({
+  gallery,
+}: {
+  gallery: { url: string; category?: string; caption?: string }[];
+}) {
+  const [activeTab, setActiveTab] = useState("All");
+  const categories = [
+    "All",
+    ...Array.from(new Set(gallery.map((g) => g.category).filter(Boolean))),
+  ] as string[];
+  const filtered =
+    activeTab === "All"
+      ? gallery
+      : gallery.filter((g) => g.category === activeTab);
+
+  return (
+    <div>
+      {categories.length > 1 && (
+        <div className="mb-3 flex gap-2 overflow-x-auto scrollbar-hide">
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setActiveTab(cat)}
+              className={`whitespace-nowrap rounded-full px-3 py-1 font-mono text-[10px] font-medium transition ${
+                activeTab === cat
+                  ? "bg-ink-950 text-white"
+                  : "bg-ink-50 text-ink-500"
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="grid grid-cols-3 gap-1.5">
+        {filtered.map((img, i) => (
+          <img
+            key={i}
+            src={img.url}
+            alt={img.caption ?? ""}
+            className="aspect-square rounded-lg object-cover"
+          />
+        ))}
       </div>
     </div>
   );
@@ -597,132 +839,13 @@ function QuickAction({
   );
 }
 
-function ProfileSection({
-  title,
-  icon,
-  children,
-}: {
-  title: string;
-  icon: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded-2xl border border-ink-100 bg-white p-4">
-      <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-        <span className="text-ink-400">{icon}</span>
-        {title}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function ReviewForm({
-  profileId,
-  googlePlaceId,
-  onSubmit,
-  onCancel,
-}: {
-  profileId: string;
-  googlePlaceId: string | null;
-  onSubmit: (comment: string) => void;
-  onCancel: () => void;
-}) {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [rating, setRating] = useState(5);
-  const [comment, setComment] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim()) return;
-    setSubmitting(true);
-
-    try {
-      const res = await fetch("/api/reviews", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          profile_id: profileId,
-          reviewer_name: name.trim(),
-          reviewer_email: email.trim() || null,
-          rating,
-          comment: comment.trim() || null,
-        }),
-      });
-      if (res.ok) {
-        onSubmit(comment.trim());
-      }
-    } catch {
-      // ignore
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <form
-      onSubmit={handleSubmit}
-      className="mt-3 space-y-2 rounded-xl border border-ink-200 p-3"
-    >
-      <div className="flex items-center gap-1">
-        {[1, 2, 3, 4, 5].map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => setRating(s)}
-            className="p-0.5"
-          >
-            <Star
-              size={20}
-              className={
-                s <= rating
-                  ? "fill-ink-950 text-ink-950"
-                  : "text-ink-200 hover:text-ink-400"
-              }
-            />
-          </button>
-        ))}
-      </div>
-      <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Your name *"
-        required
-        className="w-full rounded-lg border border-ink-200 px-3 py-2 text-xs outline-none"
-      />
-      <input
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        placeholder="Email (optional)"
-        type="email"
-        className="w-full rounded-lg border border-ink-200 px-3 py-2 text-xs outline-none"
-      />
-      <textarea
-        value={comment}
-        onChange={(e) => setComment(e.target.value)}
-        placeholder="Write your review..."
-        rows={3}
-        className="w-full resize-none rounded-lg border border-ink-200 px-3 py-2 text-xs outline-none"
-      />
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="flex-1 rounded-lg border border-ink-200 py-2 text-xs font-medium text-ink-500"
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={submitting || !name.trim()}
-          className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-ink-950 py-2 text-xs font-medium text-white disabled:opacity-40"
-        >
-          <Send size={11} />
-          {submitting ? "Sending…" : "Submit"}
-        </button>
-      </div>
-    </form>
-  );
+function SocialIcon({ platform }: { platform: string }) {
+  const p = platform.toLowerCase();
+  const cls = "h-4 w-4 text-ink-500";
+  if (p.includes("instagram")) return <Instagram className={cls} />;
+  if (p.includes("youtube")) return <Youtube className={cls} />;
+  if (p.includes("facebook")) return <Facebook className={cls} />;
+  if (p.includes("linkedin")) return <Linkedin className={cls} />;
+  if (p.includes("whatsapp")) return <MessageCircle className={cls} />;
+  return <Globe className={cls} />;
 }
