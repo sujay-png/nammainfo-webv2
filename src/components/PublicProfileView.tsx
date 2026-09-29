@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import type { Profile, Card, Review, Employee } from "@/lib/supabase/types";
 import { initials, googleReviewUrl } from "@/lib/utils";
@@ -48,6 +48,22 @@ function ensureProtocol(url: string): string {
 }
 
 /**
+ * Safely parse JSONB arrays that might come back as strings from Supabase.
+ */
+function safeArray<T>(val: any): T[] {
+  if (!val) return [];
+  if (typeof val === "string") {
+    try {
+      return JSON.parse(val);
+    } catch {
+      return [];
+    }
+  }
+  if (Array.isArray(val)) return val;
+  return [];
+}
+
+/**
  * Generate unique AI-written review suggestions based on the business's
  * services and products. Uses a seeded shuffle so each refresh yields
  * different reviews without repeating within the same view.
@@ -57,12 +73,13 @@ function generateReviewSuggestions(
   count: number = 4
 ): string[] {
   const biz = profile.business_name || profile.owner_name || "this business";
-  const services = (
-    profile.services as { name: string; description?: string }[]
-  )?.map((s) => s.name) ?? [];
-  const products = (
-    profile.products as { name: string; description?: string }[]
-  )?.map((p) => p.name) ?? [];
+  
+  const parsedServices = safeArray<{ name: string; description?: string }>(profile.services);
+  const services = parsedServices.map((s) => s.name) ?? [];
+  
+  const parsedProducts = safeArray<{ name: string; description?: string }>(profile.products);
+  const products = parsedProducts.map((p) => p.name) ?? [];
+  
   const area = profile.coverage_area || "";
   const years = profile.years_in_business;
 
@@ -125,15 +142,34 @@ export default function PublicProfileView({
   reviews: Review[];
   employees: Employee[];
 }) {
-  const [reviewSuggestions, setReviewSuggestions] = useState<string[]>(() =>
-    generateReviewSuggestions(profile)
-  );
+  // Start empty to avoid hydration mismatch — generateReviewSuggestions uses
+  // Date.now() + Math.random() which differ between server and client renders
+  const [reviewSuggestions, setReviewSuggestions] = useState<string[]>([]);
 
-  const profileUrl = profile.username
-    ? `${window.location.origin}/${profile.username}`
-    : card
-      ? `${window.location.origin}/${card.public_slug}`
-      : window.location.href;
+  // Use stable server-safe default for initial render to avoid hydration mismatch
+  const [profileUrl, setProfileUrl] = useState(() => {
+    const base = "https://nammainfo.in";
+    return profile.username
+      ? `${base}/${profile.username}`
+      : card
+        ? `${base}/${card.public_slug}`
+        : base;
+  });
+
+  useEffect(() => {
+    const origin = window.location.origin;
+    const url = profile.username
+      ? `${origin}/${profile.username}`
+      : card
+        ? `${origin}/${card.public_slug}`
+        : window.location.href;
+    setProfileUrl(url);
+  }, [profile.username, card]);
+
+  // Generate review suggestions only on client (uses Math.random / Date.now)
+  useEffect(() => {
+    setReviewSuggestions(generateReviewSuggestions(profile));
+  }, [profile]);
 
   const avgRating =
     reviews.length > 0
@@ -154,14 +190,6 @@ export default function PublicProfileView({
 
   function refreshSuggestions() {
     setReviewSuggestions(generateReviewSuggestions(profile));
-  }
-
-  function openGoogleReviewWithText(text: string) {
-    if (!profile.google_place_id) return;
-    // Google review URL — the review text gets copied to clipboard
-    // since Google doesn't support prefilling review text via URL
-    navigator.clipboard?.writeText(text);
-    window.open(googleReviewUrl(profile.google_place_id), "_blank");
   }
 
   async function saveContact() {
@@ -376,21 +404,21 @@ export default function PublicProfileView({
         )}
 
         {/* Services & Products */}
-        {((profile.services as unknown[] ?? []).length > 0 ||
-          (profile.products as unknown[] ?? []).length > 0) && (
+        {((safeArray(profile.services)).length > 0 ||
+          (safeArray(profile.products)).length > 0) && (
           <PublicCollapsible
             title="Services & Products"
             icon={<Award size={15} />}
             isOpen={openSections.services}
             onToggle={() => toggleSection("services")}
           >
-            {(profile.services as { name: string; description?: string; price?: string; emoji?: string }[] ?? []).length > 0 && (
+            {(safeArray<{ name: string; description?: string; price?: string; emoji?: string }>(profile.services)).length > 0 && (
               <>
                 <p className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
                   Services
                 </p>
                 <div className="grid grid-cols-2 gap-2">
-                  {(profile.services as { name: string; description?: string; price?: string; emoji?: string }[]).map((s, i) => (
+                  {(safeArray<{ name: string; description?: string; price?: string; emoji?: string }>(profile.services)).map((s, i) => (
                     <div key={i} className="rounded-xl border border-[var(--border)] p-3">
                       <div className="mb-1.5 flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent)] text-base">
                         {s.emoji || "⚡"}
@@ -411,13 +439,13 @@ export default function PublicProfileView({
                 </div>
               </>
             )}
-            {(profile.products as { name: string; image_url?: string; price?: string; emoji?: string }[] ?? []).length > 0 && (
+            {(safeArray<{ name: string; image_url?: string; price?: string; emoji?: string }>(profile.products)).length > 0 && (
               <>
                 <p className="mb-2 mt-4 font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
                   Products
                 </p>
                 <div className="grid grid-cols-2 gap-2">
-                  {(profile.products as { name: string; image_url?: string; price?: string; emoji?: string }[]).map((p, i) => (
+                  {(safeArray<{ name: string; image_url?: string; price?: string; emoji?: string }>(profile.products)).map((p, i) => (
                     <div key={i} className="overflow-hidden rounded-xl border border-[var(--border)]">
                       {p.image_url ? (
                         <img src={p.image_url} alt={p.name} className="aspect-square w-full object-cover" />
@@ -441,7 +469,7 @@ export default function PublicProfileView({
         )}
 
         {/* Gallery */}
-        {(profile.gallery as { url: string; category?: string; caption?: string }[] ?? []).length > 0 && (
+        {(safeArray<{ url: string; category?: string; caption?: string }>(profile.gallery)).length > 0 && (
           <PublicCollapsible
             title="Gallery"
             icon={<ImageIcon size={15} />}
@@ -449,13 +477,13 @@ export default function PublicProfileView({
             onToggle={() => toggleSection("gallery")}
           >
             <PublicGallery
-              gallery={profile.gallery as { url: string; category?: string; caption?: string }[]}
+              gallery={safeArray<{ url: string; category?: string; caption?: string }>(profile.gallery)}
             />
           </PublicCollapsible>
         )}
 
         {/* Connect With Us */}
-        {(profile.social_links as { platform: string; url: string }[] ?? []).length > 0 && (
+        {(safeArray<{ platform: string; url: string }>(profile.social_links)).length > 0 && (
           <PublicCollapsible
             title="Connect With Us"
             icon={<MessageCircle size={15} />}
@@ -463,7 +491,7 @@ export default function PublicProfileView({
             onToggle={() => toggleSection("social")}
           >
             <div className="grid grid-cols-2 gap-2">
-              {(profile.social_links as { platform: string; url: string }[]).map((link, i) => (
+              {(safeArray<{ platform: string; url: string }>(profile.social_links)).map((link, i) => (
                 <a
                   key={i}
                   href={ensureProtocol(link.url)}
@@ -482,7 +510,7 @@ export default function PublicProfileView({
         )}
 
         {/* Banking & Payment Info */}
-        {(profile.bank_accounts as { bank_name?: string; account_number?: string; ifsc?: string; upi_id?: string; qr_url?: string }[] ?? []).length > 0 && (
+        {(safeArray<{ bank_name?: string; account_number?: string; ifsc?: string; upi_id?: string; qr_url?: string }>(profile.bank_accounts)).length > 0 && (
           <PublicCollapsible
             title="Banking & Payment Info"
             icon={<Banknote size={15} />}
@@ -490,7 +518,7 @@ export default function PublicProfileView({
             onToggle={() => toggleSection("banking")}
           >
             <div className="space-y-3">
-              {(profile.bank_accounts as { bank_name?: string; account_number?: string; ifsc?: string; upi_id?: string; qr_url?: string }[]).map((acc, i) => (
+              {(safeArray<{ bank_name?: string; account_number?: string; ifsc?: string; upi_id?: string; qr_url?: string }>(profile.bank_accounts)).map((acc, i) => (
                 <div key={i} className="rounded-xl border border-[var(--border)] p-3">
                   {acc.bank_name && (
                     <div className="mb-2 flex items-center gap-2">
@@ -558,7 +586,7 @@ export default function PublicProfileView({
           </PublicCollapsible>
         )}
 
-        {/* ===== REVIEWS — AI-generated suggestions that redirect to Google ===== */}
+        {/* ===== REVIEWS ===== */}
         <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2 font-headline text-sm font-semibold">
@@ -605,53 +633,101 @@ export default function PublicProfileView({
             </div>
           )}
 
-          {/* AI-generated review suggestions */}
-          {profile.google_place_id && (
-            <div>
-              <div className="mb-2 flex items-center justify-between">
-                <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
-                  Tap to review on Google
-                </p>
-                <button
-                  onClick={refreshSuggestions}
-                  className="flex items-center gap-1 rounded-lg p-1.5 text-[var(--muted-foreground)] transition hover:bg-[var(--accent)] hover:text-[var(--muted-foreground)]"
-                  title="Get new suggestions"
-                >
-                  <RefreshCw size={12} />
-                </button>
-              </div>
-              <div className="space-y-2">
-                {reviewSuggestions.map((text, i) => (
-                  <button
-                    key={i}
-                    onClick={() => openGoogleReviewWithText(text)}
-                    className="w-full rounded-xl border border-[var(--border)] p-3 text-left transition hover:border-[var(--border)] hover:shadow-card"
-                  >
-                    <div className="mb-1.5 flex gap-0.5">
+          {/* Actual Reviews List */}
+          {reviews.length > 0 && (
+            <div className="mb-6 space-y-3">
+              {reviews.map((review) => (
+                <div key={review.id} className="rounded-xl border border-[var(--border)] p-3">
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <span className="text-xs font-semibold">
+                      {/* Adjust 'reviewer_name' below based on your actual Review type fields */}
+                      {(review as any).reviewer_name || "Anonymous"} 
+                    </span>
+                    <div className="flex gap-0.5">
                       {[1, 2, 3, 4, 5].map((s) => (
                         <Star
                           key={s}
                           size={10}
-                          className="fill-[var(--foreground)] text-[var(--foreground)]"
+                          className={
+                            s <= review.rating
+                              ? "fill-[var(--foreground)] text-[var(--foreground)]"
+                              : "text-[var(--muted-foreground)]"
+                          }
                         />
                       ))}
                     </div>
+                  </div>
+                  {/* Adjust 'comment' below based on your actual Review type fields */}
+                  {(review as any).comment && (
                     <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
-                      {text}
+                      {(review as any).comment}
                     </p>
-                    <p className="mt-2 flex items-center gap-1 font-mono text-[9px] font-medium text-[var(--muted-foreground)]">
-                      <Copy size={8} />
-                      Tap to copy & open Google Reviews
+                  )}
+                  {review.created_at && (
+                    <p className="mt-2 font-mono text-[9px] text-[var(--muted-foreground)]">
+                      {new Date(review.created_at).toLocaleDateString()}
                     </p>
-                  </button>
-                ))}
-              </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
 
-          {!profile.google_place_id && reviews.length === 0 && (
-            <p className="text-sm text-[var(--muted-foreground)]">No reviews yet</p>
-          )}
+          {/* AI-generated review suggestions */}
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
+                {profile.google_place_id
+                  ? "Tap to review on Google"
+                  : "Share your experience"}
+              </p>
+              <button
+                onClick={refreshSuggestions}
+                className="flex items-center gap-1 rounded-lg p-1.5 text-[var(--muted-foreground)] transition hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+                title="Get new suggestions"
+              >
+                <RefreshCw size={12} />
+              </button>
+            </div>
+            <div className="space-y-2">
+              {reviewSuggestions.map((text, i) => (
+                <button
+                  key={i}
+                  onClick={() => {
+                    navigator.clipboard?.writeText(text);
+                    if (profile.google_place_id) {
+                      window.open(
+                        googleReviewUrl(profile.google_place_id),
+                        "_blank"
+                      );
+                    } else {
+                      alert("Review text copied to clipboard!");
+                    }
+                  }}
+                  className="w-full rounded-xl border border-[var(--border)] p-3 text-left transition hover:border-[var(--foreground)]/20 hover:shadow-card"
+                >
+                  <div className="mb-1.5 flex gap-0.5">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <Star
+                        key={s}
+                        size={10}
+                        className="fill-[var(--foreground)] text-[var(--foreground)]"
+                      />
+                    ))}
+                  </div>
+                  <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
+                    {text}
+                  </p>
+                  <p className="mt-2 flex items-center gap-1 font-mono text-[9px] font-medium text-[var(--muted-foreground)]">
+                    <Copy size={8} />
+                    {profile.google_place_id
+                      ? "Tap to copy & open Google Reviews"
+                      : "Tap to copy review text"}
+                  </p>
+                </button>
+              ))}
+            </div>
+          </div>
         </section>
 
         {/* Downloads */}
