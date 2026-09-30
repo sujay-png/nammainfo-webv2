@@ -381,13 +381,15 @@ export default function PublicProfileView({
       <div id="details" className="space-y-4 px-5 pb-8 pt-6">
 
         {/* ── About Us ── */}
-        {profile.bio && (
+        {(profile.bio || profile.address || profile.coverage_area) && (
           <OpenSection title="About Us" icon={<Briefcase size={15} />}>
-            <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
-              {profile.bio}
-            </p>
+            {profile.bio && (
+              <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
+                {profile.bio}
+              </p>
+            )}
             {profile.address && (
-              <div className="mt-3 flex items-start gap-2 text-xs text-[var(--muted-foreground)]">
+              <div className={`${profile.bio ? "mt-3" : ""} flex items-start gap-2 text-xs text-[var(--muted-foreground)]`}>
                 <MapPin size={13} className="mt-0.5 shrink-0" />
                 {profile.address}
               </div>

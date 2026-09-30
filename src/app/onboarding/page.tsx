@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { slugify } from "@/lib/utils";
 import {
   ArrowRight,
   Loader2,
@@ -79,44 +78,73 @@ export default function OnboardingPage() {
   async function handleSubmit() {
     setLoading(true);
 
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
+    try {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-    const username = form.username.toLowerCase().replace(/[^a-z0-9-]/g, "");
+      if (!user) {
+        // User's email is not confirmed yet — try to get session from signUp
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!session) {
+          alert(
+            "Please verify your email before continuing. Check your inbox for a confirmation link."
+          );
+          setLoading(false);
+          return;
+        }
+      }
 
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        owner_name: form.owner_name.trim(),
-        business_name: form.business_name.trim() || null,
-        job_title: form.job_title.trim() || null,
-        phone: form.phone.trim() || null,
-        email: form.email.trim() || null,
-        website: form.website.trim() || null,
-        address: form.address.trim() || null,
-        username: username || null,
-        bio: form.bio.trim() || null,
-      })
-      .eq("id", user.id);
+      const userId = user?.id ?? (await supabase.auth.getSession()).data.session?.user?.id;
+      if (!userId) {
+        alert("Session expired. Please sign in again.");
+        setLoading(false);
+        router.push("/signup");
+        return;
+      }
 
-    if (error) {
-      console.error("Onboarding error:", error);
+      const username = form.username.toLowerCase().replace(/[^a-z0-9-]/g, "");
+
+      // Update the profile (created by the signup trigger)
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          owner_name: form.owner_name.trim(),
+          business_name: form.business_name.trim() || null,
+          job_title: form.job_title.trim() || null,
+          phone: form.phone.trim() || null,
+          email: form.email.trim() || null,
+          website: form.website.trim() || null,
+          address: form.address.trim() || null,
+          username: username || null,
+          bio: form.bio.trim() || null,
+        })
+        .eq("id", userId);
+
+      if (error) {
+        console.error("Onboarding error:", error);
+        alert("Something went wrong. Please try again.");
+        setLoading(false);
+        return;
+      }
+
+      // Update the existing card's slug (card was already created by the signup trigger)
+      if (username) {
+        await supabase
+          .from("cards")
+          .update({ public_slug: username })
+          .eq("profile_id", userId);
+      }
+
+      router.push("/dashboard");
+    } catch (err) {
+      console.error("Onboarding error:", err);
       alert("Something went wrong. Please try again.");
       setLoading(false);
-      return;
     }
-
-    // Create a default card for the user
-    await supabase.from("cards").insert({
-      profile_id: user.id,
-      public_slug: username || slugify(form.owner_name || form.business_name || "card"),
-      is_active: true,
-    });
-
-    router.push("/dashboard");
   }
 
   return (

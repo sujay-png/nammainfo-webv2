@@ -39,6 +39,8 @@ import {
   Copy,
   BookUser,
   StarIcon,
+  Upload,
+  Loader2,
 } from "lucide-react";
 import { googleReviewUrl } from "@/lib/utils";
 
@@ -87,7 +89,7 @@ export default function ProfilePage() {
   const [cardSlug, setCardSlug] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Profile>>({});
   const [reviews, setReviews] = useState<
-    { author_name: string; rating: number; text: string; time: number }[]
+    { reviewer_name: string; rating: number; comment: string | null; created_at: string }[]
   >([]);
 
   // Collapsible section state
@@ -122,9 +124,9 @@ export default function ProfilePage() {
           .maybeSingle(),
         supabase
           .from("reviews")
-          .select("author_name, rating, text, time")
+          .select("reviewer_name, rating, comment, created_at")
           .eq("profile_id", user.id)
-          .order("time", { ascending: false })
+          .order("created_at", { ascending: false })
           .limit(10),
       ]);
 
@@ -133,7 +135,7 @@ export default function ProfilePage() {
       setCardSlug((cardData as { public_slug: string }).public_slug);
     if (reviewData)
       setReviews(
-        reviewData as { author_name: string; rating: number; text: string; time: number }[]
+        reviewData as { reviewer_name: string; rating: number; comment: string | null; created_at: string }[]
       );
     setLoading(false);
   }, []);
@@ -680,7 +682,7 @@ export default function ProfilePage() {
                     >
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-semibold">
-                          {rev.author_name}
+                          {rev.reviewer_name}
                         </span>
                         <div className="flex gap-0.5">
                           {Array.from({ length: 5 }).map((_, s) => (
@@ -696,11 +698,11 @@ export default function ProfilePage() {
                           ))}
                         </div>
                       </div>
-                      {rev.text && (
+                      {rev.comment && (
                         <p className="mt-1.5 text-xs leading-relaxed text-[var(--muted-foreground)]">
-                          {rev.text.length > 120
-                            ? rev.text.slice(0, 120) + "…"
-                            : rev.text}
+                          {rev.comment.length > 120
+                            ? rev.comment.slice(0, 120) + "…"
+                            : rev.comment}
                         </p>
                       )}
                     </div>
@@ -972,6 +974,19 @@ export default function ProfilePage() {
             onChange={(v) => setEditForm({ ...editForm, google_place_id: v })}
             placeholder="ChIJ..."
           />
+          <div>
+            <p className="mb-1.5 text-xs font-medium text-[var(--muted-foreground)]">
+              Brochure / Catalog (PDF or Image)
+            </p>
+            <ImageUploader
+              value={editForm.brochure_url ?? ""}
+              onChange={(url) => setEditForm({ ...editForm, brochure_url: url })}
+              folder="brochures"
+              userId={profile?.id ?? ""}
+              label="Upload brochure"
+              accept="image/*,.pdf"
+            />
+          </div>
           <SaveButton saving={saving} onClick={saveProfile} />
         </EditSheet>
       )}
@@ -1016,12 +1031,15 @@ export default function ProfilePage() {
                 name: string;
                 description?: string;
                 price?: string;
+                image_url?: string;
               }[]) ?? []
             }
             onChange={(items) =>
               setEditForm({ ...editForm, products: items })
             }
             label="product"
+            showImage
+            userId={profile?.id ?? ""}
           />
           <SaveButton saving={saving} onClick={saveProfile} />
         </EditSheet>
@@ -1038,6 +1056,7 @@ export default function ProfilePage() {
               }[]) ?? []
             }
             onChange={(g) => setEditForm({ ...editForm, gallery: g })}
+            userId={profile?.id ?? ""}
           />
           <SaveButton saving={saving} onClick={saveProfile} />
         </EditSheet>
@@ -1059,6 +1078,7 @@ export default function ProfilePage() {
             onChange={(accs) =>
               setEditForm({ ...editForm, bank_accounts: accs as BankAccount[] })
             }
+            userId={profile?.id ?? ""}
           />
           <SaveButton saving={saving} onClick={saveProfile} />
         </EditSheet>
@@ -1412,12 +1432,16 @@ function ItemListEditor({
   items,
   onChange,
   label,
+  showImage,
+  userId,
 }: {
-  items: { name: string; description?: string; price?: string }[];
+  items: { name: string; description?: string; price?: string; image_url?: string }[];
   onChange: (
-    items: { name: string; description?: string; price?: string }[]
+    items: { name: string; description?: string; price?: string; image_url?: string }[]
   ) => void;
   label: string;
+  showImage?: boolean;
+  userId?: string;
 }) {
   return (
     <div className="space-y-3">
@@ -1455,6 +1479,19 @@ function ItemListEditor({
                 placeholder="Price (optional)"
                 className="w-full border-none bg-transparent text-xs text-[var(--muted-foreground)] outline-none"
               />
+              {showImage && userId && (
+                <ImageUploader
+                  value={item.image_url ?? ""}
+                  onChange={(url) => {
+                    const updated = [...items];
+                    updated[i] = { ...item, image_url: url };
+                    onChange(updated);
+                  }}
+                  folder="products"
+                  userId={userId}
+                  label={`Upload ${label} image`}
+                />
+              )}
             </div>
             <button
               onClick={() => onChange(items.filter((_, idx) => idx !== i))}
@@ -1478,54 +1515,157 @@ function ItemListEditor({
   );
 }
 
+/** Upload a file to Supabase Storage and return its public URL */
+async function uploadToStorage(
+  file: File,
+  userId: string,
+  folder: string
+): Promise<string | null> {
+  const supabase = createClient();
+  const ext = file.name.split(".").pop();
+  const path = `${userId}/${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+  const { error } = await supabase.storage
+    .from("profile-media")
+    .upload(path, file, { upsert: true });
+
+  if (error) {
+    console.error("Upload error:", error);
+    return null;
+  }
+
+  const {
+    data: { publicUrl },
+  } = supabase.storage.from("profile-media").getPublicUrl(path);
+
+  return publicUrl;
+}
+
+/** Reusable image upload component — replaces paste-URL text inputs */
+function ImageUploader({
+  value,
+  onChange,
+  folder,
+  userId,
+  label = "Upload image",
+  accept = "image/*",
+  className = "",
+}: {
+  value: string;
+  onChange: (url: string) => void;
+  folder: string;
+  userId: string;
+  label?: string;
+  accept?: string;
+  className?: string;
+}) {
+  const [uploading, setUploading] = useState(false);
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    const url = await uploadToStorage(file, userId, folder);
+    if (url) onChange(url);
+    setUploading(false);
+  }
+
+  return (
+    <div className={className}>
+      {value ? (
+        <div className="relative">
+          <img
+            src={value}
+            alt=""
+            className="h-24 w-full rounded-lg object-cover"
+          />
+          <div className="absolute inset-0 flex items-center justify-center gap-2 rounded-lg bg-black/40 opacity-0 transition hover:opacity-100">
+            <label className="cursor-pointer rounded-lg bg-white/90 px-2.5 py-1.5 text-[10px] font-medium text-ink-900">
+              Change
+              <input
+                type="file"
+                accept={accept}
+                onChange={handleFile}
+                className="hidden"
+              />
+            </label>
+            <button
+              onClick={() => onChange("")}
+              className="rounded-lg bg-white/90 px-2.5 py-1.5 text-[10px] font-medium text-red-600"
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+      ) : (
+        <label className="flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-[var(--border)] py-6 transition hover:border-[var(--foreground)]/30 hover:bg-[var(--accent)]">
+          {uploading ? (
+            <Loader2 size={20} className="animate-spin text-[var(--muted-foreground)]" />
+          ) : (
+            <>
+              <Upload size={20} className="text-[var(--muted-foreground)]" />
+              <span className="text-xs text-[var(--muted-foreground)]">
+                {label}
+              </span>
+            </>
+          )}
+          <input
+            type="file"
+            accept={accept}
+            onChange={handleFile}
+            className="hidden"
+            disabled={uploading}
+          />
+        </label>
+      )}
+    </div>
+  );
+}
+
 function GalleryEditor({
   gallery,
   onChange,
+  userId,
 }: {
   gallery: { url: string; category?: string; caption?: string }[];
   onChange: (
     g: { url: string; category?: string; caption?: string }[]
   ) => void;
+  userId: string;
 }) {
   return (
     <div className="space-y-3">
       {gallery.map((img, i) => (
-        <div key={i} className="flex gap-3 rounded-xl border border-[var(--border)] p-3">
-          {img.url && (
-            <img
-              src={img.url}
-              alt=""
-              className="h-16 w-16 shrink-0 rounded-lg object-cover"
-            />
-          )}
-          <div className="flex-1 space-y-2">
-            <input
-              value={img.url}
-              onChange={(e) => {
-                const updated = [...gallery];
-                updated[i] = { ...img, url: e.target.value };
-                onChange(updated);
-              }}
-              placeholder="Image URL"
-              className="w-full border-none bg-transparent text-xs outline-none"
-            />
-            <input
-              value={img.category ?? ""}
-              onChange={(e) => {
-                const updated = [...gallery];
-                updated[i] = { ...img, category: e.target.value };
-                onChange(updated);
-              }}
-              placeholder="Category (e.g. Work, Events)"
-              className="w-full border-none bg-transparent text-xs text-[var(--muted-foreground)] outline-none"
-            />
+        <div key={i} className="rounded-xl border border-[var(--border)] p-3">
+          <div className="mb-2 flex items-center justify-end">
+            <button
+              onClick={() => onChange(gallery.filter((_, idx) => idx !== i))}
+              className="p-1 text-[var(--muted-foreground)] hover:text-red-500"
+            >
+              <X size={14} />
+            </button>
           </div>
-          <button
-            onClick={() => onChange(gallery.filter((_, idx) => idx !== i))}
-            className="self-start p-1 text-[var(--muted-foreground)] hover:text-red-500"
-          >
-            <X size={14} />
-          </button>
+          <ImageUploader
+            value={img.url}
+            onChange={(url) => {
+              const updated = [...gallery];
+              updated[i] = { ...img, url };
+              onChange(updated);
+            }}
+            folder="gallery"
+            userId={userId}
+            label="Upload gallery image"
+          />
+          <input
+            value={img.category ?? ""}
+            onChange={(e) => {
+              const updated = [...gallery];
+              updated[i] = { ...img, category: e.target.value };
+              onChange(updated);
+            }}
+            placeholder="Category (e.g. Work, Events)"
+            className="mt-2 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs outline-none"
+          />
         </div>
       ))}
       <button
@@ -1544,6 +1684,7 @@ function GalleryEditor({
 function BankAccountsEditor({
   accounts,
   onChange,
+  userId,
 }: {
   accounts: {
     bank_name?: string;
@@ -1563,6 +1704,7 @@ function BankAccountsEditor({
       qr_url?: string;
     }[]
   ) => void;
+  userId: string;
 }) {
   return (
     <div className="space-y-4">
@@ -1632,15 +1774,17 @@ function BankAccountsEditor({
               placeholder="UPI ID (e.g. name@upi)"
               className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
             />
-            <input
+            <p className="text-xs text-[var(--muted-foreground)]">Payment QR Code</p>
+            <ImageUploader
               value={acc.qr_url ?? ""}
-              onChange={(e) => {
+              onChange={(url) => {
                 const updated = [...accounts];
-                updated[i] = { ...acc, qr_url: e.target.value };
+                updated[i] = { ...acc, qr_url: url };
                 onChange(updated);
               }}
-              placeholder="QR code image URL"
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none"
+              folder="qr-codes"
+              userId={userId}
+              label="Upload QR code image"
             />
           </div>
         </div>
