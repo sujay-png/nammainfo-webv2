@@ -22,7 +22,6 @@ import {
   Clock,
   Briefcase,
   Image as ImageIcon,
-  Link2,
   RefreshCw,
   MessageCircle,
   Instagram,
@@ -35,7 +34,6 @@ import {
   Copy,
   FileText,
   BookUser,
-  ChevronDown,
 } from "lucide-react";
 
 /**
@@ -49,9 +47,22 @@ function ensureProtocol(url: string): string {
 }
 
 /**
+ * Build the correct href for a social link.
+ * WhatsApp links use wa.me/<number> instead of a raw URL.
+ */
+function socialHref(link: { platform: string; url: string }): string {
+  const p = link.platform.toLowerCase();
+  if (p.includes("whatsapp")) {
+    // Strip non-digits, build wa.me link
+    const digits = link.url.replace(/[^0-9]/g, "");
+    return `https://wa.me/${digits}`;
+  }
+  return ensureProtocol(link.url);
+}
+
+/**
  * Generate unique AI-written review suggestions based on the business's
- * services and products. Uses a seeded shuffle so each refresh yields
- * different reviews without repeating within the same view.
+ * services and products.
  */
 function generateReviewSuggestions(
   profile: Profile,
@@ -102,7 +113,6 @@ function generateReviewSuggestions(
       `Cannot say enough good things about ${biz}! Their ${svc || prod || "service"} is outstanding. I've recommended them to everyone I know.`,
   ];
 
-  // Shuffle using timestamp seed so reviews change on each page load
   const seed = Date.now();
   const shuffled = [...templates].sort(
     () => Math.sin(seed * Math.random()) - 0.5
@@ -126,12 +136,10 @@ export default function PublicProfileView({
   reviews: Review[];
   employees: Employee[];
 }) {
-  // Apply the profile owner's color theme so visitors see the chosen palette
   const ownerTheme = getTheme(profile.theme);
   const [themeMode, setThemeMode] = useState<"light" | "dark">("light");
 
   useEffect(() => {
-    // Detect visitor's current mode preference
     const isDark = document.documentElement.classList.contains("dark") ||
       window.matchMedia("(prefers-color-scheme: dark)").matches;
     setThemeMode(isDark ? "dark" : "light");
@@ -142,11 +150,8 @@ export default function PublicProfileView({
     return vars as Record<string, string>;
   }, [ownerTheme, themeMode]);
 
-  // Start empty to avoid hydration mismatch — generateReviewSuggestions uses
-  // Date.now() + Math.random() which differ between server and client renders
   const [reviewSuggestions, setReviewSuggestions] = useState<string[]>([]);
 
-  // Use stable server-safe default for initial render to avoid hydration mismatch
   const [profileUrl, setProfileUrl] = useState(() => {
     const base = "https://nammainfo.in";
     return profile.username
@@ -166,7 +171,6 @@ export default function PublicProfileView({
     setProfileUrl(url);
   }, [profile.username, card]);
 
-  // Generate review suggestions only on client (uses Math.random / Date.now)
   useEffect(() => {
     setReviewSuggestions(generateReviewSuggestions(profile));
   }, [profile]);
@@ -176,23 +180,9 @@ export default function PublicProfileView({
       ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
       : 0;
 
-  // Collapsible sections for public view
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
-    about: true,
-    services: true,
-    gallery: false,
-    social: true,
-    banking: false,
-    team: true,
-  });
-  const toggleSection = (k: string) =>
-    setOpenSections((prev) => ({ ...prev, [k]: !prev[k] }));
-
   function refreshSuggestions() {
     setReviewSuggestions(generateReviewSuggestions(profile));
   }
-
-  // (review click handlers are inline in the JSX)
 
   async function saveContact() {
     const vcardContent = [
@@ -240,6 +230,13 @@ export default function PublicProfileView({
       await navigator.clipboard.writeText(profileUrl);
     }
   }
+
+  /* Cast arrays once */
+  const socialLinks = (profile.social_links as { platform: string; url: string }[]) ?? [];
+  const servicesList = (profile.services as { name: string; description?: string; price?: string; emoji?: string }[]) ?? [];
+  const productsList = (profile.products as { name: string; image_url?: string; price?: string; emoji?: string }[]) ?? [];
+  const galleryList = (profile.gallery as { url: string; category?: string; caption?: string }[]) ?? [];
+  const bankAccounts = (profile.bank_accounts as { bank_name?: string; account_number?: string; ifsc?: string; upi_id?: string; qr_url?: string }[]) ?? [];
 
   return (
     <main
@@ -380,16 +377,12 @@ export default function PublicProfileView({
         </button>
       </div>
 
-      {/* ===== SECTIONS ===== */}
-      <div id="details" className="space-y-3 px-5 pb-8 pt-6">
-        {/* About */}
+      {/* ===== ALL SECTIONS — NO ACCORDIONS, EVERYTHING OPEN ===== */}
+      <div id="details" className="space-y-4 px-5 pb-8 pt-6">
+
+        {/* ── About Us ── */}
         {profile.bio && (
-          <PublicCollapsible
-            title="About Us"
-            icon={<Briefcase size={15} />}
-            isOpen={openSections.about}
-            onToggle={() => toggleSection("about")}
-          >
+          <OpenSection title="About Us" icon={<Briefcase size={15} />}>
             <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
               {profile.bio}
             </p>
@@ -405,52 +398,46 @@ export default function PublicProfileView({
                 Serves: {profile.coverage_area}
               </div>
             )}
-          </PublicCollapsible>
+          </OpenSection>
         )}
 
-        {/* Services & Products */}
-        {((profile.services as unknown[] ?? []).length > 0 ||
-          (profile.products as unknown[] ?? []).length > 0) && (
-          <PublicCollapsible
+        {/* ── Services & Products ── */}
+        {(servicesList.length > 0 || productsList.length > 0) && (
+          <OpenSection
             title="Services & Products"
             icon={<Award size={15} />}
-            isOpen={openSections.services}
-            onToggle={() => toggleSection("services")}
+            badge={servicesList.length + productsList.length}
           >
-            {(profile.services as { name: string; description?: string; price?: string; emoji?: string }[] ?? []).length > 0 && (
+            {servicesList.length > 0 && (
               <>
                 <p className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
                   Services
                 </p>
                 <div className="grid grid-cols-2 gap-2">
-                  {(profile.services as { name: string; description?: string; price?: string; emoji?: string }[]).map((s, i) => (
+                  {servicesList.map((s, i) => (
                     <div key={i} className="rounded-xl border border-[var(--border)] p-3">
                       <div className="mb-1.5 flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent)] text-base">
                         {s.emoji || "⚡"}
                       </div>
-                      <p className="text-xs font-semibold">{s.name}</p>
+                      <p className="text-xs font-semibold text-[var(--foreground)]">{s.name}</p>
                       {s.description && (
-                        <p className="mt-0.5 text-[10px] text-[var(--muted-foreground)]">
-                          {s.description}
-                        </p>
+                        <p className="mt-0.5 text-[10px] text-[var(--muted-foreground)]">{s.description}</p>
                       )}
                       {s.price && (
-                        <p className="mt-1 font-mono text-[10px] font-semibold text-[var(--muted-foreground)]">
-                          {s.price}
-                        </p>
+                        <p className="mt-1 font-mono text-[10px] font-semibold text-[var(--muted-foreground)]">{s.price}</p>
                       )}
                     </div>
                   ))}
                 </div>
               </>
             )}
-            {(profile.products as { name: string; image_url?: string; price?: string; emoji?: string }[] ?? []).length > 0 && (
+            {productsList.length > 0 && (
               <>
                 <p className="mb-2 mt-4 font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
                   Products
                 </p>
                 <div className="grid grid-cols-2 gap-2">
-                  {(profile.products as { name: string; image_url?: string; price?: string; emoji?: string }[]).map((p, i) => (
+                  {productsList.map((p, i) => (
                     <div key={i} className="overflow-hidden rounded-xl border border-[var(--border)]">
                       {p.image_url ? (
                         <img src={p.image_url} alt={p.name} className="aspect-square w-full object-cover" />
@@ -460,7 +447,7 @@ export default function PublicProfileView({
                         </div>
                       )}
                       <div className="p-2.5">
-                        <p className="text-xs font-semibold">{p.name}</p>
+                        <p className="text-xs font-semibold text-[var(--foreground)]">{p.name}</p>
                         {p.price && (
                           <p className="mt-0.5 font-mono text-[10px] font-semibold text-[var(--muted-foreground)]">{p.price}</p>
                         )}
@@ -470,36 +457,28 @@ export default function PublicProfileView({
                 </div>
               </>
             )}
-          </PublicCollapsible>
+          </OpenSection>
         )}
 
-        {/* Gallery */}
-        {(profile.gallery as { url: string; category?: string; caption?: string }[] ?? []).length > 0 && (
-          <PublicCollapsible
+        {/* ── Gallery ── */}
+        {galleryList.length > 0 && (
+          <OpenSection
             title="Gallery"
             icon={<ImageIcon size={15} />}
-            isOpen={openSections.gallery}
-            onToggle={() => toggleSection("gallery")}
+            badge={galleryList.length}
           >
-            <PublicGallery
-              gallery={profile.gallery as { url: string; category?: string; caption?: string }[]}
-            />
-          </PublicCollapsible>
+            <PublicGallery gallery={galleryList} />
+          </OpenSection>
         )}
 
-        {/* Connect With Us */}
-        {(profile.social_links as { platform: string; url: string }[] ?? []).length > 0 && (
-          <PublicCollapsible
-            title="Connect With Us"
-            icon={<MessageCircle size={15} />}
-            isOpen={openSections.social}
-            onToggle={() => toggleSection("social")}
-          >
+        {/* ── Connect With Us ── */}
+        {socialLinks.length > 0 && (
+          <OpenSection title="Connect With Us" icon={<MessageCircle size={15} />}>
             <div className="grid grid-cols-2 gap-2">
-              {(profile.social_links as { platform: string; url: string }[]).map((link, i) => (
+              {socialLinks.map((link, i) => (
                 <a
                   key={i}
-                  href={ensureProtocol(link.url)}
+                  href={socialHref(link)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-2.5 rounded-xl border border-[var(--border)] px-3 py-2.5 transition hover:bg-[var(--accent)]"
@@ -511,24 +490,162 @@ export default function PublicProfileView({
                 </a>
               ))}
             </div>
-          </PublicCollapsible>
+          </OpenSection>
         )}
 
-        {/* Banking & Payment Info */}
-        {(profile.bank_accounts as { bank_name?: string; account_number?: string; ifsc?: string; upi_id?: string; qr_url?: string }[] ?? []).length > 0 && (
-          <PublicCollapsible
+        {/* ── Write a Google Review ── */}
+        <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3.5">
+            <div className="flex items-center gap-2 font-headline text-sm font-semibold text-[var(--foreground)]">
+              <Star size={15} className="text-[var(--muted-foreground)]" />
+              Write a Google Review
+            </div>
+            {profile.google_place_id && (
+              <a
+                href={googleReviewUrl(profile.google_place_id)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 rounded-lg bg-[var(--accent)] px-2 py-1 text-[10px] font-medium text-[var(--muted-foreground)] transition hover:text-[var(--foreground)]"
+              >
+                Google Reviews
+                <ExternalLink size={10} />
+              </a>
+            )}
+          </div>
+
+          <div className="border-t border-[var(--border)] px-4 py-3">
+            {/* Existing reviews summary */}
+            {reviews.length > 0 && (
+              <div className="mb-4 flex items-center gap-3">
+                <span className="font-headline text-3xl font-bold text-[var(--foreground)]">
+                  {avgRating.toFixed(1)}
+                </span>
+                <div>
+                  <div className="flex gap-0.5">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <Star
+                        key={s}
+                        size={14}
+                        className={
+                          s <= Math.round(avgRating)
+                            ? "fill-[var(--foreground)] text-[var(--foreground)]"
+                            : "text-[var(--muted-foreground)]"
+                        }
+                      />
+                    ))}
+                  </div>
+                  <p className="font-mono text-[10px] text-[var(--muted-foreground)]">
+                    {reviews.length} review{reviews.length !== 1 && "s"}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Recent reviews inline */}
+            {reviews.length > 0 && (
+              <div className="mb-4 space-y-2">
+                {reviews.slice(0, 3).map((review) => (
+                  <div key={review.id} className="rounded-xl bg-[var(--accent)] px-3 py-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-medium text-[var(--foreground)]">
+                        {review.reviewer_name}
+                      </span>
+                      <div className="flex gap-0.5">
+                        {[1, 2, 3, 4, 5].map((s) => (
+                          <Star
+                            key={s}
+                            size={10}
+                            className={
+                              s <= review.rating
+                                ? "fill-amber-500 text-amber-500"
+                                : "text-[var(--muted-foreground)]"
+                            }
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    {review.comment && (
+                      <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
+                        {review.comment}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* AI-generated review suggestions */}
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
+                  {profile.google_place_id
+                    ? "Tap to review on Google"
+                    : "Share your experience"}
+                </p>
+                <button
+                  onClick={refreshSuggestions}
+                  className="flex items-center gap-1 rounded-lg p-1.5 text-[var(--muted-foreground)] transition hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+                  title="Get new suggestions"
+                >
+                  <RefreshCw size={12} />
+                </button>
+              </div>
+              <div className="space-y-2">
+                {reviewSuggestions.map((text, i) => (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      navigator.clipboard?.writeText(text);
+                      if (profile.google_place_id) {
+                        window.open(
+                          googleReviewUrl(profile.google_place_id),
+                          "_blank"
+                        );
+                      } else {
+                        alert("Review text copied to clipboard!");
+                      }
+                    }}
+                    className="w-full rounded-xl border border-[var(--border)] p-3 text-left transition hover:border-[var(--foreground)]/20 hover:shadow-card"
+                  >
+                    <div className="mb-1.5 flex gap-0.5">
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <Star
+                          key={s}
+                          size={10}
+                          className="fill-[var(--foreground)] text-[var(--foreground)]"
+                        />
+                      ))}
+                    </div>
+                    <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
+                      {text}
+                    </p>
+                    <p className="mt-2 flex items-center gap-1 font-mono text-[9px] font-medium text-[var(--muted-foreground)]">
+                      <Copy size={8} />
+                      {profile.google_place_id
+                        ? "Tap to copy & open Google Reviews"
+                        : "Tap to copy review text"}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Banking & Payment Info ── */}
+        {bankAccounts.length > 0 && (
+          <OpenSection
             title="Banking & Payment Info"
             icon={<Banknote size={15} />}
-            isOpen={openSections.banking}
-            onToggle={() => toggleSection("banking")}
+            badge={bankAccounts.length}
           >
             <div className="space-y-3">
-              {(profile.bank_accounts as { bank_name?: string; account_number?: string; ifsc?: string; upi_id?: string; qr_url?: string }[]).map((acc, i) => (
+              {bankAccounts.map((acc, i) => (
                 <div key={i} className="rounded-xl border border-[var(--border)] p-3">
                   {acc.bank_name && (
                     <div className="mb-2 flex items-center gap-2">
                       <CreditCard size={14} className="text-[var(--muted-foreground)]" />
-                      <span className="text-sm font-semibold">{acc.bank_name}</span>
+                      <span className="text-sm font-semibold text-[var(--foreground)]">{acc.bank_name}</span>
                     </div>
                   )}
                   {acc.account_number && (
@@ -541,7 +658,7 @@ export default function PublicProfileView({
                   {acc.upi_id && (
                     <div className="mt-2 flex items-center gap-2 rounded-lg bg-[var(--accent)] px-3 py-2">
                       <Wallet size={14} className="text-[var(--muted-foreground)]" />
-                      <span className="font-mono text-xs font-medium">{acc.upi_id}</span>
+                      <span className="font-mono text-xs font-medium text-[var(--foreground)]">{acc.upi_id}</span>
                       <button onClick={() => navigator.clipboard.writeText(acc.upi_id!)} className="ml-auto p-1 text-[var(--muted-foreground)]"><Copy size={12} /></button>
                     </div>
                   )}
@@ -553,168 +670,25 @@ export default function PublicProfileView({
                 </div>
               ))}
             </div>
-          </PublicCollapsible>
+          </OpenSection>
         )}
 
-        {/* Team */}
-        {employees.length > 0 && (
-          <PublicCollapsible
-            title="Team"
-            icon={<Users size={15} />}
-            isOpen={openSections.team}
-            onToggle={() => toggleSection("team")}
-          >
-            <div className="space-y-2">
-              {employees.map((emp) => (
-                <Link
-                  key={emp.id}
-                  href={
-                    profile.username
-                      ? `/${profile.username}/${emp.slug}`
-                      : "#"
-                  }
-                  className="flex items-center gap-3 rounded-xl bg-[var(--accent)] p-3 transition hover:bg-[var(--accent)]"
-                >
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--accent)] font-headline text-xs font-semibold">
-                    {initials(emp.name)}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{emp.name}</p>
-                    <p className="font-mono text-[10px] text-[var(--muted-foreground)]">
-                      {emp.designation}
-                    </p>
-                  </div>
-                  <ChevronRight size={14} className="text-[var(--muted-foreground)]" />
-                </Link>
-              ))}
-            </div>
-          </PublicCollapsible>
-        )}
-
-        {/* ===== REVIEWS — AI-generated suggestions that redirect to Google ===== */}
-        <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <div className="flex items-center gap-2 font-headline text-sm font-semibold">
-              <Star size={15} className="text-[var(--muted-foreground)]" />
-              Reviews
-            </div>
-            {profile.google_place_id && (
-              <a
-                href={googleReviewUrl(profile.google_place_id)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 rounded-lg bg-[var(--accent)] px-2 py-1 text-[10px] font-medium text-[var(--muted-foreground)] transition hover:bg-[var(--accent)]"
-              >
-                Google Reviews
-                <ExternalLink size={10} />
-              </a>
-            )}
-          </div>
-
-          {/* Existing reviews summary */}
-          {reviews.length > 0 && (
-            <div className="mb-4 flex items-center gap-3">
-              <span className="font-headline text-3xl font-bold">
-                {avgRating.toFixed(1)}
-              </span>
-              <div>
-                <div className="flex gap-0.5">
-                  {[1, 2, 3, 4, 5].map((s) => (
-                    <Star
-                      key={s}
-                      size={14}
-                      className={
-                        s <= Math.round(avgRating)
-                          ? "fill-[var(--foreground)] text-[var(--foreground)]"
-                          : "text-[var(--muted-foreground)]"
-                      }
-                    />
-                  ))}
-                </div>
-                <p className="font-mono text-[10px] text-[var(--muted-foreground)]">
-                  {reviews.length} review{reviews.length !== 1 && "s"}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* AI-generated review suggestions */}
-          <div>
-            <div className="mb-2 flex items-center justify-between">
-              <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
-                {profile.google_place_id
-                  ? "Tap to review on Google"
-                  : "Share your experience"}
-              </p>
-              <button
-                onClick={refreshSuggestions}
-                className="flex items-center gap-1 rounded-lg p-1.5 text-[var(--muted-foreground)] transition hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
-                title="Get new suggestions"
-              >
-                <RefreshCw size={12} />
-              </button>
-            </div>
-            <div className="space-y-2">
-              {reviewSuggestions.map((text, i) => (
-                <button
-                  key={i}
-                  onClick={() => {
-                    navigator.clipboard?.writeText(text);
-                    if (profile.google_place_id) {
-                      window.open(
-                        googleReviewUrl(profile.google_place_id),
-                        "_blank"
-                      );
-                    } else {
-                      alert("Review text copied to clipboard!");
-                    }
-                  }}
-                  className="w-full rounded-xl border border-[var(--border)] p-3 text-left transition hover:border-[var(--foreground)]/20 hover:shadow-card"
-                >
-                  <div className="mb-1.5 flex gap-0.5">
-                    {[1, 2, 3, 4, 5].map((s) => (
-                      <Star
-                        key={s}
-                        size={10}
-                        className="fill-[var(--foreground)] text-[var(--foreground)]"
-                      />
-                    ))}
-                  </div>
-                  <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
-                    {text}
-                  </p>
-                  <p className="mt-2 flex items-center gap-1 font-mono text-[9px] font-medium text-[var(--muted-foreground)]">
-                    <Copy size={8} />
-                    {profile.google_place_id
-                      ? "Tap to copy & open Google Reviews"
-                      : "Tap to copy review text"}
-                  </p>
-                </button>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Downloads */}
-        <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
-          <div className="mb-3 flex items-center gap-2 font-headline text-sm font-semibold">
-            <Download size={15} className="text-[var(--muted-foreground)]" />
-            Quick Actions
-          </div>
+        {/* ── Downloads & Actions ── */}
+        <OpenSection title="Downloads & Actions" icon={<Download size={15} />}>
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={saveContact}
               className="flex items-center gap-2.5 rounded-xl border border-[var(--border)] px-3 py-3 text-left transition hover:bg-[var(--accent)]"
             >
               <BookUser size={16} className="text-[var(--muted-foreground)]" />
-              <span className="text-xs font-medium">Save Contact</span>
+              <span className="text-xs font-medium text-[var(--foreground)]">Save Contact</span>
             </button>
             <button
               onClick={shareProfile}
               className="flex items-center gap-2.5 rounded-xl border border-[var(--border)] px-3 py-3 text-left transition hover:bg-[var(--accent)]"
             >
               <Share2 size={16} className="text-[var(--muted-foreground)]" />
-              <span className="text-xs font-medium">Share Profile</span>
+              <span className="text-xs font-medium text-[var(--foreground)]">Share Profile</span>
             </button>
             {profile.brochure_url && (
               <a
@@ -724,11 +698,49 @@ export default function PublicProfileView({
                 className="flex items-center gap-2.5 rounded-xl border border-[var(--border)] px-3 py-3 transition hover:bg-[var(--accent)]"
               >
                 <FileText size={16} className="text-[var(--muted-foreground)]" />
-                <span className="text-xs font-medium">Brochure</span>
+                <span className="text-xs font-medium text-[var(--foreground)]">Brochure</span>
               </a>
             )}
           </div>
-        </section>
+        </OpenSection>
+
+        {/* ── Team ── */}
+        {employees.length > 0 && (
+          <OpenSection title="Team" icon={<Users size={15} />}>
+            <div className="space-y-2">
+              {employees.map((emp) => (
+                <Link
+                  key={emp.id}
+                  href={
+                    profile.username
+                      ? `/${profile.username}/${emp.slug}`
+                      : "#"
+                  }
+                  className="flex items-center gap-3 rounded-xl bg-[var(--accent)] p-3 transition hover:opacity-90"
+                >
+                  {emp.avatar_url ? (
+                    <img
+                      src={emp.avatar_url}
+                      alt={emp.name}
+                      className="h-9 w-9 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--border)] font-headline text-xs font-semibold text-[var(--foreground)]">
+                      {initials(emp.name)}
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-[var(--foreground)]">{emp.name}</p>
+                    <p className="font-mono text-[10px] text-[var(--muted-foreground)]">
+                      {emp.designation}
+                    </p>
+                  </div>
+                  <ChevronRight size={14} className="text-[var(--muted-foreground)]" />
+                </Link>
+              ))}
+            </div>
+          </OpenSection>
+        )}
 
         {/* GST & Address footer */}
         {(profile.gst_number || profile.address) && (
@@ -773,39 +785,37 @@ export default function PublicProfileView({
 /*  Sub-components                                                     */
 /* ================================================================== */
 
-function PublicCollapsible({
+/**
+ * Open section — always visible, no accordion toggle.
+ * Clean card with title bar and optional item-count badge.
+ */
+function OpenSection({
   title,
   icon,
-  isOpen,
-  onToggle,
+  badge,
   children,
 }: {
   title: string;
   icon: React.ReactNode;
-  isOpen: boolean;
-  onToggle: () => void;
+  badge?: number;
   children: React.ReactNode;
 }) {
   return (
     <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]">
-      <button
-        onClick={onToggle}
-        className="flex w-full items-center justify-between px-4 py-3.5"
-      >
-        <div className="flex items-center gap-2 font-headline text-sm font-semibold">
+      <div className="flex items-center justify-between px-4 py-3.5">
+        <div className="flex items-center gap-2 font-headline text-sm font-semibold text-[var(--foreground)]">
           <span className="text-[var(--muted-foreground)]">{icon}</span>
           {title}
         </div>
-        <ChevronDown
-          size={16}
-          className={`text-[var(--muted-foreground)] transition-transform ${isOpen ? "rotate-180" : ""}`}
-        />
-      </button>
-      {isOpen && (
-        <div className="animate-fade-in border-t border-[var(--border)] px-4 py-3">
-          {children}
-        </div>
-      )}
+        {badge !== undefined && badge > 0 && (
+          <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-[var(--accent)] px-2 font-mono text-[10px] font-medium text-[var(--muted-foreground)]">
+            {badge}
+          </span>
+        )}
+      </div>
+      <div className="border-t border-[var(--border)] px-4 py-3">
+        {children}
+      </div>
     </section>
   );
 }

@@ -38,7 +38,9 @@ import {
   MessageCircle,
   Copy,
   BookUser,
+  StarIcon,
 } from "lucide-react";
+import { googleReviewUrl } from "@/lib/utils";
 
 type EditSection =
   | null
@@ -84,6 +86,9 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [cardSlug, setCardSlug] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Profile>>({});
+  const [reviews, setReviews] = useState<
+    { author_name: string; rating: number; text: string; time: number }[]
+  >([]);
 
   // Collapsible section state
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
@@ -92,6 +97,7 @@ export default function ProfilePage() {
     services: false,
     gallery: false,
     social: false,
+    reviews: false,
     banking: false,
     downloads: false,
   });
@@ -106,18 +112,29 @@ export default function ProfilePage() {
     } = await supabase.auth.getUser();
     if (!user) return;
 
-    const [{ data: profileData }, { data: cardData }] = await Promise.all([
-      supabase.from("profiles").select("*").eq("id", user.id).single(),
-      supabase
-        .from("cards")
-        .select("public_slug")
-        .eq("profile_id", user.id)
-        .maybeSingle(),
-    ]);
+    const [{ data: profileData }, { data: cardData }, { data: reviewData }] =
+      await Promise.all([
+        supabase.from("profiles").select("*").eq("id", user.id).single(),
+        supabase
+          .from("cards")
+          .select("public_slug")
+          .eq("profile_id", user.id)
+          .maybeSingle(),
+        supabase
+          .from("reviews")
+          .select("author_name, rating, text, time")
+          .eq("profile_id", user.id)
+          .order("time", { ascending: false })
+          .limit(10),
+      ]);
 
     if (profileData) setProfile(profileData as unknown as Profile);
     if (cardData)
       setCardSlug((cardData as { public_slug: string }).public_slug);
+    if (reviewData)
+      setReviews(
+        reviewData as { author_name: string; rating: number; text: string; time: number }[]
+      );
     setLoading(false);
   }, []);
 
@@ -626,6 +643,83 @@ export default function ProfilePage() {
             <p className="text-sm text-[var(--muted-foreground)] opacity-60">
               Add your social media links
             </p>
+          )}
+        </CollapsibleSection>
+
+        {/* Write a Google Review */}
+        <CollapsibleSection
+          title="Write a Google Review"
+          icon={<StarIcon size={16} />}
+          isOpen={openSections.reviews}
+          onToggle={() => toggleSection("reviews")}
+          onEdit={() => startEdit("about")}
+        >
+          {/* Google Place ID link */}
+          {profile.google_place_id ? (
+            <div className="space-y-3">
+              <a
+                href={googleReviewUrl(profile.google_place_id)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 rounded-xl bg-[var(--foreground)] px-4 py-2.5 text-sm font-semibold text-[var(--background)] transition hover:opacity-80"
+              >
+                <StarIcon size={14} />
+                Write a Review on Google
+              </a>
+
+              {/* Existing reviews */}
+              {reviews.length > 0 && (
+                <div className="space-y-2">
+                  <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
+                    Recent Reviews ({reviews.length})
+                  </p>
+                  {reviews.map((rev, i) => (
+                    <div
+                      key={i}
+                      className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold">
+                          {rev.author_name}
+                        </span>
+                        <div className="flex gap-0.5">
+                          {Array.from({ length: 5 }).map((_, s) => (
+                            <Star
+                              key={s}
+                              size={10}
+                              className={
+                                s < rev.rating
+                                  ? "fill-amber-400 text-amber-400"
+                                  : "text-[var(--muted-foreground)]/30"
+                              }
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      {rev.text && (
+                        <p className="mt-1.5 text-xs leading-relaxed text-[var(--muted-foreground)]">
+                          {rev.text.length > 120
+                            ? rev.text.slice(0, 120) + "…"
+                            : rev.text}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center">
+              <p className="text-sm text-[var(--muted-foreground)] opacity-60">
+                Add your Google Place ID in the About section to enable reviews
+              </p>
+              <button
+                onClick={() => startEdit("about")}
+                className="mt-2 text-xs font-medium text-[var(--foreground)] underline underline-offset-2"
+              >
+                Set up now
+              </button>
+            </div>
           )}
         </CollapsibleSection>
 
@@ -1258,41 +1352,49 @@ function SocialLinksEditor({
 
   return (
     <div className="space-y-3">
-      {links.map((link, i) => (
-        <div key={i} className="flex gap-2">
-          <select
-            value={link.platform}
-            onChange={(e) => {
-              const updated = [...links];
-              updated[i] = { ...link, platform: e.target.value };
-              onChange(updated);
-            }}
-            className="w-32 rounded-xl border border-[var(--border)] bg-[var(--card)] px-2 py-2.5 text-xs"
-          >
-            {platforms.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
-          <input
-            value={link.url}
-            onChange={(e) => {
-              const updated = [...links];
-              updated[i] = { ...link, url: e.target.value };
-              onChange(updated);
-            }}
-            placeholder="https://..."
-            className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-xs"
-          />
-          <button
-            onClick={() => onChange(links.filter((_, idx) => idx !== i))}
-            className="rounded-xl p-2.5 text-[var(--muted-foreground)] hover:text-red-500"
-          >
-            <X size={14} />
-          </button>
-        </div>
-      ))}
+      {links.map((link, i) => {
+        const isWhatsApp = link.platform.toLowerCase().includes("whatsapp");
+        return (
+          <div key={i} className="flex gap-2">
+            <select
+              value={link.platform}
+              onChange={(e) => {
+                const updated = [...links];
+                updated[i] = { ...link, platform: e.target.value, url: "" };
+                onChange(updated);
+              }}
+              className="w-32 rounded-xl border border-[var(--border)] bg-[var(--card)] px-2 py-2.5 text-xs"
+            >
+              {platforms.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+            <input
+              value={link.url}
+              onChange={(e) => {
+                const updated = [...links];
+                const val = isWhatsApp
+                  ? e.target.value.replace(/[^0-9+\s-]/g, "")
+                  : e.target.value;
+                updated[i] = { ...link, url: val };
+                onChange(updated);
+              }}
+              type={isWhatsApp ? "tel" : "text"}
+              placeholder={isWhatsApp ? "+91 98765 43210" : "https://..."}
+              inputMode={isWhatsApp ? "tel" : "url"}
+              className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-xs"
+            />
+            <button
+              onClick={() => onChange(links.filter((_, idx) => idx !== i))}
+              className="rounded-xl p-2.5 text-[var(--muted-foreground)] hover:text-red-500"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        );
+      })}
       <button
         onClick={() =>
           onChange([...links, { platform: "WhatsApp", url: "" }])
