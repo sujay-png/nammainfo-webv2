@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Profile } from "@/lib/supabase/types";
 import { useTheme } from "@/components/ThemeProvider";
+import { themes, getTheme } from "@/lib/themes";
 import {
   LogOut,
   User,
@@ -17,13 +18,17 @@ import {
   Moon,
   Sun,
   Users,
+  Palette,
+  Check,
 } from "lucide-react";
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { theme, toggleTheme } = useTheme();
+  const { theme, toggleTheme, colorTheme, setColorTheme } = useTheme();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [showThemes, setShowThemes] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -42,6 +47,23 @@ export default function SettingsPage() {
       setLoading(false);
     })();
   }, []);
+
+  async function handleThemeSelect(slug: string) {
+    setSaving(true);
+    setColorTheme(slug);
+
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      await supabase
+        .from("profiles")
+        .update({ theme: slug })
+        .eq("id", user.id);
+    }
+    setSaving(false);
+  }
 
   async function handleSignOut() {
     const supabase = createClient();
@@ -109,6 +131,13 @@ export default function SettingsPage() {
           sublabel={profile?.is_member ? "Active" : "Free plan"}
           onClick={() => {}}
         />
+      </div>
+
+      {/* Appearance section */}
+      <div className="mt-6">
+        <p className="mb-2 px-4 font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
+          Appearance
+        </p>
 
         {/* Dark mode toggle */}
         <button
@@ -132,6 +161,73 @@ export default function SettingsPage() {
           </div>
         </button>
 
+        {/* Theme picker toggle */}
+        <button
+          onClick={() => setShowThemes(!showThemes)}
+          className="flex w-full items-center justify-between rounded-2xl px-4 py-3.5 transition hover:bg-[var(--accent)]"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-[var(--muted-foreground)]">
+              <Palette size={18} />
+            </span>
+            <div>
+              <span className="text-sm font-medium">Theme</span>
+              <p className="text-xs text-[var(--muted-foreground)]">
+                {getTheme(colorTheme).name}
+              </p>
+            </div>
+          </div>
+          <ChevronRight
+            size={14}
+            className={`text-[var(--muted-foreground)] transition-transform ${
+              showThemes ? "rotate-90" : ""
+            }`}
+          />
+        </button>
+
+        {/* Theme grid */}
+        {showThemes && (
+          <div className="mt-1 grid grid-cols-2 gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3">
+            {themes.map((t) => {
+              const isActive = colorTheme === t.slug;
+              return (
+                <button
+                  key={t.slug}
+                  onClick={() => handleThemeSelect(t.slug)}
+                  disabled={saving}
+                  className={`group relative flex items-center gap-2.5 rounded-xl border p-3 transition ${
+                    isActive
+                      ? "border-[var(--primary)] bg-[var(--accent)]"
+                      : "border-[var(--border)] hover:border-[var(--muted-foreground)] hover:bg-[var(--accent)]"
+                  }`}
+                >
+                  {/* Color swatches */}
+                  <div className="flex -space-x-1">
+                    <div
+                      className="h-6 w-6 rounded-full border-2 border-[var(--card)]"
+                      style={{ backgroundColor: t.preview.primary }}
+                    />
+                    <div
+                      className="h-6 w-6 rounded-full border-2 border-[var(--card)]"
+                      style={{ backgroundColor: t.preview.accent }}
+                    />
+                  </div>
+                  <span className="text-xs font-medium">{t.name}</span>
+                  {isActive && (
+                    <Check
+                      size={14}
+                      className="absolute right-2 top-2 text-[var(--primary)]"
+                    />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Other settings */}
+      <div className="mt-4 space-y-1">
         <SettingsItem
           icon={<Bell size={18} />}
           label="Notifications"

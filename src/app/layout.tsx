@@ -41,7 +41,7 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
           rel="stylesheet"
         />
-        {/* Inline script to prevent flash of wrong theme */}
+        {/* Inline script to prevent flash of wrong theme + color */}
         <script
           dangerouslySetInnerHTML={{
             __html: `

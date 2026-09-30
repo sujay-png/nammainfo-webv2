@@ -63,6 +63,7 @@ export interface Profile {
   // Added for web — will be migrated
   google_place_id: string | null;
   products: ServiceItem[];
+  theme: string;
 }
 
 export type ProfileInsert = Partial<Profile> & { id: string };

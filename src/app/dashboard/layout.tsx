@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -10,6 +11,8 @@ import {
   Settings,
 } from "lucide-react";
 import { clsx } from "clsx";
+import { createClient } from "@/lib/supabase/client";
+import { useTheme } from "@/components/ThemeProvider";
 
 const tabs = [
   { href: "/dashboard/feed", label: "Feed", icon: Newspaper },
@@ -25,6 +28,30 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const { colorTheme, setColorTheme } = useTheme();
+
+  // Sync color theme from Supabase on first dashboard load
+  useEffect(() => {
+    (async () => {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from("profiles")
+        .select("theme")
+        .eq("id", user.id)
+        .single();
+
+      const saved = (data as { theme?: string } | null)?.theme;
+      if (saved && saved !== colorTheme) {
+        setColorTheme(saved);
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="flex min-h-dvh flex-col bg-[var(--background)]">
