@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Newspaper,
+  Home,
   User,
   ScanLine,
   Bookmark,
@@ -15,7 +15,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useTheme } from "@/components/ThemeProvider";
 
 const tabs = [
-  { href: "/dashboard/feed", label: "Feed", icon: Newspaper },
+  { href: "/dashboard/home", label: "Home", icon: Home },
   { href: "/dashboard/saved", label: "Saved", icon: Bookmark },
   { href: "/dashboard/scanner", label: "Scan", icon: ScanLine },
   { href: "/dashboard/profile", label: "Profile", icon: User },

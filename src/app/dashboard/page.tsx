@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-// /dashboard → /dashboard/feed
+// /dashboard → /dashboard/home
 export default function DashboardIndex() {
-  redirect("/dashboard/feed");
+  redirect("/dashboard/home");
 }
