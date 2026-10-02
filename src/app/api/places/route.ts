@@ -12,8 +12,11 @@ import { NextRequest, NextResponse } from "next/server";
  * Returns: { place_id, google_maps_url?, name? }
  *
  * No API key required — resolves short links via redirect, then parses
- * the expanded URL to extract Place ID or a usable Maps URL.
+ * the expanded URL (and page HTML as fallback) to extract Place ID.
  */
+
+const BROWSER_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 function extractPlaceId(url: string): string | null {
   // 1. Direct ChIJ... place ID in the URL or as the value itself
@@ -33,6 +36,33 @@ function extractPlaceId(url: string): string | null {
   if (dataPlaceMatch) return dataPlaceMatch[1];
   const dataHexMatch = url.match(/!1s(0x[0-9a-fA-F]+:0x[0-9a-fA-F]+)/);
   if (dataHexMatch) return dataHexMatch[1];
+
+  return null;
+}
+
+/** Scrape place ID from Google Maps page HTML as a fallback */
+function extractPlaceIdFromHtml(html: string): string | null {
+  // Google Maps pages embed Place IDs in various patterns in the page source:
+
+  // Pattern 1: "place_id":"ChIJ..." or "placeId":"ChIJ..."
+  const jsonMatch = html.match(/["'](?:place_id|placeId)["']\s*:\s*["'](ChIJ[A-Za-z0-9_-]+)["']/);
+  if (jsonMatch) return jsonMatch[1];
+
+  // Pattern 2: ChIJ in data attributes or script blocks — e.g. [null,"ChIJ..."]
+  const arrayMatch = html.match(/\[(?:null,)*"(ChIJ[A-Za-z0-9_-]+)"/);
+  if (arrayMatch) return arrayMatch[1];
+
+  // Pattern 3: writereview?placeid=ChIJ... link in the page
+  const reviewLink = html.match(/writereview\?placeid=(ChIJ[A-Za-z0-9_-]+)/);
+  if (reviewLink) return reviewLink[1];
+
+  // Pattern 4: /maps/place/ data with !1sChIJ in script tags
+  const scriptMatch = html.match(/!1s(ChIJ[A-Za-z0-9_-]+)/);
+  if (scriptMatch) return scriptMatch[1];
+
+  // Pattern 5: 0x hex format place references
+  const hexMatch = html.match(/["'](0x[0-9a-fA-F]+:0x[0-9a-fA-F]+)["']/);
+  if (hexMatch) return hexMatch[1];
 
   return null;
 }
@@ -76,21 +106,22 @@ export async function POST(req: NextRequest) {
 
     // Resolve short URLs by following redirects
     let expandedUrl = rawUrl;
-    if (
+    let pageHtml = "";
+    const isShortUrl =
       rawUrl.includes("maps.app.goo.gl") ||
       rawUrl.includes("goo.gl/maps") ||
-      rawUrl.length < 60 // short URLs are typically < 50 chars
-    ) {
-      try {
-        const res = await fetch(rawUrl, {
-          redirect: "follow",
-          headers: {
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          },
-        });
-        expandedUrl = res.url;
-      } catch {
+      rawUrl.length < 60;
+
+    try {
+      const res = await fetch(rawUrl, {
+        redirect: "follow",
+        headers: { "User-Agent": BROWSER_UA },
+      });
+      expandedUrl = res.url;
+      // Read the HTML for fallback Place ID extraction
+      pageHtml = await res.text();
+    } catch {
+      if (isShortUrl) {
         return NextResponse.json(
           { error: "Could not resolve this link — try pasting the full Google Maps URL" },
           { status: 400 }
@@ -100,6 +131,24 @@ export async function POST(req: NextRequest) {
 
     // Try to extract place ID from expanded URL
     placeId = extractPlaceId(expandedUrl);
+
+    // Fallback: scrape Place ID from the page HTML
+    if (!placeId && pageHtml) {
+      placeId = extractPlaceIdFromHtml(pageHtml);
+    }
+
+    // If still no Place ID and we haven't fetched HTML yet (non-short URL), try now
+    if (!placeId && !pageHtml && expandedUrl.includes("google")) {
+      try {
+        const res = await fetch(expandedUrl, {
+          headers: { "User-Agent": BROWSER_UA },
+        });
+        pageHtml = await res.text();
+        placeId = extractPlaceIdFromHtml(pageHtml);
+      } catch {
+        // ignore — we'll return what we have
+      }
+    }
 
     // Extract place name from /maps/place/NAME/
     const nameMatch = expandedUrl.match(/\/maps\/place\/([^/@?]+)/);
@@ -119,16 +168,12 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Even without a place_id, the expanded URL is a valid Google Maps link
-    if (expandedUrl.includes("google")) {
-      return NextResponse.json({
-        google_maps_url: mapsUrl,
-        ...(placeName ? { name: placeName } : {}),
-      });
-    }
-
+    // Could not extract Place ID — return error instead of just the URL
     return NextResponse.json(
-      { error: "Could not process this link — try a different Google Maps URL" },
+      {
+        error:
+          "Could not extract Place ID from this link. Try opening Google Maps, searching for your business, clicking 'Share' and pasting that link.",
+      },
       { status: 400 }
     );
   } catch {

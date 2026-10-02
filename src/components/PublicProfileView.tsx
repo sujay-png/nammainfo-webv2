@@ -441,9 +441,7 @@ export default function PublicProfileView({
               <a
                 href={
                   profile.google_place_id
-                    ? profile.google_place_id.startsWith("http")
-                      ? profile.google_place_id
-                      : `https://www.google.com/maps/dir/?api=1&destination=&destination_place_id=${profile.google_place_id}`
+                    ? `https://www.google.com/maps/dir/?api=1&destination=&destination_place_id=${profile.google_place_id}`
                     : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(profile.address!)}`
                 }
                 target="_blank"
@@ -537,11 +535,7 @@ export default function PublicProfileView({
           headerExtra={
             profile.google_place_id ? (
               <a
-                href={
-                  profile.google_place_id.startsWith("http")
-                    ? profile.google_place_id
-                    : googleReviewUrl(profile.google_place_id)
-                }
+                href={googleReviewUrl(profile.google_place_id)}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
@@ -657,10 +651,10 @@ export default function PublicProfileView({
                       setCopiedToast(true);
                       setTimeout(() => setCopiedToast(false), 2500);
                       if (profile.google_place_id) {
-                        const url = profile.google_place_id.startsWith("http")
-                          ? profile.google_place_id
-                          : googleReviewUrl(profile.google_place_id);
-                        window.open(url, "_blank");
+                        window.open(
+                          googleReviewUrl(profile.google_place_id),
+                          "_blank"
+                        );
                       }
                     }}
                     className="w-full rounded-xl border border-[var(--border)] p-3 text-left transition hover:border-[var(--foreground)]/20 hover:shadow-card"

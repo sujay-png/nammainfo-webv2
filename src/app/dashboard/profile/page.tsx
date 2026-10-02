@@ -98,8 +98,13 @@ export default function ProfilePage() {
         return;
       }
 
-      // Store place_id if we got one, otherwise store the google_maps_url
-      const valueToStore = data.place_id || data.google_maps_url || trimmed;
+      // Only store proper Place IDs (ChIJ... or 0x...) — needed for direct review link
+      if (!data.place_id) {
+        setMapsLinkError("Could not extract Place ID — try a different link");
+        setMapsLinkLoading(false);
+        return;
+      }
+      const valueToStore = data.place_id;
 
       const supabase = createClient();
       await supabase
