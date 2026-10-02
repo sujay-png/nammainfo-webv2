@@ -460,7 +460,7 @@ export default function PublicProfileView({
 
         {/* ── About Us ── */}
         {(profile.bio || profile.address || profile.coverage_area) && (
-          <CollapsibleSection title="About Us" icon={<Briefcase size={15} />} defaultOpen>
+          <CollapsibleSection title="About Us" icon={<Briefcase size={15} />}>
             {profile.bio && (
               <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
                 {profile.bio}
@@ -965,7 +965,6 @@ function ServicesTabs({
       title={servicesLabel}
       icon={<Award size={15} />}
       badge={servicesList.length + productsList.length}
-      defaultOpen
     >
       {/* Category tabs */}
       {hasServices && hasCategories && (
