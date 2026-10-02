@@ -440,7 +440,9 @@ export default function PublicProfileView({
               <a
                 href={
                   profile.google_place_id
-                    ? `https://www.google.com/maps/dir/?api=1&destination=&destination_place_id=${profile.google_place_id}`
+                    ? profile.google_place_id.startsWith("http")
+                      ? profile.google_place_id
+                      : `https://www.google.com/maps/dir/?api=1&destination=&destination_place_id=${profile.google_place_id}`
                     : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(profile.address!)}`
                 }
                 target="_blank"
@@ -532,7 +534,7 @@ export default function PublicProfileView({
           icon={<Star size={15} />}
           badge={reviews.length > 0 ? reviews.length : undefined}
           headerExtra={
-            profile.google_place_id ? (
+            profile.google_place_id && !profile.google_place_id.startsWith("http") ? (
               <a
                 href={googleReviewUrl(profile.google_place_id)}
                 target="_blank"
@@ -629,7 +631,7 @@ export default function PublicProfileView({
             <div>
               <div className="mb-2 flex items-center justify-between">
                 <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
-                  {profile.google_place_id
+                  {profile.google_place_id && !profile.google_place_id.startsWith("http")
                     ? "Tap to review on Google"
                     : "Share your experience"}
                 </p>
@@ -647,7 +649,7 @@ export default function PublicProfileView({
                     key={i}
                     onClick={() => {
                       navigator.clipboard?.writeText(text);
-                      if (profile.google_place_id) {
+                      if (profile.google_place_id && !profile.google_place_id.startsWith("http")) {
                         window.open(
                           googleReviewUrl(profile.google_place_id),
                           "_blank"
@@ -672,7 +674,7 @@ export default function PublicProfileView({
                     </p>
                     <p className="mt-2 flex items-center gap-1 font-mono text-[9px] font-medium text-[var(--muted-foreground)]">
                       <Copy size={8} />
-                      {profile.google_place_id
+                      {profile.google_place_id && !profile.google_place_id.startsWith("http")
                         ? "Tap to copy & open Google Reviews"
                         : "Tap to copy review text"}
                     </p>

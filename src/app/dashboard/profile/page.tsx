@@ -26,7 +26,6 @@ import {
   Check,
   Trash2,
   Camera,
-  Search,
   Loader2,
   Banknote,
   Download,
@@ -58,95 +57,64 @@ export default function ProfilePage() {
   const [galleryUploading, setGalleryUploading] = useState(false);
   const [brochureUploading, setBrochureUploading] = useState(false);
 
-  // Google Place ID search state
-  const [placeResults, setPlaceResults] = useState<
-    { place_id: string; name: string; address: string; rating: number | null }[]
-  >([]);
-  const [placeSearching, setPlaceSearching] = useState(false);
-  const [placeError, setPlaceError] = useState("");
-
-  // Google Place search state
-  const [placeQuery, setPlaceQuery] = useState("");
-  const [placeLinkedName, setPlaceLinkedName] = useState("");
+  // Google Maps link state
+  const [mapsLinkInput, setMapsLinkInput] = useState("");
+  const [mapsLinkError, setMapsLinkError] = useState("");
+  const [mapsLinkLoading, setMapsLinkLoading] = useState(false);
   const [showGoogleSetup, setShowGoogleSetup] = useState(false);
 
-  async function searchPlaceId(customQuery?: string) {
-    const q = customQuery?.trim() || placeQuery.trim() || [editForm.business_name, editForm.address].filter(Boolean).join(", ");
-    if (!q || q.length < 3) {
-      setPlaceError("Enter at least 3 characters to search");
-      return;
-    }
-    setPlaceSearching(true);
-    setPlaceError("");
-    setPlaceResults([]);
-    try {
-      const res = await fetch(`/api/places?q=${encodeURIComponent(q)}`);
-      const data = await res.json();
-      if (!res.ok) {
-        setPlaceError(data.error || "Search failed");
-      } else if (data.results.length === 0) {
-        setPlaceError("No business found — try a different name or add your city");
-      } else {
-        setPlaceResults(data.results);
-      }
-    } catch {
-      setPlaceError("Network error");
-    }
-    setPlaceSearching(false);
-  }
-
-  function extractPlaceIdFromUrl(url: string): string | null {
-    // Handle various Google Maps URL formats
-    // Format 1: https://www.google.com/maps/place/...?...&ftid=0x...:0x...
-    // Format 2: https://maps.app.goo.gl/... (short URL — can't extract, need API)
-    // Format 3: URL containing place_id= parameter
-    // Format 4: Direct ChIJ... place ID pasted
-    const trimmed = url.trim();
-    if (/^ChIJ[A-Za-z0-9_-]+$/.test(trimmed)) return trimmed;
-    const placeIdParam = trimmed.match(/[?&]place_id=([^&]+)/);
-    if (placeIdParam) return placeIdParam[1];
-    return null;
-  }
-
-  async function handlePasteGoogleLink(url: string) {
-    const directId = extractPlaceIdFromUrl(url);
-    if (directId) {
-      setEditForm({ ...editForm, google_place_id: directId });
-      setPlaceError("");
-      return;
-    }
-    // For Google Maps URLs, try searching with the place name from URL
-    const nameMatch = url.match(/\/maps\/place\/([^/?]+)/);
-    if (nameMatch) {
-      const placeName = decodeURIComponent(nameMatch[1]).replace(/\+/g, " ");
-      setPlaceQuery(placeName);
-      await searchPlaceId(placeName);
-      return;
-    }
-    // For short URLs or unrecognized formats, tell user to search instead
-    setPlaceError("Couldn't extract from that link — try searching by business name instead");
-  }
-
-  // Direct Google Maps link handler (saves directly, not via edit form)
-  async function handlePasteGoogleLinkDirect(url: string) {
+  async function resolveAndSaveGoogleLink(url: string) {
     if (!profile) return;
-    const directId = extractPlaceIdFromUrl(url);
-    if (directId) {
+    const trimmed = url.trim();
+    if (!trimmed) return;
+
+    // Quick validation — must look like a Google Maps URL or Place ID
+    const isPlaceId = /^ChIJ[A-Za-z0-9_-]+$/.test(trimmed);
+    const isGoogleUrl =
+      trimmed.includes("google.com/maps") ||
+      trimmed.includes("maps.app.goo.gl") ||
+      trimmed.includes("goo.gl/maps") ||
+      trimmed.includes("maps.google.com");
+
+    if (!isPlaceId && !isGoogleUrl) {
+      setMapsLinkError("Please paste a valid Google Maps link");
+      return;
+    }
+
+    setMapsLinkLoading(true);
+    setMapsLinkError("");
+
+    try {
+      const res = await fetch("/api/places", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: trimmed }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setMapsLinkError(data.error || "Could not process this link");
+        setMapsLinkLoading(false);
+        return;
+      }
+
+      // Store place_id if we got one, otherwise store the google_maps_url
+      const valueToStore = data.place_id || data.google_maps_url || trimmed;
+
       const supabase = createClient();
-      await supabase.from("profiles").update({ google_place_id: directId } as Record<string, unknown>).eq("id", profile.id);
-      setProfile({ ...profile, google_place_id: directId });
-      setPlaceError("");
+      await supabase
+        .from("profiles")
+        .update({ google_place_id: valueToStore } as Record<string, unknown>)
+        .eq("id", profile.id);
+
+      setProfile({ ...profile, google_place_id: valueToStore });
+      setMapsLinkInput("");
+      setMapsLinkError("");
       setShowGoogleSetup(false);
-      return;
+    } catch {
+      setMapsLinkError("Network error — please try again");
     }
-    const nameMatch = url.match(/\/maps\/place\/([^/?]+)/);
-    if (nameMatch) {
-      const placeName = decodeURIComponent(nameMatch[1]).replace(/\+/g, " ");
-      setPlaceQuery(placeName);
-      await searchPlaceId(placeName);
-      return;
-    }
-    setPlaceError("Couldn't extract from that link — try searching by business name instead");
+    setMapsLinkLoading(false);
   }
 
   // Crop modal state
@@ -773,18 +741,22 @@ export default function ProfilePage() {
             <div className="flex items-center gap-2">
               <MapPin size={14} className="text-green-600" />
               <span className="text-xs font-medium text-green-800">
-                Google Maps connected
+                Google Maps linked
               </span>
             </div>
             <div className="flex items-center gap-2">
               <a
-                href={`https://www.google.com/maps/place/?q=place_id:${profile.google_place_id}`}
+                href={
+                  profile.google_place_id.startsWith("http")
+                    ? profile.google_place_id
+                    : `https://www.google.com/maps/place/?q=place_id:${profile.google_place_id}`
+                }
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1 text-[10px] font-medium text-blue-600 hover:text-blue-800"
               >
                 <ExternalLink size={10} />
-                Directions
+                View on Maps
               </a>
               <button
                 type="button"
@@ -792,7 +764,6 @@ export default function ProfilePage() {
                   const supabase = createClient();
                   await supabase.from("profiles").update({ google_place_id: null } as Record<string, unknown>).eq("id", profile.id);
                   setProfile({ ...profile, google_place_id: null });
-                  setPlaceLinkedName("");
                 }}
                 className="text-[10px] font-medium text-red-500 hover:text-red-700"
               >
@@ -812,9 +783,9 @@ export default function ProfilePage() {
                   <MapPin size={14} className="text-ink-500" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-xs font-semibold text-ink-700">Connect Google Maps</p>
+                  <p className="text-xs font-semibold text-ink-700">Add Google Maps Link</p>
                   <p className="text-[10px] text-ink-400">
-                    Enable Google Reviews & Get Directions
+                    Enable Reviews & Get Directions on your profile
                   </p>
                 </div>
                 <ChevronRight size={14} className="text-ink-300" />
@@ -823,15 +794,14 @@ export default function ProfilePage() {
               <div>
                 <div className="mb-2 flex items-center justify-between">
                   <label className="text-xs font-semibold text-ink-700">
-                    Connect Google Maps
+                    Paste Google Maps Link
                   </label>
                   <button
                     type="button"
                     onClick={() => {
                       setShowGoogleSetup(false);
-                      setPlaceResults([]);
-                      setPlaceError("");
-                      setPlaceQuery("");
+                      setMapsLinkInput("");
+                      setMapsLinkError("");
                     }}
                     className="rounded p-0.5 text-ink-400 hover:bg-ink-100 hover:text-ink-600"
                   >
@@ -839,97 +809,51 @@ export default function ProfilePage() {
                   </button>
                 </div>
 
-                {/* Search by name */}
                 <div className="flex gap-2">
                   <input
-                    value={placeQuery}
-                    onChange={(e) => setPlaceQuery(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), searchPlaceId())}
-                    placeholder="Search your business name..."
+                    value={mapsLinkInput}
+                    onChange={(e) => {
+                      setMapsLinkInput(e.target.value);
+                      setMapsLinkError("");
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        resolveAndSaveGoogleLink(mapsLinkInput);
+                      }
+                    }}
+                    onPaste={(e) => {
+                      const text = e.clipboardData.getData("text").trim();
+                      if (text) {
+                        e.preventDefault();
+                        setMapsLinkInput(text);
+                        resolveAndSaveGoogleLink(text);
+                      }
+                    }}
+                    placeholder="https://maps.app.goo.gl/..."
                     className="flex-1 rounded-lg border border-ink-200 bg-white px-3 py-2 text-xs outline-none focus:border-ink-400"
                   />
                   <button
                     type="button"
-                    onClick={() => searchPlaceId()}
-                    disabled={placeSearching}
+                    onClick={() => resolveAndSaveGoogleLink(mapsLinkInput)}
+                    disabled={mapsLinkLoading || !mapsLinkInput.trim()}
                     className="flex items-center gap-1 rounded-lg bg-ink-900 px-3 py-2 text-[11px] font-medium text-white transition hover:bg-ink-800 disabled:opacity-50"
                   >
-                    {placeSearching ? (
+                    {mapsLinkLoading ? (
                       <Loader2 size={12} className="animate-spin" />
                     ) : (
-                      <Search size={12} />
+                      <Link2 size={12} />
                     )}
-                    Search
+                    Link
                   </button>
                 </div>
 
-                {/* Search results */}
-                {placeResults.length > 0 && (
-                  <div className="mt-2 space-y-1.5">
-                    <p className="text-[10px] font-medium uppercase tracking-wider text-ink-400">
-                      Select your business
-                    </p>
-                    {placeResults.map((r) => (
-                      <button
-                        key={r.place_id}
-                        type="button"
-                        onClick={async () => {
-                          const supabase = createClient();
-                          await supabase.from("profiles").update({ google_place_id: r.place_id } as Record<string, unknown>).eq("id", profile.id);
-                          setProfile({ ...profile, google_place_id: r.place_id });
-                          setPlaceLinkedName(r.name);
-                          setPlaceResults([]);
-                          setPlaceError("");
-                          setPlaceQuery("");
-                          setShowGoogleSetup(false);
-                        }}
-                        className="flex w-full items-start gap-2 rounded-lg border border-ink-100 bg-ink-50 p-2.5 text-left transition hover:border-ink-400 hover:bg-ink-100"
-                      >
-                        <MapPin size={13} className="mt-0.5 shrink-0 text-ink-400" />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-medium text-ink-800">{r.name}</p>
-                          <p className="truncate text-[10px] text-ink-400">{r.address}</p>
-                        </div>
-                        {r.rating && (
-                          <span className="shrink-0 text-[10px] text-ink-400">★ {r.rating}</span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* Divider */}
-                <div className="my-2 flex items-center gap-2">
-                  <div className="h-px flex-1 bg-ink-100" />
-                  <span className="text-[10px] font-medium text-ink-300">OR</span>
-                  <div className="h-px flex-1 bg-ink-100" />
-                </div>
-
-                {/* Paste Google Maps link */}
-                <input
-                  placeholder="Paste your Google Maps link here..."
-                  className="w-full rounded-lg border border-ink-200 bg-white px-3 py-2 text-xs outline-none focus:border-ink-400"
-                  onPaste={(e) => {
-                    const text = e.clipboardData.getData("text");
-                    if (text.includes("google") || text.startsWith("ChIJ")) {
-                      e.preventDefault();
-                      handlePasteGoogleLinkDirect(text);
-                    }
-                  }}
-                  onChange={(e) => {
-                    const val = e.target.value.trim();
-                    if (val.includes("google") || val.startsWith("ChIJ")) {
-                      handlePasteGoogleLinkDirect(val);
-                      e.target.value = "";
-                    }
-                  }}
-                />
                 <p className="mt-1.5 text-[10px] text-ink-400">
-                  Google Maps → find your business → Share → Copy link → paste above
+                  Open Google Maps → find your business → tap Share → Copy link → paste above
                 </p>
 
-                {placeError && (
-                  <p className="mt-1.5 text-xs text-red-500">{placeError}</p>
+                {mapsLinkError && (
+                  <p className="mt-1.5 text-xs text-red-500">{mapsLinkError}</p>
                 )}
               </div>
             )}
