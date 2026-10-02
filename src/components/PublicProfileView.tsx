@@ -15,6 +15,7 @@ import {
   Star,
   ExternalLink,
   ChevronRight,
+  ChevronLeft,
   ChevronDown,
   UserPlus,
   Eye,
@@ -143,6 +144,7 @@ export default function PublicProfileView({
   reviews,
   employees,
   isEmployeeView = false,
+  hideHero = false,
 }: {
   profile: Profile;
   card: Card | null;
@@ -150,6 +152,8 @@ export default function PublicProfileView({
   employees: Employee[];
   /** When true, hides the "Create your own profile" CTA */
   isEmployeeView?: boolean;
+  /** When true, hides the hero/header section (used when embedded inside employee view) */
+  hideHero?: boolean;
 }) {
   const ownerTheme = getTheme(profile.theme);
   const [themeMode, setThemeMode] = useState<"light" | "dark">("light");
@@ -166,7 +170,7 @@ export default function PublicProfileView({
   }, [ownerTheme, themeMode]);
 
   const [reviewSuggestions, setReviewSuggestions] = useState<string[]>([]);
-  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [qrLightbox, setQrLightbox] = useState<string | null>(null);
   const [servicePopup, setServicePopup] = useState<{
     name: string;
@@ -275,145 +279,149 @@ export default function PublicProfileView({
 
   return (
     <main
-      className="mx-auto min-h-dvh max-w-lg bg-[var(--background)]"
+      className={`mx-auto max-w-lg bg-[var(--background)] ${hideHero ? "" : "min-h-dvh"}`}
       style={themeVars as React.CSSProperties}
     >
-      {/* Hero — Cover + Avatar */}
-      <div className="relative">
-        <div className="h-44 w-full overflow-hidden bg-[var(--foreground)]">
-          {profile.cover_url ? (
-            <img
-              src={profile.cover_url}
-              alt=""
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div className="h-full w-full bg-[var(--foreground)]" />
-          )}
-        </div>
-        <div className="absolute -bottom-12 left-5">
-          <div className="h-24 w-24 overflow-hidden rounded-2xl border-4 border-[var(--card)] bg-[var(--accent)] shadow-card">
-            {profile.logo_url ? (
-              <img
-                src={profile.logo_url}
-                alt=""
-                className="h-full w-full object-cover"
+      {!hideHero && (
+        <>
+          {/* Hero — Cover + Avatar */}
+          <div className="relative">
+            <div className="h-44 w-full overflow-hidden bg-[var(--foreground)]">
+              {profile.cover_url ? (
+                <img
+                  src={profile.cover_url}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="h-full w-full bg-[var(--foreground)]" />
+              )}
+            </div>
+            <div className="absolute -bottom-12 left-5">
+              <div className="h-24 w-24 overflow-hidden rounded-2xl border-4 border-[var(--card)] bg-[var(--accent)] shadow-card">
+                {profile.logo_url ? (
+                  <img
+                    src={profile.logo_url}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-[var(--foreground)] font-headline text-2xl font-bold text-[var(--background)]">
+                    {initials(profile.owner_name || profile.business_name)}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Name + info */}
+          <div className="mt-14 px-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <h1 className="font-headline text-xl font-bold text-[var(--foreground)]">
+                  {profile.owner_name || "Namma Info Member"}
+                </h1>
+                <p className="text-sm text-[var(--muted-foreground)]">
+                  {[profile.job_title, profile.business_name]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              </div>
+              <button
+                onClick={shareProfile}
+                className="rounded-xl border border-[var(--border)] p-2.5 transition hover:bg-[var(--accent)]"
+              >
+                <Share2 size={16} className="text-[var(--foreground)]" />
+              </button>
+            </div>
+
+            {/* Stats */}
+            {(profile.years_in_business ||
+              profile.clients_served ||
+              reviews.length > 0) && (
+              <div className="mt-4 flex gap-3">
+                {profile.years_in_business && (
+                  <div className="flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-1.5">
+                    <Clock size={12} className="text-[var(--muted-foreground)]" />
+                    <span className="font-mono text-xs font-medium text-[var(--foreground)]">
+                      {profile.years_in_business} yrs
+                    </span>
+                  </div>
+                )}
+                {profile.clients_served && (
+                  <div className="flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-1.5">
+                    <Users size={12} className="text-[var(--muted-foreground)]" />
+                    <span className="font-mono text-xs font-medium text-[var(--foreground)]">
+                      {profile.clients_served}+ clients
+                    </span>
+                  </div>
+                )}
+                {reviews.length > 0 && (
+                  <div className="flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-1.5">
+                    <Star size={12} className="fill-[var(--foreground)] text-[var(--foreground)]" />
+                    <span className="font-mono text-xs font-medium text-[var(--foreground)]">
+                      {avgRating.toFixed(1)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Action CTAs */}
+          <div className="mt-5 flex gap-2 px-5">
+            <button
+              onClick={saveContact}
+              className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[var(--foreground)] py-3.5 text-xs font-semibold text-[var(--background)] shadow-card-lg transition hover:opacity-90"
+            >
+              <Download size={15} />
+              Add to Contacts
+            </button>
+            <a
+              href="#details"
+              className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] py-3.5 text-xs font-semibold text-[var(--foreground)] shadow-card transition hover:shadow-card-hover"
+            >
+              <Eye size={15} />
+              View Profile
+            </a>
+          </div>
+
+          {/* Quick contact */}
+          <div className="mt-4 grid grid-cols-4 gap-2 px-5">
+            {profile.phone && (
+              <QuickAction
+                href={`tel:${profile.phone}`}
+                icon={<Phone size={18} />}
+                label="Call"
               />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center bg-[var(--foreground)] font-headline text-2xl font-bold text-[var(--background)]">
-                {initials(profile.owner_name || profile.business_name)}
-              </div>
             )}
+            {profile.email && (
+              <QuickAction
+                href={`mailto:${profile.email}`}
+                icon={<Mail size={18} />}
+                label="Email"
+              />
+            )}
+            {profile.website && (
+              <QuickAction
+                href={ensureProtocol(profile.website)}
+                icon={<Globe size={18} />}
+                label="Website"
+              />
+            )}
+            <button
+              onClick={shareProfile}
+              className="flex flex-col items-center gap-1 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 transition hover:shadow-card"
+            >
+              <Share2 size={18} className="text-[var(--foreground)]" />
+              <span className="text-[10px] font-medium text-[var(--muted-foreground)]">Share</span>
+            </button>
           </div>
-        </div>
-      </div>
-
-      {/* Name + info */}
-      <div className="mt-14 px-5">
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="font-headline text-xl font-bold text-[var(--foreground)]">
-              {profile.owner_name || "Namma Info Member"}
-            </h1>
-            <p className="text-sm text-[var(--muted-foreground)]">
-              {[profile.job_title, profile.business_name]
-                .filter(Boolean)
-                .join(" · ")}
-            </p>
-          </div>
-          <button
-            onClick={shareProfile}
-            className="rounded-xl border border-[var(--border)] p-2.5 transition hover:bg-[var(--accent)]"
-          >
-            <Share2 size={16} className="text-[var(--foreground)]" />
-          </button>
-        </div>
-
-        {/* Stats */}
-        {(profile.years_in_business ||
-          profile.clients_served ||
-          reviews.length > 0) && (
-          <div className="mt-4 flex gap-3">
-            {profile.years_in_business && (
-              <div className="flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-1.5">
-                <Clock size={12} className="text-[var(--muted-foreground)]" />
-                <span className="font-mono text-xs font-medium text-[var(--foreground)]">
-                  {profile.years_in_business} yrs
-                </span>
-              </div>
-            )}
-            {profile.clients_served && (
-              <div className="flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-1.5">
-                <Users size={12} className="text-[var(--muted-foreground)]" />
-                <span className="font-mono text-xs font-medium text-[var(--foreground)]">
-                  {profile.clients_served}+ clients
-                </span>
-              </div>
-            )}
-            {reviews.length > 0 && (
-              <div className="flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-1.5">
-                <Star size={12} className="fill-[var(--foreground)] text-[var(--foreground)]" />
-                <span className="font-mono text-xs font-medium text-[var(--foreground)]">
-                  {avgRating.toFixed(1)}
-                </span>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Action CTAs */}
-      <div className="mt-5 flex gap-2 px-5">
-        <button
-          onClick={saveContact}
-          className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[var(--foreground)] py-3.5 text-xs font-semibold text-[var(--background)] shadow-card-lg transition hover:opacity-90"
-        >
-          <Download size={15} />
-          Add to Contacts
-        </button>
-        <a
-          href="#details"
-          className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] py-3.5 text-xs font-semibold text-[var(--foreground)] shadow-card transition hover:shadow-card-hover"
-        >
-          <Eye size={15} />
-          View Profile
-        </a>
-      </div>
-
-      {/* Quick contact */}
-      <div className="mt-4 grid grid-cols-4 gap-2 px-5">
-        {profile.phone && (
-          <QuickAction
-            href={`tel:${profile.phone}`}
-            icon={<Phone size={18} />}
-            label="Call"
-          />
-        )}
-        {profile.email && (
-          <QuickAction
-            href={`mailto:${profile.email}`}
-            icon={<Mail size={18} />}
-            label="Email"
-          />
-        )}
-        {profile.website && (
-          <QuickAction
-            href={ensureProtocol(profile.website)}
-            icon={<Globe size={18} />}
-            label="Website"
-          />
-        )}
-        <button
-          onClick={shareProfile}
-          className="flex flex-col items-center gap-1 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 transition hover:shadow-card"
-        >
-          <Share2 size={18} className="text-[var(--foreground)]" />
-          <span className="text-[10px] font-medium text-[var(--muted-foreground)]">Share</span>
-        </button>
-      </div>
+        </>
+      )}
 
       {/* ===== ALL SECTIONS — COLLAPSIBLE ACCORDIONS ===== */}
-      <div id="details" className="space-y-4 px-5 pb-8 pt-6">
+      <div id="details" className={`space-y-4 px-5 pb-8 ${hideHero ? "pt-2" : "pt-6"}`}>
 
         {/* ── About Us ── */}
         {(profile.bio || profile.address || profile.coverage_area) && (
@@ -453,26 +461,42 @@ export default function PublicProfileView({
                     Services
                   </p>
                 )}
-                <div className="grid grid-cols-2 gap-2">
-                  {servicesList.map((s, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setServicePopup(s)}
-                      className="rounded-xl border border-[var(--border)] p-3 text-left transition hover:shadow-card active:scale-[0.98]"
-                    >
-                      <div className="mb-1.5 flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent)] text-base">
-                        {s.emoji || "⚡"}
-                      </div>
-                      <p className="text-xs font-semibold text-[var(--foreground)]">{s.name}</p>
-                      {s.description && (
-                        <p className="mt-0.5 line-clamp-2 text-[10px] text-[var(--muted-foreground)]">{s.description}</p>
+                {(() => {
+                  const categories = Array.from(new Set(servicesList.map(s => s.category).filter(Boolean))) as string[];
+                  const uncategorized = servicesList.filter(s => !s.category);
+                  const hasCategories = categories.length > 0;
+
+                  return (
+                    <div>
+                      {hasCategories && categories.map(cat => (
+                        <div key={cat} className="mb-3">
+                          <p className="mb-1.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
+                            {cat}
+                          </p>
+                          <div className="grid grid-cols-2 gap-2">
+                            {servicesList.filter(s => s.category === cat).map((s, i) => (
+                              <ServiceCard key={i} service={s} onTap={setServicePopup} />
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                      {uncategorized.length > 0 && (
+                        <div className={hasCategories ? "mt-3" : ""}>
+                          {hasCategories && uncategorized.length < servicesList.length && (
+                            <p className="mb-1.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
+                              Other
+                            </p>
+                          )}
+                          <div className="grid grid-cols-2 gap-2">
+                            {uncategorized.map((s, i) => (
+                              <ServiceCard key={i} service={s} onTap={setServicePopup} />
+                            ))}
+                          </div>
+                        </div>
                       )}
-                      {s.price && (
-                        <p className="mt-1 font-mono text-[10px] font-semibold text-[var(--muted-foreground)]">{s.price}</p>
-                      )}
-                    </button>
-                  ))}
-                </div>
+                    </div>
+                  );
+                })()}
               </>
             )}
             {hasProducts && (
@@ -513,7 +537,7 @@ export default function PublicProfileView({
             icon={<ImageIcon size={15} />}
             badge={galleryList.length}
           >
-            <PublicGallery gallery={galleryList} onImageTap={setLightboxImage} />
+            <PublicGallery gallery={galleryList} allGallery={galleryList} onImageTap={(idx) => setLightboxIndex(idx)} />
           </CollapsibleSection>
         )}
 
@@ -835,25 +859,14 @@ export default function PublicProfileView({
         </p>
       </div>
 
-      {/* ===== LIGHTBOX — Gallery images ===== */}
-      {lightboxImage && (
-        <div
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/90 p-4"
-          onClick={() => setLightboxImage(null)}
-        >
-          <button
-            onClick={() => setLightboxImage(null)}
-            className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white backdrop-blur transition hover:bg-white/20"
-          >
-            <X size={20} />
-          </button>
-          <img
-            src={lightboxImage}
-            alt=""
-            className="max-h-[85vh] max-w-full rounded-lg object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
+      {/* ===== LIGHTBOX — Gallery images with swipe ===== */}
+      {lightboxIndex !== null && galleryList[lightboxIndex] && (
+        <GalleryLightbox
+          images={galleryList}
+          currentIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onChange={setLightboxIndex}
+        />
       )}
 
       {/* ===== LIGHTBOX — QR Code ===== */}
@@ -963,6 +976,32 @@ export default function PublicProfileView({
 /*  Sub-components                                                     */
 /* ================================================================== */
 
+function ServiceCard({
+  service,
+  onTap,
+}: {
+  service: { name: string; description?: string; price?: string; emoji?: string; category?: string };
+  onTap: (s: typeof service) => void;
+}) {
+  return (
+    <button
+      onClick={() => onTap(service)}
+      className="rounded-xl border border-[var(--border)] p-3 text-left transition hover:shadow-card active:scale-[0.98]"
+    >
+      <div className="mb-1.5 flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent)] text-base">
+        {service.emoji || "⚡"}
+      </div>
+      <p className="text-xs font-semibold text-[var(--foreground)]">{service.name}</p>
+      {service.description && (
+        <p className="mt-0.5 line-clamp-2 text-[10px] text-[var(--muted-foreground)]">{service.description}</p>
+      )}
+      {service.price && (
+        <p className="mt-1 font-mono text-[10px] font-semibold text-[var(--muted-foreground)]">{service.price}</p>
+      )}
+    </button>
+  );
+}
+
 /**
  * Collapsible section — accordion toggle with smooth animation.
  */
@@ -1022,10 +1061,12 @@ function CollapsibleSection({
 
 function PublicGallery({
   gallery,
+  allGallery,
   onImageTap,
 }: {
   gallery: { url: string; category?: string; caption?: string }[];
-  onImageTap: (url: string) => void;
+  allGallery: { url: string; category?: string; caption?: string }[];
+  onImageTap: (globalIndex: number) => void;
 }) {
   const [activeTab, setActiveTab] = useState("All");
   const categories = [
@@ -1057,19 +1098,22 @@ function PublicGallery({
         </div>
       )}
       <div className="grid grid-cols-3 gap-1.5">
-        {filtered.map((img, i) => (
-          <button
-            key={i}
-            onClick={() => onImageTap(img.url)}
-            className="overflow-hidden rounded-lg transition active:scale-95"
-          >
-            <img
-              src={img.url}
-              alt={img.caption ?? ""}
-              className="aspect-square w-full object-cover"
-            />
-          </button>
-        ))}
+        {filtered.map((img, i) => {
+          const globalIdx = allGallery.findIndex((g) => g.url === img.url);
+          return (
+            <button
+              key={i}
+              onClick={() => onImageTap(globalIdx >= 0 ? globalIdx : i)}
+              className="overflow-hidden rounded-lg transition active:scale-95"
+            >
+              <img
+                src={img.url}
+                alt={img.caption ?? ""}
+                className="aspect-square w-full object-cover"
+              />
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -1094,6 +1138,118 @@ function QuickAction({
       <span className="text-[var(--foreground)]">{icon}</span>
       <span className="text-[10px] font-medium text-[var(--muted-foreground)]">{label}</span>
     </a>
+  );
+}
+
+function GalleryLightbox({
+  images,
+  currentIndex,
+  onClose,
+  onChange,
+}: {
+  images: { url: string; caption?: string }[];
+  currentIndex: number;
+  onClose: () => void;
+  onChange: (index: number) => void;
+}) {
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchDelta, setTouchDelta] = useState(0);
+
+  const goPrev = () => {
+    if (currentIndex > 0) onChange(currentIndex - 1);
+  };
+  const goNext = () => {
+    if (currentIndex < images.length - 1) onChange(currentIndex + 1);
+  };
+
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "ArrowLeft") goPrev();
+      else if (e.key === "ArrowRight") goNext();
+      else if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex]);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStart(e.touches[0].clientX);
+    setTouchDelta(0);
+  };
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStart === null) return;
+    setTouchDelta(e.touches[0].clientX - touchStart);
+  };
+  const handleTouchEnd = () => {
+    if (Math.abs(touchDelta) > 60) {
+      if (touchDelta > 0) goPrev();
+      else goNext();
+    }
+    setTouchStart(null);
+    setTouchDelta(0);
+  };
+
+  const img = images[currentIndex];
+
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/95"
+      onClick={onClose}
+    >
+      {/* Close */}
+      <button
+        onClick={onClose}
+        className="absolute right-4 top-4 z-10 rounded-full bg-white/10 p-2 text-white backdrop-blur transition hover:bg-white/20"
+      >
+        <X size={20} />
+      </button>
+
+      {/* Counter */}
+      <div className="absolute left-4 top-4 z-10 rounded-full bg-white/10 px-3 py-1.5 font-mono text-xs text-white backdrop-blur">
+        {currentIndex + 1} / {images.length}
+      </div>
+
+      {/* Prev arrow */}
+      {currentIndex > 0 && (
+        <button
+          onClick={(e) => { e.stopPropagation(); goPrev(); }}
+          className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/10 p-2 text-white backdrop-blur transition hover:bg-white/20"
+        >
+          <ChevronLeft size={24} />
+        </button>
+      )}
+
+      {/* Next arrow */}
+      {currentIndex < images.length - 1 && (
+        <button
+          onClick={(e) => { e.stopPropagation(); goNext(); }}
+          className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/10 p-2 text-white backdrop-blur transition hover:bg-white/20"
+        >
+          <ChevronRight size={24} />
+        </button>
+      )}
+
+      {/* Image with touch handling */}
+      <div
+        className="flex h-full w-full flex-col items-center justify-center px-12 py-16"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <img
+          src={img.url}
+          alt={img.caption ?? ""}
+          className="max-h-full max-w-full rounded-lg object-contain transition-transform duration-200"
+          style={{ transform: touchDelta !== 0 ? `translateX(${touchDelta}px)` : undefined }}
+          draggable={false}
+        />
+        {img.caption && (
+          <p className="mt-3 text-center text-sm text-white/70">{img.caption}</p>
+        )}
+      </div>
+    </div>
   );
 }
 

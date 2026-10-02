@@ -27,6 +27,8 @@ import {
   Check,
   Trash2,
   Camera,
+  Search,
+  Loader2,
 } from "lucide-react";
 
 type EditSection =
@@ -56,6 +58,42 @@ export default function ProfilePage() {
     email: "",
     phone: "",
   });
+  const [newEmpAvatar, setNewEmpAvatar] = useState<File | null>(null);
+  const [newEmpAvatarPreview, setNewEmpAvatarPreview] = useState<string | null>(null);
+
+  // Google Place ID search state
+  const [placeResults, setPlaceResults] = useState<
+    { place_id: string; name: string; address: string; rating: number | null }[]
+  >([]);
+  const [placeSearching, setPlaceSearching] = useState(false);
+  const [placeError, setPlaceError] = useState("");
+
+  async function searchPlaceId() {
+    const q = [editForm.business_name, editForm.address]
+      .filter(Boolean)
+      .join(", ");
+    if (!q || q.length < 3) {
+      setPlaceError("Add a business name or address first");
+      return;
+    }
+    setPlaceSearching(true);
+    setPlaceError("");
+    setPlaceResults([]);
+    try {
+      const res = await fetch(`/api/places?q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      if (!res.ok) {
+        setPlaceError(data.error || "Search failed");
+      } else if (data.results.length === 0) {
+        setPlaceError("No results found — try editing your business name or address");
+      } else {
+        setPlaceResults(data.results);
+      }
+    } catch {
+      setPlaceError("Network error");
+    }
+    setPlaceSearching(false);
+  }
 
   // Crop modal state
   const [cropImage, setCropImage] = useState<{
@@ -154,17 +192,28 @@ export default function ProfilePage() {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "");
 
-    const { error } = await supabase.from("employees").insert({
-      owner_id: profile.id,
-      name: newEmployee.name,
-      designation: newEmployee.designation,
-      email: newEmployee.email || null,
-      phone: newEmployee.phone || null,
-      slug,
-    });
+    const { data, error } = await supabase
+      .from("employees")
+      .insert({
+        owner_id: profile.id,
+        name: newEmployee.name,
+        designation: newEmployee.designation,
+        email: newEmployee.email || null,
+        phone: newEmployee.phone || null,
+        slug,
+      })
+      .select("id")
+      .single();
 
-    if (!error) {
+    if (!error && data) {
+      // Upload avatar if one was selected
+      if (newEmpAvatar) {
+        await uploadEmployeeImage(newEmpAvatar, data.id, "avatar_url");
+      }
       setNewEmployee({ name: "", designation: "", email: "", phone: "" });
+      if (newEmpAvatarPreview) URL.revokeObjectURL(newEmpAvatarPreview);
+      setNewEmpAvatar(null);
+      setNewEmpAvatarPreview(null);
       loadProfile();
     }
     setSaving(false);
@@ -850,12 +899,63 @@ export default function ProfilePage() {
             value={editForm.gst_number ?? ""}
             onChange={(v) => setEditForm({ ...editForm, gst_number: v })}
           />
-          <InputField
-            label="Google Place ID (for reviews)"
-            value={editForm.google_place_id ?? ""}
-            onChange={(v) => setEditForm({ ...editForm, google_place_id: v })}
-            placeholder="ChIJ..."
-          />
+          <div>
+            <label className="mb-1 block text-xs font-medium text-ink-500">
+              Google Place ID (for reviews)
+            </label>
+            <div className="flex gap-2">
+              <input
+                value={editForm.google_place_id ?? ""}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, google_place_id: e.target.value })
+                }
+                placeholder="ChIJ..."
+                className="flex-1 rounded-xl border border-ink-200 bg-white px-3 py-2.5 text-sm outline-none"
+              />
+              <button
+                type="button"
+                onClick={searchPlaceId}
+                disabled={placeSearching}
+                className="flex items-center gap-1.5 rounded-xl bg-ink-100 px-3 py-2.5 text-xs font-medium text-ink-700 transition hover:bg-ink-200 disabled:opacity-50"
+              >
+                {placeSearching ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : (
+                  <Search size={13} />
+                )}
+                Find
+              </button>
+            </div>
+            {placeError && (
+              <p className="mt-1.5 text-xs text-red-500">{placeError}</p>
+            )}
+            {placeResults.length > 0 && (
+              <div className="mt-2 space-y-1.5">
+                {placeResults.map((r) => (
+                  <button
+                    key={r.place_id}
+                    type="button"
+                    onClick={() => {
+                      setEditForm({ ...editForm, google_place_id: r.place_id });
+                      setPlaceResults([]);
+                    }}
+                    className="flex w-full items-start gap-2 rounded-xl border border-ink-100 bg-ink-50 p-2.5 text-left transition hover:border-ink-300"
+                  >
+                    <MapPin size={14} className="mt-0.5 shrink-0 text-ink-400" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-ink-800">{r.name}</p>
+                      <p className="text-[11px] text-ink-400 truncate">{r.address}</p>
+                      {r.rating && (
+                        <p className="text-[10px] text-ink-400">
+                          ★ {r.rating}
+                        </p>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <SaveButton saving={saving} onClick={saveProfile} />
         </EditSheet>
       )}
@@ -875,11 +975,12 @@ export default function ProfilePage() {
       {editing === "services" && (
         <EditSheet title="Services" onClose={() => setEditing(null)}>
           <ItemListEditor
-            items={(editForm.services ?? []) as { name: string; description?: string; price?: string }[]}
+            items={(editForm.services ?? []) as { name: string; description?: string; price?: string; category?: string }[]}
             onChange={(items) =>
               setEditForm({ ...editForm, services: items })
             }
             label="service"
+            showCategory
           />
           <SaveButton saving={saving} onClick={saveProfile} />
         </EditSheet>
@@ -982,10 +1083,51 @@ export default function ProfilePage() {
           </div>
           <div className="mt-4 space-y-2 border-t border-ink-100 pt-4">
             <p className="text-xs font-medium text-ink-500">Add team member</p>
+            {/* Avatar preview + upload */}
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="h-14 w-14 overflow-hidden rounded-full bg-ink-100">
+                  {newEmpAvatarPreview ? (
+                    <img
+                      src={newEmpAvatarPreview}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center">
+                      <Camera size={18} className="text-ink-300" />
+                    </div>
+                  )}
+                </div>
+                <label className="absolute -bottom-0.5 -right-0.5 cursor-pointer rounded-full bg-ink-950 p-1.5 text-white shadow-sm transition hover:opacity-80">
+                  <Camera size={10} />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) {
+                        if (f.size > 5 * 1024 * 1024) {
+                          alert("Image must be under 5 MB");
+                          return;
+                        }
+                        if (newEmpAvatarPreview) URL.revokeObjectURL(newEmpAvatarPreview);
+                        setNewEmpAvatar(f);
+                        setNewEmpAvatarPreview(URL.createObjectURL(f));
+                      }
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+              <p className="text-[10px] text-ink-400">Upload photo (optional)<br />Max 5 MB</p>
+            </div>
             <InputField
               label="Name"
               value={newEmployee.name}
               onChange={(v) => setNewEmployee({ ...newEmployee, name: v })}
+              required
             />
             <InputField
               label="Designation"
@@ -993,6 +1135,7 @@ export default function ProfilePage() {
               onChange={(v) =>
                 setNewEmployee({ ...newEmployee, designation: v })
               }
+              required
             />
             <InputField
               label="Email"
@@ -1120,6 +1263,7 @@ function InputField({
   type = "text",
   placeholder,
   prefix,
+  required,
 }: {
   label: string;
   value: string;
@@ -1127,11 +1271,13 @@ function InputField({
   type?: string;
   placeholder?: string;
   prefix?: string;
+  required?: boolean;
 }) {
   return (
     <div>
       <label className="mb-1 block text-xs font-medium text-ink-500">
         {label}
+        {required && <span className="ml-0.5 text-red-400">*</span>}
       </label>
       <div className="flex">
         {prefix && (
@@ -1270,12 +1416,14 @@ function ItemListEditor({
   items,
   onChange,
   label,
+  showCategory = false,
 }: {
-  items: { name: string; description?: string; price?: string }[];
+  items: { name: string; description?: string; price?: string; category?: string }[];
   onChange: (
-    items: { name: string; description?: string; price?: string }[]
+    items: { name: string; description?: string; price?: string; category?: string }[]
   ) => void;
   label: string;
+  showCategory?: boolean;
 }) {
   return (
     <div className="space-y-3">
@@ -1313,6 +1461,18 @@ function ItemListEditor({
                 placeholder="Price (optional)"
                 className="w-full border-none bg-transparent text-xs text-ink-500 outline-none"
               />
+              {showCategory && (
+                <input
+                  value={item.category ?? ""}
+                  onChange={(e) => {
+                    const updated = [...items];
+                    updated[i] = { ...item, category: e.target.value };
+                    onChange(updated);
+                  }}
+                  placeholder="Department / Category (optional)"
+                  className="w-full border-none bg-transparent text-xs text-ink-500 outline-none"
+                />
+              )}
             </div>
             <button
               onClick={() => onChange(items.filter((_, idx) => idx !== i))}
@@ -1325,7 +1485,7 @@ function ItemListEditor({
       ))}
       <button
         onClick={() =>
-          onChange([...items, { name: "", description: "", price: "" }])
+          onChange([...items, { name: "", description: "", price: "", ...(showCategory ? { category: "" } : {}) }])
         }
         className="flex items-center gap-1.5 text-xs font-medium text-ink-500 hover:text-ink-700"
       >
