@@ -180,6 +180,7 @@ export default function PublicProfileView({
   const [activeReviewTab, setActiveReviewTab] = useState("All");
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [qrLightbox, setQrLightbox] = useState<string | null>(null);
+  const [copiedToast, setCopiedToast] = useState(false);
   const [servicePopup, setServicePopup] = useState<{
     name: string;
     description?: string;
@@ -534,9 +535,13 @@ export default function PublicProfileView({
           icon={<Star size={15} />}
           badge={reviews.length > 0 ? reviews.length : undefined}
           headerExtra={
-            profile.google_place_id && !profile.google_place_id.startsWith("http") ? (
+            profile.google_place_id ? (
               <a
-                href={googleReviewUrl(profile.google_place_id)}
+                href={
+                  profile.google_place_id.startsWith("http")
+                    ? profile.google_place_id
+                    : googleReviewUrl(profile.google_place_id)
+                }
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
@@ -631,7 +636,7 @@ export default function PublicProfileView({
             <div>
               <div className="mb-2 flex items-center justify-between">
                 <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
-                  {profile.google_place_id && !profile.google_place_id.startsWith("http")
+                  {profile.google_place_id
                     ? "Tap to review on Google"
                     : "Share your experience"}
                 </p>
@@ -649,13 +654,13 @@ export default function PublicProfileView({
                     key={i}
                     onClick={() => {
                       navigator.clipboard?.writeText(text);
-                      if (profile.google_place_id && !profile.google_place_id.startsWith("http")) {
-                        window.open(
-                          googleReviewUrl(profile.google_place_id),
-                          "_blank"
-                        );
-                      } else {
-                        alert("Review text copied to clipboard!");
+                      setCopiedToast(true);
+                      setTimeout(() => setCopiedToast(false), 2500);
+                      if (profile.google_place_id) {
+                        const url = profile.google_place_id.startsWith("http")
+                          ? profile.google_place_id
+                          : googleReviewUrl(profile.google_place_id);
+                        window.open(url, "_blank");
                       }
                     }}
                     className="w-full rounded-xl border border-[var(--border)] p-3 text-left transition hover:border-[var(--foreground)]/20 hover:shadow-card"
@@ -674,7 +679,7 @@ export default function PublicProfileView({
                     </p>
                     <p className="mt-2 flex items-center gap-1 font-mono text-[9px] font-medium text-[var(--muted-foreground)]">
                       <Copy size={8} />
-                      {profile.google_place_id && !profile.google_place_id.startsWith("http")
+                      {profile.google_place_id
                         ? "Tap to copy & open Google Reviews"
                         : "Tap to copy review text"}
                     </p>
@@ -910,6 +915,12 @@ export default function PublicProfileView({
               </a>
             ) : null}
           </div>
+        </div>
+      )}
+      {/* ===== COPIED TOAST ===== */}
+      {copiedToast && (
+        <div className="fixed bottom-6 left-1/2 z-[80] -translate-x-1/2 animate-[fadeInUp_0.2s_ease-out] rounded-full bg-[var(--foreground)] px-4 py-2 text-xs font-medium text-[var(--background)] shadow-lg">
+          ✓ Review text copied — paste it on Google!
         </div>
       )}
     </main>
