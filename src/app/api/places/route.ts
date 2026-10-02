@@ -21,11 +21,15 @@ const BROWSER_UA =
 
 /** Extract a ChIJ Place ID — the ONLY format that works with writereview */
 function extractChIJPlaceId(text: string): string | null {
-  // Direct ChIJ match anywhere in text
   const chijMatch = text.match(/(ChIJ[A-Za-z0-9_-]+)/);
   if (chijMatch) return chijMatch[1];
-
   return null;
+}
+
+/** Extract hex feature ID (0x...:0x...) — used for #lrd review link trick */
+function extractFeatureId(text: string): string | null {
+  const hexMatch = text.match(/(0x[0-9a-fA-F]+:0x[0-9a-fA-F]+)/);
+  return hexMatch ? hexMatch[1] : null;
 }
 
 export async function POST(req: NextRequest) {
@@ -89,20 +93,26 @@ export async function POST(req: NextRequest) {
       placeId = extractChIJPlaceId(pageHtml);
     }
 
+    // Extract hex feature ID from expanded URL or page HTML
+    let featureId = extractFeatureId(expandedUrl);
+    if (!featureId && pageHtml) {
+      featureId = extractFeatureId(pageHtml);
+    }
+
     // Extract place name from /maps/place/NAME/
     const nameMatch = expandedUrl.match(/\/maps\/place\/([^/@?]+)/);
     const placeName = nameMatch
       ? decodeURIComponent(nameMatch[1]).replace(/\+/g, " ")
       : null;
 
-    // Build a clean Maps URL
-    const cleanUrl = expandedUrl.split("?")[0] || expandedUrl;
-    const mapsUrl = cleanUrl.includes("google") ? cleanUrl : expandedUrl;
+    // Keep full expanded URL (data path contains feature ID for review links)
+    const mapsUrl = expandedUrl.includes("google") ? expandedUrl : rawUrl;
 
     // Return what we have — place_id only if ChIJ, always google_maps_url
     if (mapsUrl.includes("google")) {
       return NextResponse.json({
         ...(placeId ? { place_id: placeId } : {}),
+        ...(featureId ? { feature_id: featureId } : {}),
         google_maps_url: mapsUrl,
         ...(placeName ? { name: placeName } : {}),
       });

@@ -46,15 +46,27 @@ export function slugify(text: string): string {
  *
  * The stored value can be:
  *   - A ChIJ... Place ID → opens the direct "Write a review" form
- *   - A full Google Maps URL → opens the Maps page (has "Write a review" button)
+ *   - A full Google Maps URL → opens the Maps page with review dialog
  *
- * Only ChIJ... IDs work with Google's writereview endpoint.
+ * For Maps URLs, we extract the hex feature ID (0x...:0x...) and use
+ * the #lrd fragment with action=3 to open the "Write a review" dialog.
  */
 export function googleReviewUrl(placeId: string): string {
   // ChIJ... format → direct review form (the ideal case)
   if (placeId.startsWith("ChIJ")) {
     return `https://search.google.com/local/writereview?placeid=${placeId}`;
   }
-  // Everything else (Google Maps URL) → open directly
-  return placeId.startsWith("http") ? placeId : `https://www.google.com/maps`;
+
+  // Google Maps URL → extract feature ID and use #lrd trick to open review dialog
+  if (placeId.startsWith("http")) {
+    const featureMatch = placeId.match(/(0x[0-9a-fA-F]+:0x[0-9a-fA-F]+)/);
+    if (featureMatch) {
+      // Strip any existing hash, then append #lrd=FEATURE_ID,3 (3 = write a review)
+      const baseUrl = placeId.split("#")[0];
+      return `${baseUrl}#lrd=${featureMatch[1]},3,,,,`;
+    }
+    return placeId;
+  }
+
+  return `https://www.google.com/maps`;
 }
