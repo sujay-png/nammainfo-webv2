@@ -1,19 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 
 /**
- * POST /api/places — resolve a Google Maps URL to a place_id + maps URL.
+ * POST /api/places — resolve a Google link to review + maps URLs.
  *
  * Accepts:
- *   { url: "https://maps.app.goo.gl/..." }             — short share link
- *   { url: "https://www.google.com/maps/place/..." }    — full link
- *   { url: "https://www.google.com/maps?cid=..." }      — CID link
- *   { url: "ChIJ..." }                                  — direct Place ID
+ *   { url: "https://g.page/r/XXXX/review" }             — Google Business review link (BEST)
+ *   { url: "https://search.google.com/local/writereview?placeid=ChIJ..." } — direct review URL
+ *   { url: "https://maps.app.goo.gl/..." }               — short share link
+ *   { url: "https://www.google.com/maps/place/..." }      — full link
+ *   { url: "https://www.google.com/maps?cid=..." }        — CID link
+ *   { url: "ChIJ..." }                                    — direct Place ID
  *
- * Returns: { place_id?, google_maps_url, name? }
+ * Returns: { review_url?, place_id?, google_maps_url?, name? }
  *
- * place_id is ONLY a ChIJ... format (the only format Google's
- * writereview URL accepts). google_maps_url always points to the
- * business page on Google Maps.
+ * review_url is the direct "write a review" link (best for users).
+ * place_id is ONLY a ChIJ... format.
+ * google_maps_url always points to the business page on Google Maps.
  */
 
 const BROWSER_UA =
@@ -26,10 +28,12 @@ function extractChIJPlaceId(text: string): string | null {
   return null;
 }
 
-/** Extract hex feature ID (0x...:0x...) — used for #lrd review link trick */
-function extractFeatureId(text: string): string | null {
-  const hexMatch = text.match(/(0x[0-9a-fA-F]+:0x[0-9a-fA-F]+)/);
-  return hexMatch ? hexMatch[1] : null;
+/** Check if a URL is a direct Google review link (g.page or writereview) */
+function isGoogleReviewLink(url: string): boolean {
+  return (
+    /g\.page\/r\/[A-Za-z0-9_-]+\/review/i.test(url) ||
+    url.includes("search.google.com/local/writereview")
+  );
 }
 
 export async function POST(req: NextRequest) {
@@ -43,19 +47,28 @@ export async function POST(req: NextRequest) {
 
     // Direct ChIJ Place ID pasted
     if (/^ChIJ[A-Za-z0-9_-]+$/.test(rawUrl)) {
-      return NextResponse.json({ place_id: rawUrl });
+      return NextResponse.json({
+        place_id: rawUrl,
+        review_url: `https://search.google.com/local/writereview?placeid=${rawUrl}`,
+      });
     }
 
-    // Must look like a Google Maps URL
+    // Google Business Profile review link → store directly (opens review dialog)
+    if (isGoogleReviewLink(rawUrl)) {
+      return NextResponse.json({ review_url: rawUrl });
+    }
+
+    // Must look like a Google-related URL
     if (
       !rawUrl.includes("google.com/maps") &&
       !rawUrl.includes("google.co") &&
       !rawUrl.includes("maps.app.goo.gl") &&
       !rawUrl.includes("goo.gl/maps") &&
-      !rawUrl.includes("maps.google")
+      !rawUrl.includes("maps.google") &&
+      !rawUrl.includes("g.page")
     ) {
       return NextResponse.json(
-        { error: "Please paste a Google Maps link" },
+        { error: "Please paste a Google Maps link or Google Business review link" },
         { status: 400 }
       );
     }
@@ -63,7 +76,11 @@ export async function POST(req: NextRequest) {
     // Try ChIJ from raw URL first
     let placeId = extractChIJPlaceId(rawUrl);
     if (placeId) {
-      return NextResponse.json({ place_id: placeId, google_maps_url: rawUrl });
+      return NextResponse.json({
+        place_id: placeId,
+        review_url: `https://search.google.com/local/writereview?placeid=${placeId}`,
+        google_maps_url: rawUrl,
+      });
     }
 
     // Resolve URL by following redirects
@@ -84,20 +101,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Check if redirect landed on a review link
+    if (isGoogleReviewLink(expandedUrl)) {
+      return NextResponse.json({ review_url: expandedUrl });
+    }
+
     // Try ChIJ from expanded URL
     placeId = extractChIJPlaceId(expandedUrl);
 
-    // Try ChIJ from page HTML (Google Maps is mostly client-rendered,
-    // but sometimes the ChIJ appears in initial script data)
+    // Try ChIJ from page HTML
     if (!placeId && pageHtml) {
       placeId = extractChIJPlaceId(pageHtml);
     }
 
-    // Extract hex feature ID from expanded URL or page HTML
-    let featureId = extractFeatureId(expandedUrl);
-    if (!featureId && pageHtml) {
-      featureId = extractFeatureId(pageHtml);
-    }
+    // Build review URL if we got ChIJ
+    const reviewUrl = placeId
+      ? `https://search.google.com/local/writereview?placeid=${placeId}`
+      : null;
 
     // Extract place name from /maps/place/NAME/
     const nameMatch = expandedUrl.match(/\/maps\/place\/([^/@?]+)/);
@@ -105,14 +125,14 @@ export async function POST(req: NextRequest) {
       ? decodeURIComponent(nameMatch[1]).replace(/\+/g, " ")
       : null;
 
-    // Keep full expanded URL (data path contains feature ID for review links)
+    // Keep full expanded URL
     const mapsUrl = expandedUrl.includes("google") ? expandedUrl : rawUrl;
 
-    // Return what we have — place_id only if ChIJ, always google_maps_url
+    // Return what we have
     if (mapsUrl.includes("google")) {
       return NextResponse.json({
         ...(placeId ? { place_id: placeId } : {}),
-        ...(featureId ? { feature_id: featureId } : {}),
+        ...(reviewUrl ? { review_url: reviewUrl } : {}),
         google_maps_url: mapsUrl,
         ...(placeName ? { name: placeName } : {}),
       });

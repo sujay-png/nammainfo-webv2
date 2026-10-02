@@ -68,16 +68,18 @@ export default function ProfilePage() {
     const trimmed = url.trim();
     if (!trimmed) return;
 
-    // Quick validation — must look like a Google Maps URL or Place ID
+    // Quick validation — must look like a Google Maps URL, Place ID, or Google Business review link
     const isPlaceId = /^ChIJ[A-Za-z0-9_-]+$/.test(trimmed);
     const isGoogleUrl =
       trimmed.includes("google.com/maps") ||
       trimmed.includes("maps.app.goo.gl") ||
       trimmed.includes("goo.gl/maps") ||
-      trimmed.includes("maps.google.com");
+      trimmed.includes("maps.google.com") ||
+      trimmed.includes("g.page") ||
+      trimmed.includes("search.google.com/local/writereview");
 
     if (!isPlaceId && !isGoogleUrl) {
-      setMapsLinkError("Please paste a valid Google Maps link");
+      setMapsLinkError("Please paste a Google Maps link or Google Business review link");
       return;
     }
 
@@ -98,10 +100,10 @@ export default function ProfilePage() {
         return;
       }
 
-      // Prefer ChIJ place_id for direct review links, fall back to google_maps_url
-      const valueToStore = data.place_id || data.google_maps_url;
+      // Prefer review_url (opens review dialog directly), then place_id, then maps URL
+      const valueToStore = data.review_url || data.place_id || data.google_maps_url;
       if (!valueToStore) {
-        setMapsLinkError("Could not extract Place ID — try a different link");
+        setMapsLinkError("Could not process this link — try a different one");
         setMapsLinkLoading(false);
         return;
       }
@@ -761,7 +763,9 @@ export default function ProfilePage() {
                 className="flex items-center gap-1 text-[10px] font-medium text-blue-600 hover:text-blue-800"
               >
                 <ExternalLink size={10} />
-                View on Maps
+                {profile.google_place_id.includes("review") || profile.google_place_id.includes("writereview")
+                  ? "Test review link"
+                  : "View on Maps"}
               </a>
               <button
                 type="button"
@@ -788,9 +792,9 @@ export default function ProfilePage() {
                   <MapPin size={14} className="text-ink-500" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-xs font-semibold text-ink-700">Add Google Maps Link</p>
+                  <p className="text-xs font-semibold text-ink-700">Link Google Reviews</p>
                   <p className="text-[10px] text-ink-400">
-                    Enable Reviews & Get Directions on your profile
+                    Enable direct Google Reviews on your profile
                   </p>
                 </div>
                 <ChevronRight size={14} className="text-ink-300" />
@@ -799,7 +803,7 @@ export default function ProfilePage() {
               <div>
                 <div className="mb-2 flex items-center justify-between">
                   <label className="text-xs font-semibold text-ink-700">
-                    Paste Google Maps Link
+                    Paste Google Review Link
                   </label>
                   <button
                     type="button"
@@ -835,7 +839,7 @@ export default function ProfilePage() {
                         resolveAndSaveGoogleLink(text);
                       }
                     }}
-                    placeholder="https://maps.app.goo.gl/..."
+                    placeholder="https://g.page/r/.../review or Maps link"
                     className="flex-1 rounded-lg border border-ink-200 bg-white px-3 py-2 text-xs outline-none focus:border-ink-400"
                   />
                   <button
@@ -854,7 +858,8 @@ export default function ProfilePage() {
                 </div>
 
                 <p className="mt-1.5 text-[10px] text-ink-400">
-                  Open Google Maps → find your business → tap Share → Copy link → paste above
+                  <strong>Best:</strong> Google Business Profile → Get more reviews → Copy link<br />
+                  Or: Google Maps → find your business → Share → Copy link
                 </p>
 
                 {mapsLinkError && (
