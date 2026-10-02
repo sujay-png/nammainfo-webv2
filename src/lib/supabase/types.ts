@@ -128,6 +128,7 @@ export interface Employee {
   phone: string | null;
   slug: string;
   avatar_url: string | null;
+  cover_url: string | null;
   is_active: boolean;
   created_at: string;
 }
@@ -177,9 +178,9 @@ export interface Database {
         Relationships: AnyRelationship[];
       };
     };
-    Views: Record<string, never>;
-    Functions: Record<string, never>;
-    Enums: Record<string, never>;
-    CompositeTypes: Record<string, never>;
+    Views: { [_ in never]: never };
+    Functions: { [_ in never]: never };
+    Enums: { [_ in never]: never };
+    CompositeTypes: { [_ in never]: never };
   };
 }

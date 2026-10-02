@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
 import { createPublicClient } from "@/lib/supabase/server";
 import type { Metadata } from "next";
-import type { Profile, Employee } from "@/lib/supabase/types";
-import EmployeeCardView from "@/components/EmployeeCardView";
+import type { Profile, Employee, Review, Card } from "@/lib/supabase/types";
+import EmployeeProfileView from "@/components/EmployeeProfileView";
 
 export const dynamic = "force-dynamic";
 
@@ -68,5 +68,37 @@ export default async function EmployeePage({
   if (!empData) notFound();
   const employee = empData as unknown as Employee;
 
-  return <EmployeeCardView employee={employee} owner={owner} />;
+  // Get the card for the owner
+  const { data: cardData } = await supabase
+    .from("cards")
+    .select("*")
+    .eq("profile_id", owner.id)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  // Fetch reviews for the company
+  const { data: reviewsData } = await supabase
+    .from("reviews")
+    .select("*")
+    .eq("profile_id", owner.id)
+    .order("created_at", { ascending: false })
+    .limit(10);
+
+  // Fetch all employees for team section
+  const { data: employeesData } = await supabase
+    .from("employees")
+    .select("*")
+    .eq("owner_id", owner.id)
+    .eq("is_active", true)
+    .order("created_at");
+
+  return (
+    <EmployeeProfileView
+      employee={employee}
+      owner={owner}
+      card={cardData as Card | null}
+      reviews={(reviewsData as unknown as Review[]) ?? []}
+      employees={(employeesData as unknown as Employee[]) ?? []}
+    />
+  );
 }

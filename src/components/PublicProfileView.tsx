@@ -15,6 +15,7 @@ import {
   Star,
   ExternalLink,
   ChevronRight,
+  ChevronDown,
   UserPlus,
   Eye,
   Users,
@@ -34,6 +35,7 @@ import {
   Copy,
   FileText,
   BookUser,
+  X,
 } from "lucide-react";
 
 /**
@@ -53,11 +55,21 @@ function ensureProtocol(url: string): string {
 function socialHref(link: { platform: string; url: string }): string {
   const p = link.platform.toLowerCase();
   if (p.includes("whatsapp")) {
-    // Strip non-digits, build wa.me link
     const digits = link.url.replace(/[^0-9]/g, "");
     return `https://wa.me/${digits}`;
   }
   return ensureProtocol(link.url);
+}
+
+/** Get the WhatsApp number from social links */
+function getWhatsAppNumber(
+  socialLinks: { platform: string; url: string }[]
+): string | null {
+  const wa = socialLinks.find((l) =>
+    l.platform.toLowerCase().includes("whatsapp")
+  );
+  if (!wa) return null;
+  return wa.url.replace(/[^0-9]/g, "");
 }
 
 /**
@@ -130,11 +142,14 @@ export default function PublicProfileView({
   card,
   reviews,
   employees,
+  isEmployeeView = false,
 }: {
   profile: Profile;
   card: Card | null;
   reviews: Review[];
   employees: Employee[];
+  /** When true, hides the "Create your own profile" CTA */
+  isEmployeeView?: boolean;
 }) {
   const ownerTheme = getTheme(profile.theme);
   const [themeMode, setThemeMode] = useState<"light" | "dark">("light");
@@ -151,6 +166,15 @@ export default function PublicProfileView({
   }, [ownerTheme, themeMode]);
 
   const [reviewSuggestions, setReviewSuggestions] = useState<string[]>([]);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [qrLightbox, setQrLightbox] = useState<string | null>(null);
+  const [servicePopup, setServicePopup] = useState<{
+    name: string;
+    description?: string;
+    price?: string;
+    emoji?: string;
+    category?: string;
+  } | null>(null);
 
   const [profileUrl, setProfileUrl] = useState(() => {
     const base = "https://nammainfo.in";
@@ -233,14 +257,25 @@ export default function PublicProfileView({
 
   /* Cast arrays once */
   const socialLinks = (profile.social_links as { platform: string; url: string }[]) ?? [];
-  const servicesList = (profile.services as { name: string; description?: string; price?: string; emoji?: string }[]) ?? [];
+  const servicesList = (profile.services as { name: string; description?: string; price?: string; emoji?: string; category?: string }[]) ?? [];
   const productsList = (profile.products as { name: string; image_url?: string; price?: string; emoji?: string }[]) ?? [];
   const galleryList = (profile.gallery as { url: string; category?: string; caption?: string }[]) ?? [];
-  const bankAccounts = (profile.bank_accounts as { bank_name?: string; account_number?: string; ifsc?: string; upi_id?: string; qr_url?: string }[]) ?? [];
+  const bankAccounts = (profile.bank_accounts as { bank_name?: string; account_holder?: string; account_number?: string; ifsc?: string; upi_id?: string; qr_url?: string }[]) ?? [];
+
+  /* Dynamic label for services/products section */
+  const hasServices = servicesList.length > 0;
+  const hasProducts = productsList.length > 0;
+  const servicesLabel = hasServices && hasProducts
+    ? "Services & Products"
+    : hasServices
+      ? "Services"
+      : "Products";
+
+  const whatsAppNumber = getWhatsAppNumber(socialLinks);
 
   return (
     <main
-      className="mx-auto min-h-dvh max-w-lg bg-[var(--card)]"
+      className="mx-auto min-h-dvh max-w-lg bg-[var(--background)]"
       style={themeVars as React.CSSProperties}
     >
       {/* Hero — Cover + Avatar */}
@@ -377,12 +412,12 @@ export default function PublicProfileView({
         </button>
       </div>
 
-      {/* ===== ALL SECTIONS — NO ACCORDIONS, EVERYTHING OPEN ===== */}
+      {/* ===== ALL SECTIONS — COLLAPSIBLE ACCORDIONS ===== */}
       <div id="details" className="space-y-4 px-5 pb-8 pt-6">
 
         {/* ── About Us ── */}
         {(profile.bio || profile.address || profile.coverage_area) && (
-          <OpenSection title="About Us" icon={<Briefcase size={15} />}>
+          <CollapsibleSection title="About Us" icon={<Briefcase size={15} />} defaultOpen>
             {profile.bio && (
               <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
                 {profile.bio}
@@ -400,44 +435,53 @@ export default function PublicProfileView({
                 Serves: {profile.coverage_area}
               </div>
             )}
-          </OpenSection>
+          </CollapsibleSection>
         )}
 
-        {/* ── Services & Products ── */}
-        {(servicesList.length > 0 || productsList.length > 0) && (
-          <OpenSection
-            title="Services & Products"
+        {/* ── Services & Products (dynamic label) ── */}
+        {(hasServices || hasProducts) && (
+          <CollapsibleSection
+            title={servicesLabel}
             icon={<Award size={15} />}
             badge={servicesList.length + productsList.length}
+            defaultOpen
           >
-            {servicesList.length > 0 && (
+            {hasServices && (
               <>
-                <p className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
-                  Services
-                </p>
+                {hasProducts && (
+                  <p className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
+                    Services
+                  </p>
+                )}
                 <div className="grid grid-cols-2 gap-2">
                   {servicesList.map((s, i) => (
-                    <div key={i} className="rounded-xl border border-[var(--border)] p-3">
+                    <button
+                      key={i}
+                      onClick={() => setServicePopup(s)}
+                      className="rounded-xl border border-[var(--border)] p-3 text-left transition hover:shadow-card active:scale-[0.98]"
+                    >
                       <div className="mb-1.5 flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent)] text-base">
                         {s.emoji || "⚡"}
                       </div>
                       <p className="text-xs font-semibold text-[var(--foreground)]">{s.name}</p>
                       {s.description && (
-                        <p className="mt-0.5 text-[10px] text-[var(--muted-foreground)]">{s.description}</p>
+                        <p className="mt-0.5 line-clamp-2 text-[10px] text-[var(--muted-foreground)]">{s.description}</p>
                       )}
                       {s.price && (
                         <p className="mt-1 font-mono text-[10px] font-semibold text-[var(--muted-foreground)]">{s.price}</p>
                       )}
-                    </div>
+                    </button>
                   ))}
                 </div>
               </>
             )}
-            {productsList.length > 0 && (
+            {hasProducts && (
               <>
-                <p className="mb-2 mt-4 font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
-                  Products
-                </p>
+                {hasServices && (
+                  <p className="mb-2 mt-4 font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
+                    Products
+                  </p>
+                )}
                 <div className="grid grid-cols-2 gap-2">
                   {productsList.map((p, i) => (
                     <div key={i} className="overflow-hidden rounded-xl border border-[var(--border)]">
@@ -459,23 +503,23 @@ export default function PublicProfileView({
                 </div>
               </>
             )}
-          </OpenSection>
+          </CollapsibleSection>
         )}
 
         {/* ── Gallery ── */}
         {galleryList.length > 0 && (
-          <OpenSection
+          <CollapsibleSection
             title="Gallery"
             icon={<ImageIcon size={15} />}
             badge={galleryList.length}
           >
-            <PublicGallery gallery={galleryList} />
-          </OpenSection>
+            <PublicGallery gallery={galleryList} onImageTap={setLightboxImage} />
+          </CollapsibleSection>
         )}
 
         {/* ── Connect With Us ── */}
         {socialLinks.length > 0 && (
-          <OpenSection title="Connect With Us" icon={<MessageCircle size={15} />}>
+          <CollapsibleSection title="Connect With Us" icon={<MessageCircle size={15} />}>
             <div className="grid grid-cols-2 gap-2">
               {socialLinks.map((link, i) => (
                 <a
@@ -492,7 +536,7 @@ export default function PublicProfileView({
                 </a>
               ))}
             </div>
-          </OpenSection>
+          </CollapsibleSection>
         )}
 
         {/* ── Write a Google Review ── */}
@@ -636,7 +680,7 @@ export default function PublicProfileView({
 
         {/* ── Banking & Payment Info ── */}
         {bankAccounts.length > 0 && (
-          <OpenSection
+          <CollapsibleSection
             title="Banking & Payment Info"
             icon={<Banknote size={15} />}
             badge={bankAccounts.length}
@@ -650,10 +694,15 @@ export default function PublicProfileView({
                       <span className="text-sm font-semibold text-[var(--foreground)]">{acc.bank_name}</span>
                     </div>
                   )}
+                  {acc.account_holder && (
+                    <p className="mb-1 text-xs text-[var(--muted-foreground)]">
+                      Account Holder: <span className="font-medium text-[var(--foreground)]">{acc.account_holder}</span>
+                    </p>
+                  )}
                   {acc.account_number && (
                     <div className="flex items-center justify-between py-1">
                       <span className="font-mono text-xs text-[var(--muted-foreground)]">A/C: {acc.account_number}</span>
-                      <button onClick={() => navigator.clipboard.writeText(acc.account_number!)} className="p-1 text-[var(--muted-foreground)]"><Copy size={12} /></button>
+                      <button onClick={() => navigator.clipboard.writeText(acc.account_number!)} className="p-1 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"><Copy size={12} /></button>
                     </div>
                   )}
                   {acc.ifsc && <p className="font-mono text-xs text-[var(--muted-foreground)]">IFSC: {acc.ifsc}</p>}
@@ -661,22 +710,26 @@ export default function PublicProfileView({
                     <div className="mt-2 flex items-center gap-2 rounded-lg bg-[var(--accent)] px-3 py-2">
                       <Wallet size={14} className="text-[var(--muted-foreground)]" />
                       <span className="font-mono text-xs font-medium text-[var(--foreground)]">{acc.upi_id}</span>
-                      <button onClick={() => navigator.clipboard.writeText(acc.upi_id!)} className="ml-auto p-1 text-[var(--muted-foreground)]"><Copy size={12} /></button>
+                      <button onClick={() => navigator.clipboard.writeText(acc.upi_id!)} className="ml-auto p-1 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"><Copy size={12} /></button>
                     </div>
                   )}
                   {acc.qr_url && (
-                    <div className="mt-2">
-                      <img src={acc.qr_url} alt="Payment QR" className="h-32 w-32 rounded-lg object-contain" />
-                    </div>
+                    <button
+                      onClick={() => setQrLightbox(acc.qr_url!)}
+                      className="mt-2 block"
+                    >
+                      <img src={acc.qr_url} alt="Payment QR" className="h-32 w-32 rounded-lg object-contain transition hover:opacity-80" />
+                      <p className="mt-1 text-[9px] text-[var(--muted-foreground)]">Tap to enlarge</p>
+                    </button>
                   )}
                 </div>
               ))}
             </div>
-          </OpenSection>
+          </CollapsibleSection>
         )}
 
         {/* ── Downloads & Actions ── */}
-        <OpenSection title="Downloads & Actions" icon={<Download size={15} />}>
+        <CollapsibleSection title="Downloads & Actions" icon={<Download size={15} />}>
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={saveContact}
@@ -704,11 +757,11 @@ export default function PublicProfileView({
               </a>
             )}
           </div>
-        </OpenSection>
+        </CollapsibleSection>
 
         {/* ── Team ── */}
         {employees.length > 0 && (
-          <OpenSection title="Team" icon={<Users size={15} />}>
+          <CollapsibleSection title="Team" icon={<Users size={15} />}>
             <div className="space-y-2">
               {employees.map((emp) => (
                 <Link
@@ -741,7 +794,7 @@ export default function PublicProfileView({
                 </Link>
               ))}
             </div>
-          </OpenSection>
+          </CollapsibleSection>
         )}
 
         {/* GST & Address footer */}
@@ -766,19 +819,142 @@ export default function PublicProfileView({
           </div>
         )}
 
-        {/* CTA */}
-        <Link
-          href="/signup"
-          className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[var(--border)] py-4 text-sm font-medium text-[var(--muted-foreground)] transition hover:border-[var(--foreground)] hover:text-[var(--foreground)]"
-        >
-          <UserPlus size={16} />
-          Create your own Namma Info profile
-        </Link>
+        {/* CTA — hidden on employee views */}
+        {!isEmployeeView && (
+          <Link
+            href="/signup"
+            className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[var(--border)] py-4 text-sm font-medium text-[var(--muted-foreground)] transition hover:border-[var(--foreground)] hover:text-[var(--foreground)]"
+          >
+            <UserPlus size={16} />
+            Create your own Namma Info profile
+          </Link>
+        )}
 
         <p className="pt-4 text-center font-mono text-[11px] text-[var(--muted-foreground)]">
           Powered by Namma Info
         </p>
       </div>
+
+      {/* ===== LIGHTBOX — Gallery images ===== */}
+      {lightboxImage && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/90 p-4"
+          onClick={() => setLightboxImage(null)}
+        >
+          <button
+            onClick={() => setLightboxImage(null)}
+            className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white backdrop-blur transition hover:bg-white/20"
+          >
+            <X size={20} />
+          </button>
+          <img
+            src={lightboxImage}
+            alt=""
+            className="max-h-[85vh] max-w-full rounded-lg object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+
+      {/* ===== LIGHTBOX — QR Code ===== */}
+      {qrLightbox && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/90 p-4"
+          onClick={() => setQrLightbox(null)}
+        >
+          <button
+            onClick={() => setQrLightbox(null)}
+            className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white backdrop-blur transition hover:bg-white/20"
+          >
+            <X size={20} />
+          </button>
+          <div
+            className="rounded-2xl bg-white p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={qrLightbox}
+              alt="Payment QR Code"
+              className="h-72 w-72 object-contain sm:h-80 sm:w-80"
+            />
+            <p className="mt-2 text-center text-xs text-gray-500">Scan to pay</p>
+          </div>
+        </div>
+      )}
+
+      {/* ===== SERVICE DETAIL POPUP ===== */}
+      {servicePopup && (
+        <div
+          className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 sm:items-center"
+          onClick={() => setServicePopup(null)}
+        >
+          <div
+            className="w-full max-w-lg rounded-t-3xl bg-[var(--card)] p-5 pb-8 shadow-xl sm:rounded-3xl sm:pb-5"
+            style={themeVars as React.CSSProperties}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--accent)] text-2xl">
+                  {servicePopup.emoji || "⚡"}
+                </div>
+                <div>
+                  <h3 className="font-headline text-lg font-bold text-[var(--foreground)]">
+                    {servicePopup.name}
+                  </h3>
+                  {servicePopup.category && (
+                    <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
+                      {servicePopup.category}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => setServicePopup(null)}
+                className="rounded-full p-1.5 text-[var(--muted-foreground)] hover:bg-[var(--accent)]"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {servicePopup.description && (
+              <p className="mb-3 text-sm leading-relaxed text-[var(--muted-foreground)]">
+                {servicePopup.description}
+              </p>
+            )}
+
+            {servicePopup.price && (
+              <div className="mb-4 inline-block rounded-lg bg-[var(--accent)] px-3 py-1.5">
+                <span className="font-mono text-sm font-semibold text-[var(--foreground)]">
+                  {servicePopup.price}
+                </span>
+              </div>
+            )}
+
+            {whatsAppNumber ? (
+              <a
+                href={`https://wa.me/${whatsAppNumber}?text=${encodeURIComponent(
+                  `Hi, I'm interested in your service: ${servicePopup.name}. Could you please share more details?`
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#25D366] py-3.5 text-sm font-semibold text-white transition hover:opacity-90"
+              >
+                <MessageCircle size={18} />
+                Enquire on WhatsApp
+              </a>
+            ) : profile.phone ? (
+              <a
+                href={`tel:${profile.phone}`}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[var(--foreground)] py-3.5 text-sm font-semibold text-[var(--background)] transition hover:opacity-90"
+              >
+                <Phone size={18} />
+                Call to Enquire
+              </a>
+            ) : null}
+          </div>
+        </div>
+      )}
     </main>
   );
 }
@@ -788,35 +964,57 @@ export default function PublicProfileView({
 /* ================================================================== */
 
 /**
- * Open section — always visible, no accordion toggle.
- * Clean card with title bar and optional item-count badge.
+ * Collapsible section — accordion toggle with smooth animation.
  */
-function OpenSection({
+function CollapsibleSection({
   title,
   icon,
   badge,
+  defaultOpen = false,
   children,
 }: {
   title: string;
   icon: React.ReactNode;
   badge?: number;
+  defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
+
   return (
     <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]">
-      <div className="flex items-center justify-between px-4 py-3.5">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between px-4 py-3.5"
+      >
         <div className="flex items-center gap-2 font-headline text-sm font-semibold text-[var(--foreground)]">
           <span className="text-[var(--muted-foreground)]">{icon}</span>
           {title}
         </div>
-        {badge !== undefined && badge > 0 && (
-          <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-[var(--accent)] px-2 font-mono text-[10px] font-medium text-[var(--muted-foreground)]">
-            {badge}
-          </span>
-        )}
-      </div>
-      <div className="border-t border-[var(--border)] px-4 py-3">
-        {children}
+        <div className="flex items-center gap-2">
+          {badge !== undefined && badge > 0 && (
+            <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-[var(--accent)] px-2 font-mono text-[10px] font-medium text-[var(--muted-foreground)]">
+              {badge}
+            </span>
+          )}
+          <ChevronDown
+            size={16}
+            className={`text-[var(--muted-foreground)] transition-transform duration-200 ${
+              open ? "rotate-180" : ""
+            }`}
+          />
+        </div>
+      </button>
+      <div
+        className={`grid transition-all duration-200 ease-in-out ${
+          open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+        }`}
+      >
+        <div className="overflow-hidden">
+          <div className="border-t border-[var(--border)] px-4 py-3">
+            {children}
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -824,8 +1022,10 @@ function OpenSection({
 
 function PublicGallery({
   gallery,
+  onImageTap,
 }: {
   gallery: { url: string; category?: string; caption?: string }[];
+  onImageTap: (url: string) => void;
 }) {
   const [activeTab, setActiveTab] = useState("All");
   const categories = [
@@ -858,12 +1058,17 @@ function PublicGallery({
       )}
       <div className="grid grid-cols-3 gap-1.5">
         {filtered.map((img, i) => (
-          <img
+          <button
             key={i}
-            src={img.url}
-            alt={img.caption ?? ""}
-            className="aspect-square rounded-lg object-cover"
-          />
+            onClick={() => onImageTap(img.url)}
+            className="overflow-hidden rounded-lg transition active:scale-95"
+          >
+            <img
+              src={img.url}
+              alt={img.caption ?? ""}
+              className="aspect-square w-full object-cover"
+            />
+          </button>
         ))}
       </div>
     </div>

@@ -18,10 +18,10 @@ export async function createClient() {
         getAll() {
           return cookieStore.getAll();
         },
-        setAll(cookiesToSet: { name: string; value: string; options: Record<string, unknown> }[]) {
+        setAll(cookiesToSet: { name: any; value: any; options: any; }[]) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options as any)
+              cookieStore.set(name, value, options)
             );
           } catch {
             // Called from a Server Component with no request context —
