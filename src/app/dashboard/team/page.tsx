@@ -164,13 +164,15 @@ export default function TeamPage() {
     field: "avatar_url" | "cover_url",
     fileOrBlob: File | Blob
   ) {
+    if (!profile) return;
     setPhotoUploading(`${empId}-${field}`);
     const supabase = createClient();
     const ext =
       fileOrBlob instanceof File
         ? fileOrBlob.name.split(".").pop()
         : "jpg";
-    const path = `${empId}/${field}-${Date.now()}.${ext}`;
+    // Use profile.id (owner's auth ID) as prefix — required by storage RLS policy
+    const path = `${profile.id}/emp-${empId}-${field}-${Date.now()}.${ext}`;
 
     const { error: uploadError } = await supabase.storage
       .from("avatars")
@@ -179,22 +181,26 @@ export default function TeamPage() {
         contentType: fileOrBlob.type || "image/jpeg",
       });
 
-    if (!uploadError) {
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("avatars").getPublicUrl(path);
-
-      await supabase
-        .from("employees")
-        .update({ [field]: publicUrl })
-        .eq("id", empId);
-
-      setEmployees((prev) =>
-        prev.map((e) =>
-          e.id === empId ? { ...e, [field]: publicUrl } : e
-        )
-      );
+    if (uploadError) {
+      alert(`Upload failed: ${uploadError.message}`);
+      setPhotoUploading(null);
+      return;
     }
+
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from("avatars").getPublicUrl(path);
+
+    await supabase
+      .from("employees")
+      .update({ [field]: publicUrl })
+      .eq("id", empId);
+
+    setEmployees((prev) =>
+      prev.map((e) =>
+        e.id === empId ? { ...e, [field]: publicUrl } : e
+      )
+    );
     setPhotoUploading(null);
   }
 
