@@ -439,86 +439,14 @@ export default function PublicProfileView({
 
         {/* ── Services & Products (dynamic label) ── */}
         {(hasServices || hasProducts) && (
-          <CollapsibleSection
-            title={servicesLabel}
-            icon={<Award size={15} />}
-            badge={servicesList.length + productsList.length}
-            defaultOpen
-          >
-            {hasServices && (
-              <>
-                {hasProducts && (
-                  <p className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
-                    Services
-                  </p>
-                )}
-                {(() => {
-                  const categories = Array.from(new Set(servicesList.map(s => s.category).filter(Boolean))) as string[];
-                  const uncategorized = servicesList.filter(s => !s.category);
-                  const hasCategories = categories.length > 0;
-
-                  return (
-                    <div>
-                      {hasCategories && categories.map(cat => (
-                        <div key={cat} className="mb-3">
-                          <p className="mb-1.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
-                            {cat}
-                          </p>
-                          <div className="grid grid-cols-2 gap-2">
-                            {servicesList.filter(s => s.category === cat).map((s, i) => (
-                              <ServiceCard key={i} service={s} onTap={setServicePopup} />
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                      {uncategorized.length > 0 && (
-                        <div className={hasCategories ? "mt-3" : ""}>
-                          {hasCategories && uncategorized.length < servicesList.length && (
-                            <p className="mb-1.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
-                              Other
-                            </p>
-                          )}
-                          <div className="grid grid-cols-2 gap-2">
-                            {uncategorized.map((s, i) => (
-                              <ServiceCard key={i} service={s} onTap={setServicePopup} />
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-              </>
-            )}
-            {hasProducts && (
-              <>
-                {hasServices && (
-                  <p className="mb-2 mt-4 font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
-                    Products
-                  </p>
-                )}
-                <div className="grid grid-cols-2 gap-2">
-                  {productsList.map((p, i) => (
-                    <div key={i} className="overflow-hidden rounded-xl border border-[var(--border)]">
-                      {p.image_url ? (
-                        <img src={p.image_url} alt={p.name} className="aspect-square w-full object-cover" />
-                      ) : (
-                        <div className="flex aspect-square w-full items-center justify-center bg-[var(--accent)] text-2xl">
-                          {p.emoji || "📦"}
-                        </div>
-                      )}
-                      <div className="p-2.5">
-                        <p className="text-xs font-semibold text-[var(--foreground)]">{p.name}</p>
-                        {p.price && (
-                          <p className="mt-0.5 font-mono text-[10px] font-semibold text-[var(--muted-foreground)]">{p.price}</p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </CollapsibleSection>
+          <ServicesTabs
+            servicesList={servicesList}
+            productsList={productsList}
+            servicesLabel={servicesLabel}
+            hasServices={hasServices}
+            hasProducts={hasProducts}
+            onServiceTap={setServicePopup}
+          />
         )}
 
         {/* ── Gallery ── */}
@@ -902,7 +830,7 @@ export default function PublicProfileView({
                 )}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#25D366] py-3.5 text-sm font-semibold text-white transition hover:opacity-90"
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[var(--foreground)] py-3.5 text-sm font-semibold text-[var(--background)] transition hover:opacity-90"
               >
                 <MessageCircle size={18} />
                 Enquire on WhatsApp
@@ -926,6 +854,123 @@ export default function PublicProfileView({
 /* ================================================================== */
 /*  Sub-components                                                     */
 /* ================================================================== */
+
+function ServicesTabs({
+  servicesList,
+  productsList,
+  servicesLabel,
+  hasServices,
+  hasProducts,
+  onServiceTap,
+}: {
+  servicesList: { name: string; description?: string; price?: string; emoji?: string; category?: string }[];
+  productsList: { name: string; image_url?: string; price?: string; emoji?: string }[];
+  servicesLabel: string;
+  hasServices: boolean;
+  hasProducts: boolean;
+  onServiceTap: (s: { name: string; description?: string; price?: string; emoji?: string; category?: string }) => void;
+}) {
+  /* Build category tabs from services */
+  const categories = useMemo(() => {
+    if (!hasServices) return [] as string[];
+    const cats = Array.from(new Set(servicesList.map(s => s.category?.trim()).filter(Boolean))) as string[];
+    return cats;
+  }, [servicesList, hasServices]);
+
+  const hasCategories = categories.length > 0;
+
+  /* "All" tab + category tabs + optional "Products" tab */
+  const tabs = useMemo(() => {
+    const t: string[] = [];
+    if (hasCategories) {
+      t.push("All", ...categories);
+    }
+    return t;
+  }, [categories, hasCategories]);
+
+  const [activeTab, setActiveTab] = useState("All");
+
+  /* Filter services by active tab */
+  const filteredServices = useMemo(() => {
+    if (!hasServices) return [];
+    if (!hasCategories || activeTab === "All") return servicesList;
+    return servicesList.filter(s => (s.category?.trim() || "") === activeTab);
+  }, [servicesList, activeTab, hasServices, hasCategories]);
+
+  return (
+    <CollapsibleSection
+      title={servicesLabel}
+      icon={<Award size={15} />}
+      badge={servicesList.length + productsList.length}
+      defaultOpen
+    >
+      {/* Category tabs */}
+      {hasServices && hasCategories && (
+        <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+          {tabs.map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`shrink-0 rounded-full px-3.5 py-1.5 text-[11px] font-semibold transition ${
+                activeTab === tab
+                  ? "bg-[var(--foreground)] text-[var(--background)]"
+                  : "bg-[var(--accent)] text-[var(--muted-foreground)] hover:bg-[var(--border)]"
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Services grid */}
+      {hasServices && (
+        <>
+          {hasProducts && !hasCategories && (
+            <p className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
+              Services
+            </p>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            {filteredServices.map((s, i) => (
+              <ServiceCard key={`${s.name}-${i}`} service={s} onTap={onServiceTap} />
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Products */}
+      {hasProducts && (
+        <>
+          {hasServices && (
+            <p className="mb-2 mt-4 font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
+              Products
+            </p>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            {productsList.map((p, i) => (
+              <div key={i} className="overflow-hidden rounded-xl border border-[var(--border)]">
+                {p.image_url ? (
+                  <img src={p.image_url} alt={p.name} className="aspect-square w-full object-cover" />
+                ) : (
+                  <div className="flex aspect-square w-full items-center justify-center bg-[var(--accent)] text-2xl">
+                    {p.emoji || "📦"}
+                  </div>
+                )}
+                <div className="p-2.5">
+                  <p className="text-xs font-semibold text-[var(--foreground)]">{p.name}</p>
+                  {p.price && (
+                    <p className="mt-0.5 font-mono text-[10px] font-semibold text-[var(--muted-foreground)]">{p.price}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </CollapsibleSection>
+  );
+}
 
 function ServiceCard({
   service,

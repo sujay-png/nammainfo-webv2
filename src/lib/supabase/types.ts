@@ -15,6 +15,7 @@ export interface ServiceItem {
   description?: string;
   price?: string;
   image_url?: string;
+  category?: string;
 }
 
 export interface GalleryItem {

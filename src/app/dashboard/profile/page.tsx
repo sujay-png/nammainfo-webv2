@@ -592,30 +592,42 @@ export default function ProfilePage() {
         onEdit={() => startEdit("services")}
       >
         {(profile.services ?? []).length > 0 ? (
-          <div className="space-y-2">
-            {profile.services.map(
-              (
-                s: { name: string; description?: string; price?: string },
-                i: number
-              ) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between rounded-xl bg-ink-50 px-3 py-2.5"
-                >
-                  <div>
-                    <p className="text-sm font-medium">{s.name}</p>
-                    {s.description && (
-                      <p className="text-xs text-ink-400">{s.description}</p>
-                    )}
+          <div className="space-y-3">
+            {(() => {
+              const svcs = profile.services as { name: string; description?: string; price?: string; category?: string }[];
+              const grouped = svcs.reduce<Record<string, typeof svcs>>((acc, s) => {
+                const cat = s.category?.trim() || "Uncategorized";
+                (acc[cat] ??= []).push(s);
+                return acc;
+              }, {});
+              const cats = Object.keys(grouped);
+              const hasCategories = cats.length > 1 || cats[0] !== "Uncategorized";
+              return hasCategories ? (
+                cats.map((cat) => (
+                  <div key={cat}>
+                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-ink-400">{cat}</p>
+                    <div className="space-y-1.5">
+                      {grouped[cat].map((s, i) => (
+                        <div key={i} className="flex items-center justify-between rounded-xl bg-ink-50 px-3 py-2">
+                          <p className="text-sm font-medium">{s.name}</p>
+                          {s.price && <span className="text-xs font-semibold text-ink-600">{s.price}</span>}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  {s.price && (
-                    <span className="text-xs font-semibold text-ink-600">
-                      {s.price}
-                    </span>
-                  )}
-                </div>
-              )
-            )}
+                ))
+              ) : (
+                svcs.map((s, i) => (
+                  <div key={i} className="flex items-center justify-between rounded-xl bg-ink-50 px-3 py-2.5">
+                    <div>
+                      <p className="text-sm font-medium">{s.name}</p>
+                      {s.description && <p className="text-xs text-ink-400">{s.description}</p>}
+                    </div>
+                    {s.price && <span className="text-xs font-semibold text-ink-600">{s.price}</span>}
+                  </div>
+                ))
+              );
+            })()}
           </div>
         ) : (
           <p className="text-sm text-ink-400">Showcase your services</p>
@@ -1438,16 +1450,24 @@ function ItemListEditor({
                 className="w-full border-none bg-transparent text-xs text-ink-500 outline-none"
               />
               {showCategory && (
-                <input
-                  value={item.category ?? ""}
-                  onChange={(e) => {
-                    const updated = [...items];
-                    updated[i] = { ...item, category: e.target.value };
-                    onChange(updated);
-                  }}
-                  placeholder="Department / Category (optional)"
-                  className="w-full border-none bg-transparent text-xs text-ink-500 outline-none"
-                />
+                <>
+                  <input
+                    list="category-options"
+                    value={item.category ?? ""}
+                    onChange={(e) => {
+                      const updated = [...items];
+                      updated[i] = { ...item, category: e.target.value };
+                      onChange(updated);
+                    }}
+                    placeholder="Department / Category (e.g. IT, Media)"
+                    className="w-full rounded-lg border border-ink-200 bg-transparent px-2 py-1.5 text-xs text-ink-500 outline-none focus:border-ink-400"
+                  />
+                  <datalist id="category-options">
+                    {Array.from(new Set(items.map((it) => it.category?.trim()).filter(Boolean))).map((cat) => (
+                      <option key={cat} value={cat!} />
+                    ))}
+                  </datalist>
+                </>
               )}
             </div>
             <button
