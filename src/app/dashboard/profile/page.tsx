@@ -98,13 +98,13 @@ export default function ProfilePage() {
         return;
       }
 
-      // Only store proper Place IDs (ChIJ... or 0x...) — needed for direct review link
-      if (!data.place_id) {
+      // Prefer ChIJ place_id for direct review links, fall back to google_maps_url
+      const valueToStore = data.place_id || data.google_maps_url;
+      if (!valueToStore) {
         setMapsLinkError("Could not extract Place ID — try a different link");
         setMapsLinkLoading(false);
         return;
       }
-      const valueToStore = data.place_id;
 
       const supabase = createClient();
       await supabase
