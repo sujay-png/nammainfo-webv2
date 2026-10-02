@@ -6,6 +6,7 @@ import type { Metadata } from "next";
 import type { Profile, Card, Review, Employee } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 export async function generateMetadata({
   params,

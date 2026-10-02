@@ -5,6 +5,7 @@ import type { Profile, Employee, Review, Card } from "@/lib/supabase/types";
 import EmployeeProfileView from "@/components/EmployeeProfileView";
 
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 export async function generateMetadata({
   params,
