@@ -47,7 +47,6 @@ export function slugify(text: string): string {
  * The stored value can be:
  *   - A ChIJ... Place ID → opens the direct "Write a review" form
  *   - A full Google Maps URL → opens the Maps page (has "Write a review" button)
- *   - A 0x...:0x... hex ID → opens Google Maps search for the place
  *
  * Only ChIJ... IDs work with Google's writereview endpoint.
  */
@@ -56,10 +55,6 @@ export function googleReviewUrl(placeId: string): string {
   if (placeId.startsWith("ChIJ")) {
     return `https://search.google.com/local/writereview?placeid=${placeId}`;
   }
-  // Full Google Maps URL → open it directly
-  if (placeId.startsWith("http")) {
-    return placeId;
-  }
-  // 0x hex format → search on Google Maps (writereview doesn't support hex IDs)
-  return `https://www.google.com/maps/place/?q=place_id:${placeId}`;
+  // Everything else (Google Maps URL) → open directly
+  return placeId.startsWith("http") ? placeId : `https://www.google.com/maps`;
 }

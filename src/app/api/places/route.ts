@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 /**
- * POST /api/places — resolve a Google Maps URL to a place_id.
+ * POST /api/places — resolve a Google Maps URL to a place_id + maps URL.
  *
  * Accepts:
  *   { url: "https://maps.app.goo.gl/..." }             — short share link
@@ -9,61 +9,21 @@ import { NextRequest, NextResponse } from "next/server";
  *   { url: "https://www.google.com/maps?cid=..." }      — CID link
  *   { url: "ChIJ..." }                                  — direct Place ID
  *
- * Returns: { place_id, google_maps_url?, name? }
+ * Returns: { place_id?, google_maps_url, name? }
  *
- * Prioritizes ChIJ... Place IDs (needed for writereview URL).
- * Falls back to hex 0x...:0x... or the Google Maps URL.
+ * place_id is ONLY a ChIJ... format (the only format Google's
+ * writereview URL accepts). google_maps_url always points to the
+ * business page on Google Maps.
  */
 
 const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
-/** Extract a ChIJ Place ID from a URL (preferred — works with writereview) */
-function extractChIJPlaceId(url: string): string | null {
-  const chijMatch = url.match(/(ChIJ[A-Za-z0-9_-]+)/);
+/** Extract a ChIJ Place ID — the ONLY format that works with writereview */
+function extractChIJPlaceId(text: string): string | null {
+  // Direct ChIJ match anywhere in text
+  const chijMatch = text.match(/(ChIJ[A-Za-z0-9_-]+)/);
   if (chijMatch) return chijMatch[1];
-
-  const placeIdParam = url.match(/[?&]place_id=(ChIJ[^&]+)/);
-  if (placeIdParam) return decodeURIComponent(placeIdParam[1]);
-
-  const dataMatch = url.match(/!1s(ChIJ[A-Za-z0-9_-]+)/);
-  if (dataMatch) return dataMatch[1];
-
-  return null;
-}
-
-/** Extract a hex format Place ID (0x...:0x...) — fallback, doesn't work with writereview */
-function extractHexPlaceId(url: string): string | null {
-  const ftidMatch = url.match(/[?&]ftid=(0x[0-9a-fA-F]+:0x[0-9a-fA-F]+)/);
-  if (ftidMatch) return ftidMatch[1];
-
-  const dataHexMatch = url.match(/!1s(0x[0-9a-fA-F]+:0x[0-9a-fA-F]+)/);
-  if (dataHexMatch) return dataHexMatch[1];
-
-  // Standalone in URL
-  const standaloneHex = url.match(/(0x[0-9a-fA-F]+:0x[0-9a-fA-F]+)/);
-  if (standaloneHex) return standaloneHex[1];
-
-  return null;
-}
-
-/** Scrape ChIJ Place ID from Google Maps page HTML */
-function extractChIJFromHtml(html: string): string | null {
-  // "place_id":"ChIJ..." or "placeId":"ChIJ..."
-  const jsonMatch = html.match(/["'](?:place_id|placeId)["']\s*:\s*["'](ChIJ[A-Za-z0-9_-]+)["']/);
-  if (jsonMatch) return jsonMatch[1];
-
-  // [null,"ChIJ..."] in script data
-  const arrayMatch = html.match(/\[(?:null,)*"(ChIJ[A-Za-z0-9_-]+)"/);
-  if (arrayMatch) return arrayMatch[1];
-
-  // writereview?placeid=ChIJ... link in the page
-  const reviewLink = html.match(/writereview\?placeid=(ChIJ[A-Za-z0-9_-]+)/);
-  if (reviewLink) return reviewLink[1];
-
-  // !1sChIJ in script/data blocks
-  const scriptMatch = html.match(/!1s(ChIJ[A-Za-z0-9_-]+)/);
-  if (scriptMatch) return scriptMatch[1];
 
   return null;
 }
@@ -77,11 +37,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "URL is required" }, { status: 400 });
     }
 
-    // Direct Place ID pasted
+    // Direct ChIJ Place ID pasted
     if (/^ChIJ[A-Za-z0-9_-]+$/.test(rawUrl)) {
-      return NextResponse.json({ place_id: rawUrl });
-    }
-    if (/^0x[0-9a-fA-F]+:0x[0-9a-fA-F]+$/.test(rawUrl)) {
       return NextResponse.json({ place_id: rawUrl });
     }
 
@@ -105,7 +62,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ place_id: placeId, google_maps_url: rawUrl });
     }
 
-    // Resolve URL by following redirects and read the page HTML
+    // Resolve URL by following redirects
     let expandedUrl = rawUrl;
     let pageHtml = "";
 
@@ -126,14 +83,10 @@ export async function POST(req: NextRequest) {
     // Try ChIJ from expanded URL
     placeId = extractChIJPlaceId(expandedUrl);
 
-    // Try ChIJ from page HTML (most reliable source)
+    // Try ChIJ from page HTML (Google Maps is mostly client-rendered,
+    // but sometimes the ChIJ appears in initial script data)
     if (!placeId && pageHtml) {
-      placeId = extractChIJFromHtml(pageHtml);
-    }
-
-    // Fall back to hex format from URL (works for directions, not for writereview)
-    if (!placeId) {
-      placeId = extractHexPlaceId(expandedUrl);
+      placeId = extractChIJPlaceId(pageHtml);
     }
 
     // Extract place name from /maps/place/NAME/
@@ -142,21 +95,14 @@ export async function POST(req: NextRequest) {
       ? decodeURIComponent(nameMatch[1]).replace(/\+/g, " ")
       : null;
 
-    // Clean up the Maps URL
+    // Build a clean Maps URL
     const cleanUrl = expandedUrl.split("?")[0] || expandedUrl;
     const mapsUrl = cleanUrl.includes("google") ? cleanUrl : expandedUrl;
 
-    if (placeId) {
+    // Return what we have — place_id only if ChIJ, always google_maps_url
+    if (mapsUrl.includes("google")) {
       return NextResponse.json({
-        place_id: placeId,
-        google_maps_url: mapsUrl,
-        ...(placeName ? { name: placeName } : {}),
-      });
-    }
-
-    // No Place ID but we have a valid Maps URL — return it
-    if (expandedUrl.includes("google")) {
-      return NextResponse.json({
+        ...(placeId ? { place_id: placeId } : {}),
         google_maps_url: mapsUrl,
         ...(placeName ? { name: placeName } : {}),
       });
