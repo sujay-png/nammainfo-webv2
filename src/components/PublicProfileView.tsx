@@ -327,12 +327,6 @@ export default function PublicProfileView({
                     .join(" · ")}
                 </p>
               </div>
-              <button
-                onClick={shareProfile}
-                className="rounded-xl border border-[var(--border)] p-2.5 transition hover:bg-[var(--accent)]"
-              >
-                <Share2 size={16} className="text-[var(--foreground)]" />
-              </button>
             </div>
 
             {/* Stats */}
@@ -377,17 +371,21 @@ export default function PublicProfileView({
               <Download size={15} />
               Add to Contacts
             </button>
-            <a
-              href="#details"
-              className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] py-3.5 text-xs font-semibold text-[var(--foreground)] shadow-card transition hover:shadow-card-hover"
-            >
-              <Eye size={15} />
-              View Profile
-            </a>
+            {profile.website && (
+              <a
+                href={ensureProtocol(profile.website)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] py-3.5 text-xs font-semibold text-[var(--foreground)] shadow-card transition hover:shadow-card-hover"
+              >
+                <Globe size={15} />
+                Visit Website
+              </a>
+            )}
           </div>
 
           {/* Quick contact */}
-          <div className="mt-4 grid grid-cols-4 gap-2 px-5">
+          <div className="mt-4 grid grid-cols-3 gap-2 px-5">
             {profile.phone && (
               <QuickAction
                 href={`tel:${profile.phone}`}
@@ -400,13 +398,6 @@ export default function PublicProfileView({
                 href={`mailto:${profile.email}`}
                 icon={<Mail size={18} />}
                 label="Email"
-              />
-            )}
-            {profile.website && (
-              <QuickAction
-                href={ensureProtocol(profile.website)}
-                icon={<Globe size={18} />}
-                label="Website"
               />
             )}
             <button

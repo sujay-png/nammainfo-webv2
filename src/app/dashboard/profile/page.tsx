@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Profile, Employee, Review } from "@/lib/supabase/types";
+import type { Profile, Review } from "@/lib/supabase/types";
 import { initials } from "@/lib/utils";
 import CropModal from "@/components/CropModal";
 import {
@@ -16,7 +16,6 @@ import {
   Mail,
   Globe,
   Star,
-  Users,
   Clock,
   Award,
   ChevronRight,
@@ -29,6 +28,11 @@ import {
   Camera,
   Search,
   Loader2,
+  Banknote,
+  Download,
+  FileText,
+  Upload,
+  ChevronDown,
 } from "lucide-react";
 
 type EditSection =
@@ -39,11 +43,11 @@ type EditSection =
   | "services"
   | "products"
   | "gallery"
-  | "employees";
+  | "banking"
+  | "brochure";
 
 export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [employees, setEmployees] = useState<Employee[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<EditSection>(null);
@@ -52,14 +56,8 @@ export default function ProfilePage() {
 
   // Edit form states
   const [editForm, setEditForm] = useState<Partial<Profile>>({});
-  const [newEmployee, setNewEmployee] = useState({
-    name: "",
-    designation: "",
-    email: "",
-    phone: "",
-  });
-  const [newEmpAvatar, setNewEmpAvatar] = useState<File | null>(null);
-  const [newEmpAvatarPreview, setNewEmpAvatarPreview] = useState<string | null>(null);
+  const [galleryUploading, setGalleryUploading] = useState(false);
+  const [brochureUploading, setBrochureUploading] = useState(false);
 
   // Google Place ID search state
   const [placeResults, setPlaceResults] = useState<
@@ -99,7 +97,6 @@ export default function ProfilePage() {
   const [cropImage, setCropImage] = useState<{
     src: string;
     field: "logo_url" | "cover_url";
-    employeeId?: string; // when set, uploading for an employee
   } | null>(null);
 
   const loadProfile = useCallback(async () => {
@@ -109,14 +106,9 @@ export default function ProfilePage() {
     } = await supabase.auth.getUser();
     if (!user) return;
 
-    const [{ data: profileData }, { data: empData }, { data: reviewData }, { data: cardData }] =
+    const [{ data: profileData }, { data: reviewData }, { data: cardData }] =
       await Promise.all([
         supabase.from("profiles").select("*").eq("id", user.id).single(),
-        supabase
-          .from("employees")
-          .select("*")
-          .eq("owner_id", user.id)
-          .order("created_at"),
         supabase
           .from("reviews")
           .select("*")
@@ -130,7 +122,6 @@ export default function ProfilePage() {
       ]);
 
     if (profileData) setProfile(profileData as unknown as Profile);
-    if (empData) setEmployees(empData as unknown as Employee[]);
     if (reviewData) setReviews(reviewData as unknown as Review[]);
     if (cardData)
       setCardSlug((cardData as { public_slug: string }).public_slug);
@@ -170,6 +161,8 @@ export default function ProfilePage() {
         services: editForm.services ?? [],
         products: editForm.products ?? [],
         gallery: editForm.gallery ?? [],
+        bank_accounts: editForm.bank_accounts ?? [],
+        brochure_url: editForm.brochure_url ?? null,
         google_place_id: editForm.google_place_id ?? null,
         gst_number: editForm.gst_number ?? null,
       } as Record<string, unknown>)
@@ -182,48 +175,6 @@ export default function ProfilePage() {
     setSaving(false);
   }
 
-  async function addEmployee() {
-    if (!profile || !newEmployee.name || !newEmployee.designation) return;
-    setSaving(true);
-    const supabase = createClient();
-
-    const slug = newEmployee.name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "");
-
-    const { data, error } = await supabase
-      .from("employees")
-      .insert({
-        owner_id: profile.id,
-        name: newEmployee.name,
-        designation: newEmployee.designation,
-        email: newEmployee.email || null,
-        phone: newEmployee.phone || null,
-        slug,
-      })
-      .select("id")
-      .single();
-
-    if (!error && data) {
-      // Upload avatar if one was selected
-      if (newEmpAvatar) {
-        await uploadEmployeeImage(newEmpAvatar, data.id, "avatar_url");
-      }
-      setNewEmployee({ name: "", designation: "", email: "", phone: "" });
-      if (newEmpAvatarPreview) URL.revokeObjectURL(newEmpAvatarPreview);
-      setNewEmpAvatar(null);
-      setNewEmpAvatarPreview(null);
-      loadProfile();
-    }
-    setSaving(false);
-  }
-
-  async function deleteEmployee(id: string) {
-    const supabase = createClient();
-    await supabase.from("employees").delete().eq("id", id);
-    setEmployees(employees.filter((e) => e.id !== id));
-  }
 
   async function shareProfile() {
     const url = profile?.username
@@ -279,47 +230,10 @@ export default function ProfilePage() {
     setProfile({ ...profile, [field]: publicUrl } as Profile);
   }
 
-  async function uploadEmployeeImage(
-    fileOrBlob: File | Blob,
-    employeeId: string,
-    field: "avatar_url" | "cover_url"
-  ) {
-    const supabase = createClient();
-    const ext =
-      fileOrBlob instanceof File
-        ? fileOrBlob.name.split(".").pop()
-        : "jpg";
-    const path = `employees/${employeeId}/${field}-${Date.now()}.${ext}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from("avatars")
-      .upload(path, fileOrBlob, {
-        upsert: true,
-        contentType: fileOrBlob.type || "image/jpeg",
-      });
-
-    if (uploadError) return;
-
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from("avatars").getPublicUrl(path);
-
-    await supabase
-      .from("employees")
-      .update({ [field]: publicUrl } as Record<string, unknown>)
-      .eq("id", employeeId);
-
-    setEmployees(
-      employees.map((e) =>
-        e.id === employeeId ? { ...e, [field]: publicUrl } : e
-      )
-    );
-  }
 
   function handleImageSelect(
     file: File,
-    field: "logo_url" | "cover_url",
-    employeeId?: string
+    field: "logo_url" | "cover_url"
   ) {
     const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
     if (file.size > MAX_SIZE) {
@@ -327,24 +241,96 @@ export default function ProfilePage() {
       return;
     }
     const objectUrl = URL.createObjectURL(file);
-    setCropImage({ src: objectUrl, field, employeeId });
+    setCropImage({ src: objectUrl, field });
   }
 
   async function handleCropConfirm(blob: Blob) {
     if (!cropImage) return;
     URL.revokeObjectURL(cropImage.src);
-    const { field, employeeId } = cropImage;
+    const { field } = cropImage;
     setCropImage(null);
-    if (employeeId) {
-      await uploadEmployeeImage(blob, employeeId, field === "logo_url" ? "avatar_url" : "cover_url");
-    } else {
-      await uploadImage(blob, field);
-    }
+    await uploadImage(blob, field);
   }
 
   function handleCropCancel() {
     if (cropImage) URL.revokeObjectURL(cropImage.src);
     setCropImage(null);
+  }
+
+  async function uploadGalleryImage(file: File) {
+    if (!profile) return;
+    const MAX_SIZE = 5 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      alert("Image must be under 5 MB");
+      return;
+    }
+    setGalleryUploading(true);
+    const supabase = createClient();
+    const ext = file.name.split(".").pop();
+    const path = `${profile.id}/gallery-${Date.now()}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("profile-media")
+      .upload(path, file, { upsert: true, contentType: file.type || "image/jpeg" });
+
+    if (!uploadError) {
+      const { data: { publicUrl } } = supabase.storage.from("profile-media").getPublicUrl(path);
+      const updatedGallery = [...(profile.gallery ?? []), { url: publicUrl, caption: "" }];
+      await supabase
+        .from("profiles")
+        .update({ gallery: updatedGallery } as Record<string, unknown>)
+        .eq("id", profile.id);
+      setProfile({ ...profile, gallery: updatedGallery } as Profile);
+    }
+    setGalleryUploading(false);
+  }
+
+  async function removeGalleryImage(index: number) {
+    if (!profile) return;
+    const supabase = createClient();
+    const updatedGallery = (profile.gallery ?? []).filter((_, i) => i !== index);
+    await supabase
+      .from("profiles")
+      .update({ gallery: updatedGallery } as Record<string, unknown>)
+      .eq("id", profile.id);
+    setProfile({ ...profile, gallery: updatedGallery } as Profile);
+  }
+
+  async function uploadBrochure(file: File) {
+    if (!profile) return;
+    const MAX_SIZE = 10 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      alert("File must be under 10 MB");
+      return;
+    }
+    setBrochureUploading(true);
+    const supabase = createClient();
+    const ext = file.name.split(".").pop();
+    const path = `${profile.id}/brochure-${Date.now()}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("profile-media")
+      .upload(path, file, { upsert: true, contentType: file.type });
+
+    if (!uploadError) {
+      const { data: { publicUrl } } = supabase.storage.from("profile-media").getPublicUrl(path);
+      await supabase
+        .from("profiles")
+        .update({ brochure_url: publicUrl } as Record<string, unknown>)
+        .eq("id", profile.id);
+      setProfile({ ...profile, brochure_url: publicUrl } as Profile);
+    }
+    setBrochureUploading(false);
+  }
+
+  async function removeBrochure() {
+    if (!profile) return;
+    const supabase = createClient();
+    await supabase
+      .from("profiles")
+      .update({ brochure_url: null } as Record<string, unknown>)
+      .eq("id", profile.id);
+    setProfile({ ...profile, brochure_url: null } as Profile);
   }
 
   if (loading) {
@@ -704,6 +690,30 @@ export default function ProfilePage() {
         )}
       </Section>
 
+      {/* Gallery */}
+      <Section
+        title="Gallery"
+        icon={<ImageIcon size={16} />}
+        onEdit={() => startEdit("gallery")}
+      >
+        {(profile.gallery ?? []).length > 0 ? (
+          <div className="grid grid-cols-3 gap-1.5">
+            {profile.gallery.slice(0, 6).map((img: { url: string; caption?: string }, i: number) => (
+              <div key={i} className="aspect-square overflow-hidden rounded-lg">
+                <img src={img.url} alt={img.caption ?? ""} className="h-full w-full object-cover" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-ink-400">Add photos to your gallery</p>
+        )}
+        {(profile.gallery ?? []).length > 6 && (
+          <p className="mt-2 text-xs text-ink-400">
+            +{profile.gallery.length - 6} more photos
+          </p>
+        )}
+      </Section>
+
       {/* Reviews */}
       <Section title="Reviews" icon={<Star size={16} />}>
         {reviews.length > 0 ? (
@@ -760,40 +770,49 @@ export default function ProfilePage() {
         )}
       </Section>
 
-      {/* Employees */}
+      {/* Banking & Payment Info */}
       <Section
-        title="Team"
-        icon={<Users size={16} />}
-        onEdit={() => startEdit("employees")}
+        title="Banking & Payments"
+        icon={<Banknote size={16} />}
+        onEdit={() => startEdit("banking")}
       >
-        {employees.length > 0 ? (
+        {(profile.bank_accounts ?? []).length > 0 ? (
           <div className="space-y-2">
-            {employees.map((emp) => (
-              <div
-                key={emp.id}
-                className="flex items-center justify-between rounded-xl bg-ink-50 px-3 py-2.5"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-ink-200 text-xs font-semibold">
-                    {initials(emp.name)}
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">{emp.name}</p>
-                    <p className="text-[11px] text-ink-400">
-                      {emp.designation}
-                    </p>
-                  </div>
+            {profile.bank_accounts.map(
+              (acc: { bank_name?: string; account_holder?: string; account_number?: string; ifsc?: string; upi_id?: string }, i: number) => (
+                <div key={i} className="rounded-xl bg-ink-50 px-3 py-2.5">
+                  <p className="text-sm font-medium">{acc.bank_name || "Bank Account"}</p>
+                  {acc.upi_id && (
+                    <p className="text-xs text-ink-400">UPI: {acc.upi_id}</p>
+                  )}
+                  {acc.account_number && (
+                    <p className="text-xs text-ink-400">A/C: {acc.account_number}</p>
+                  )}
                 </div>
-                {profile.username && (
-                  <span className="font-mono text-[10px] text-ink-400">
-                    /{profile.username}/{emp.slug}
-                  </span>
-                )}
-              </div>
-            ))}
+              )
+            )}
           </div>
         ) : (
-          <p className="text-sm text-ink-400">Add team members</p>
+          <p className="text-sm text-ink-400">Add your banking details for customers</p>
+        )}
+      </Section>
+
+      {/* Brochure / Downloads */}
+      <Section
+        title="Brochure"
+        icon={<FileText size={16} />}
+        onEdit={() => startEdit("brochure")}
+      >
+        {profile.brochure_url ? (
+          <div className="flex items-center gap-3 rounded-xl bg-ink-50 px-3 py-2.5">
+            <Download size={16} className="text-ink-500" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">Brochure uploaded</p>
+              <p className="truncate text-xs text-ink-400">{profile.brochure_url.split("/").pop()}</p>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-ink-400">Upload a brochure for your business</p>
         )}
       </Section>
 
@@ -1000,161 +1019,108 @@ export default function ProfilePage() {
         </EditSheet>
       )}
 
-      {/* Employees Edit */}
-      {editing === "employees" && (
-        <EditSheet title="Manage Team" onClose={() => setEditing(null)}>
-          <div className="space-y-4">
-            {employees.map((emp) => (
-              <div
-                key={emp.id}
-                className="overflow-hidden rounded-xl border border-ink-100"
-              >
-                {/* Employee cover */}
-                <div className="relative h-20 bg-ink-100">
-                  {emp.cover_url ? (
-                    <img
-                      src={emp.cover_url}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center">
-                      <Camera size={16} className="text-ink-300" />
-                    </div>
-                  )}
-                  <label className="absolute right-2 top-2 cursor-pointer rounded-full bg-ink-950/50 p-1.5 text-white backdrop-blur-sm transition hover:bg-ink-950/70">
-                    <Camera size={10} />
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) handleImageSelect(f, "cover_url", emp.id);
-                        e.target.value = "";
-                      }}
-                    />
-                  </label>
-                </div>
-                {/* Employee info row */}
-                <div className="flex items-center gap-3 p-3">
-                  {/* Avatar */}
-                  <div className="relative shrink-0">
-                    <div className="h-10 w-10 overflow-hidden rounded-full bg-ink-200">
-                      {emp.avatar_url ? (
-                        <img
-                          src={emp.avatar_url}
-                          alt=""
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-xs font-semibold">
-                          {initials(emp.name)}
-                        </div>
-                      )}
-                    </div>
-                    <label className="absolute -bottom-0.5 -right-0.5 cursor-pointer rounded-full bg-ink-950 p-1 text-white shadow-sm transition hover:opacity-80">
-                      <Camera size={8} />
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) handleImageSelect(f, "logo_url", emp.id);
-                          e.target.value = "";
-                        }}
-                      />
-                    </label>
+      {/* Gallery Edit */}
+      {editing === "gallery" && (
+        <EditSheet title="Manage Gallery" onClose={() => setEditing(null)}>
+          <div className="space-y-3">
+            {(profile.gallery ?? []).length > 0 && (
+              <div className="grid grid-cols-3 gap-2">
+                {profile.gallery.map((img: { url: string; caption?: string }, i: number) => (
+                  <div key={i} className="group relative aspect-square overflow-hidden rounded-xl">
+                    <img src={img.url} alt={img.caption ?? ""} className="h-full w-full object-cover" />
+                    <button
+                      onClick={() => removeGalleryImage(i)}
+                      className="absolute right-1 top-1 rounded-full bg-ink-950/60 p-1 text-white opacity-0 transition group-hover:opacity-100"
+                    >
+                      <X size={12} />
+                    </button>
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium">{emp.name}</p>
-                    <p className="text-xs text-ink-400">{emp.designation}</p>
-                  </div>
-                  <button
-                    onClick={() => deleteEmployee(emp.id)}
-                    className="rounded-lg p-1.5 text-ink-400 transition hover:bg-red-50 hover:text-red-500"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
+                ))}
               </div>
-            ))}
+            )}
+            <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-ink-200 p-6 text-center transition hover:border-ink-400 hover:bg-ink-50">
+              {galleryUploading ? (
+                <Loader2 size={20} className="animate-spin text-ink-400" />
+              ) : (
+                <Upload size={20} className="text-ink-400" />
+              )}
+              <span className="text-xs font-medium text-ink-500">
+                {galleryUploading ? "Uploading…" : "Tap to add photos"}
+              </span>
+              <span className="text-[10px] text-ink-400">Max 5 MB · JPG, PNG</span>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                disabled={galleryUploading}
+                onChange={async (e) => {
+                  const files = Array.from(e.target.files ?? []);
+                  for (const f of files) {
+                    await uploadGalleryImage(f);
+                  }
+                  e.target.value = "";
+                }}
+              />
+            </label>
           </div>
-          <div className="mt-4 space-y-2 border-t border-ink-100 pt-4">
-            <p className="text-xs font-medium text-ink-500">Add team member</p>
-            {/* Avatar preview + upload */}
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <div className="h-14 w-14 overflow-hidden rounded-full bg-ink-100">
-                  {newEmpAvatarPreview ? (
-                    <img
-                      src={newEmpAvatarPreview}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center">
-                      <Camera size={18} className="text-ink-300" />
-                    </div>
-                  )}
+        </EditSheet>
+      )}
+
+      {/* Banking Edit */}
+      {editing === "banking" && (
+        <EditSheet title="Banking & Payments" onClose={() => setEditing(null)}>
+          <BankAccountsEditor
+            accounts={(editForm.bank_accounts ?? []) as { bank_name?: string; account_holder?: string; account_number?: string; ifsc?: string; upi_id?: string }[]}
+            onChange={(accounts) => setEditForm({ ...editForm, bank_accounts: accounts } as Partial<Profile>)}
+          />
+          <SaveButton saving={saving} onClick={saveProfile} />
+        </EditSheet>
+      )}
+
+      {/* Brochure Edit */}
+      {editing === "brochure" && (
+        <EditSheet title="Brochure" onClose={() => setEditing(null)}>
+          <div className="space-y-3">
+            {profile.brochure_url ? (
+              <div className="flex items-center gap-3 rounded-xl border border-ink-100 p-3">
+                <FileText size={20} className="shrink-0 text-ink-500" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">Brochure uploaded</p>
+                  <p className="truncate text-xs text-ink-400">{profile.brochure_url.split("/").pop()}</p>
                 </div>
-                <label className="absolute -bottom-0.5 -right-0.5 cursor-pointer rounded-full bg-ink-950 p-1.5 text-white shadow-sm transition hover:opacity-80">
-                  <Camera size={10} />
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) {
-                        if (f.size > 5 * 1024 * 1024) {
-                          alert("Image must be under 5 MB");
-                          return;
-                        }
-                        if (newEmpAvatarPreview) URL.revokeObjectURL(newEmpAvatarPreview);
-                        setNewEmpAvatar(f);
-                        setNewEmpAvatarPreview(URL.createObjectURL(f));
-                      }
-                      e.target.value = "";
-                    }}
-                  />
-                </label>
+                <button
+                  onClick={removeBrochure}
+                  className="rounded-lg p-1.5 text-ink-400 transition hover:bg-red-50 hover:text-red-500"
+                >
+                  <Trash2 size={14} />
+                </button>
               </div>
-              <p className="text-[10px] text-ink-400">Upload photo (optional)<br />Max 5 MB</p>
-            </div>
-            <InputField
-              label="Name"
-              value={newEmployee.name}
-              onChange={(v) => setNewEmployee({ ...newEmployee, name: v })}
-              required
-            />
-            <InputField
-              label="Designation"
-              value={newEmployee.designation}
-              onChange={(v) =>
-                setNewEmployee({ ...newEmployee, designation: v })
-              }
-              required
-            />
-            <InputField
-              label="Email"
-              value={newEmployee.email}
-              onChange={(v) => setNewEmployee({ ...newEmployee, email: v })}
-            />
-            <InputField
-              label="Phone"
-              value={newEmployee.phone}
-              onChange={(v) => setNewEmployee({ ...newEmployee, phone: v })}
-            />
-            <button
-              onClick={addEmployee}
-              disabled={saving || !newEmployee.name || !newEmployee.designation}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-ink-950 py-3 text-sm font-medium text-white transition hover:bg-ink-800 disabled:opacity-40"
-            >
-              <Plus size={14} />
-              Add Member
-            </button>
+            ) : (
+              <p className="text-sm text-ink-400">No brochure uploaded yet</p>
+            )}
+            <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-ink-200 p-6 text-center transition hover:border-ink-400 hover:bg-ink-50">
+              {brochureUploading ? (
+                <Loader2 size={20} className="animate-spin text-ink-400" />
+              ) : (
+                <Upload size={20} className="text-ink-400" />
+              )}
+              <span className="text-xs font-medium text-ink-500">
+                {brochureUploading ? "Uploading…" : "Upload brochure"}
+              </span>
+              <span className="text-[10px] text-ink-400">PDF, JPG, PNG · Max 10 MB</span>
+              <input
+                type="file"
+                accept=".pdf,image/*"
+                className="hidden"
+                disabled={brochureUploading}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) uploadBrochure(f);
+                  e.target.value = "";
+                }}
+              />
+            </label>
           </div>
         </EditSheet>
       )}
@@ -1165,21 +1131,11 @@ export default function ProfilePage() {
         <CropModal
           imageSrc={cropImage.src}
           aspect={cropImage.field === "cover_url" ? 16 / 9 : 1}
-          title={
-            cropImage.employeeId
-              ? cropImage.field === "cover_url"
-                ? "Crop Employee Cover"
-                : "Crop Employee Photo"
-              : cropImage.field === "cover_url"
-                ? "Crop Cover Photo"
-                : "Crop Logo"
-          }
+          title={cropImage.field === "cover_url" ? "Crop Cover Photo" : "Crop Logo"}
           outputSize={
             cropImage.field === "cover_url"
               ? { width: 1200, height: 675 }
-              : cropImage.employeeId
-                ? { width: 300, height: 300 }
-                : { width: 400, height: 400 }
+              : { width: 400, height: 400 }
           }
           onCancel={handleCropCancel}
           onConfirm={handleCropConfirm}
@@ -1198,29 +1154,49 @@ function Section({
   icon,
   onEdit,
   children,
+  defaultOpen = false,
 }: {
   title: string;
   icon: React.ReactNode;
   onEdit?: () => void;
   children: React.ReactNode;
+  defaultOpen?: boolean;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <section className="mt-4 rounded-2xl border border-ink-100 bg-white p-4">
-      <div className="mb-3 flex items-center justify-between">
+    <section className="mt-4 overflow-hidden rounded-2xl border border-ink-100 bg-white">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between p-4"
+      >
         <div className="flex items-center gap-2 text-sm font-semibold">
           <span className="text-ink-400">{icon}</span>
           {title}
         </div>
-        {onEdit && (
-          <button
-            onClick={onEdit}
-            className="rounded-lg p-1.5 text-ink-400 transition hover:bg-ink-50 hover:text-ink-700"
-          >
-            <Edit3 size={14} />
-          </button>
-        )}
+        <div className="flex items-center gap-1">
+          {onEdit && (
+            <span
+              role="button"
+              onClick={(e) => { e.stopPropagation(); onEdit(); }}
+              className="rounded-lg p-1.5 text-ink-400 transition hover:bg-ink-50 hover:text-ink-700"
+            >
+              <Edit3 size={14} />
+            </span>
+          )}
+          <ChevronDown
+            size={16}
+            className={`text-ink-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+          />
+        </div>
+      </button>
+      <div
+        className={`grid transition-all duration-200 ${open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
+      >
+        <div className="overflow-hidden">
+          <div className="px-4 pb-4">{children}</div>
+        </div>
       </div>
-      {children}
     </section>
   );
 }
@@ -1491,6 +1467,92 @@ function ItemListEditor({
       >
         <Plus size={12} />
         Add {label}
+      </button>
+    </div>
+  );
+}
+
+function BankAccountsEditor({
+  accounts,
+  onChange,
+}: {
+  accounts: { bank_name?: string; account_holder?: string; account_number?: string; ifsc?: string; upi_id?: string }[];
+  onChange: (accounts: { bank_name?: string; account_holder?: string; account_number?: string; ifsc?: string; upi_id?: string }[]) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      {accounts.map((acc, i) => (
+        <div key={i} className="rounded-xl border border-ink-200 p-3">
+          <div className="flex items-start justify-between">
+            <div className="flex-1 space-y-2">
+              <input
+                value={acc.bank_name ?? ""}
+                onChange={(e) => {
+                  const updated = [...accounts];
+                  updated[i] = { ...acc, bank_name: e.target.value };
+                  onChange(updated);
+                }}
+                placeholder="Bank Name"
+                className="w-full border-none bg-transparent text-sm font-medium outline-none"
+              />
+              <input
+                value={acc.account_holder ?? ""}
+                onChange={(e) => {
+                  const updated = [...accounts];
+                  updated[i] = { ...acc, account_holder: e.target.value };
+                  onChange(updated);
+                }}
+                placeholder="Account Holder Name"
+                className="w-full border-none bg-transparent text-xs text-ink-500 outline-none"
+              />
+              <input
+                value={acc.account_number ?? ""}
+                onChange={(e) => {
+                  const updated = [...accounts];
+                  updated[i] = { ...acc, account_number: e.target.value };
+                  onChange(updated);
+                }}
+                placeholder="Account Number"
+                className="w-full border-none bg-transparent text-xs text-ink-500 outline-none"
+              />
+              <input
+                value={acc.ifsc ?? ""}
+                onChange={(e) => {
+                  const updated = [...accounts];
+                  updated[i] = { ...acc, ifsc: e.target.value };
+                  onChange(updated);
+                }}
+                placeholder="IFSC Code"
+                className="w-full border-none bg-transparent text-xs text-ink-500 outline-none"
+              />
+              <input
+                value={acc.upi_id ?? ""}
+                onChange={(e) => {
+                  const updated = [...accounts];
+                  updated[i] = { ...acc, upi_id: e.target.value };
+                  onChange(updated);
+                }}
+                placeholder="UPI ID (e.g. name@upi)"
+                className="w-full border-none bg-transparent text-xs text-ink-500 outline-none"
+              />
+            </div>
+            <button
+              onClick={() => onChange(accounts.filter((_, idx) => idx !== i))}
+              className="rounded-lg p-1 text-ink-400 hover:text-red-500"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      ))}
+      <button
+        onClick={() =>
+          onChange([...accounts, { bank_name: "", account_holder: "", account_number: "", ifsc: "", upi_id: "" }])
+        }
+        className="flex items-center gap-1.5 text-xs font-medium text-ink-500 hover:text-ink-700"
+      >
+        <Plus size={12} />
+        Add bank account
       </button>
     </div>
   );
