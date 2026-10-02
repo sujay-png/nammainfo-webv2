@@ -41,7 +41,6 @@ type EditSection =
   | "about"
   | "social"
   | "services"
-  | "products"
   | "gallery"
   | "banking"
   | "brochure";
@@ -291,6 +290,9 @@ export default function ProfilePage() {
     setCropImage(null);
   }
 
+  // Gallery upload category state
+  const [galleryUploadCategory, setGalleryUploadCategory] = useState("");
+
   async function uploadGalleryImage(file: File) {
     if (!profile) return;
     const MAX_SIZE = 5 * 1024 * 1024;
@@ -309,7 +311,7 @@ export default function ProfilePage() {
 
     if (!uploadError) {
       const { data: { publicUrl } } = supabase.storage.from("profile-media").getPublicUrl(path);
-      const updatedGallery = [...(profile.gallery ?? []), { url: publicUrl, caption: "" }];
+      const updatedGallery = [...(profile.gallery ?? []), { url: publicUrl, caption: "", category: galleryUploadCategory.trim() || "" }];
       await supabase
         .from("profiles")
         .update({ gallery: updatedGallery } as Record<string, unknown>)
@@ -317,6 +319,18 @@ export default function ProfilePage() {
       setProfile({ ...profile, gallery: updatedGallery } as Profile);
     }
     setGalleryUploading(false);
+  }
+
+  async function updateGalleryItem(index: number, field: "caption" | "category", value: string) {
+    if (!profile) return;
+    const supabase = createClient();
+    const updatedGallery = [...(profile.gallery ?? [])];
+    updatedGallery[index] = { ...updatedGallery[index], [field]: value };
+    await supabase
+      .from("profiles")
+      .update({ gallery: updatedGallery } as Record<string, unknown>)
+      .eq("id", profile.id);
+    setProfile({ ...profile, gallery: updatedGallery } as Profile);
   }
 
   async function removeGalleryImage(index: number) {
@@ -619,120 +633,88 @@ export default function ProfilePage() {
         )}
       </Section>
 
-      {/* Services */}
+      {/* Services & Products */}
       <Section
-        title="Services"
+        title="Services & Products"
         icon={<Award size={16} />}
         onEdit={() => startEdit("services")}
       >
-        {(profile.services ?? []).length > 0 ? (
-          <div className="space-y-3">
-            {(() => {
-              const svcs = profile.services as { name: string; description?: string; price?: string; category?: string }[];
-              const grouped = svcs.reduce<Record<string, typeof svcs>>((acc, s) => {
-                const cat = s.category?.trim() || "Uncategorized";
-                (acc[cat] ??= []).push(s);
-                return acc;
-              }, {});
-              const cats = Object.keys(grouped);
-              const hasCategories = cats.length > 1 || cats[0] !== "Uncategorized";
-              return hasCategories ? (
-                cats.map((cat) => (
-                  <div key={cat}>
-                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-ink-400">{cat}</p>
-                    <div className="space-y-1.5">
-                      {grouped[cat].map((s, i) => (
-                        <div key={i} className="flex items-center justify-between rounded-xl bg-ink-50 px-3 py-2">
-                          <p className="text-sm font-medium">{s.name}</p>
-                          {s.price && <span className="text-xs font-semibold text-ink-600">{s.price}</span>}
-                        </div>
-                      ))}
+        {/* Services sub-section */}
+        {(profile.services ?? []).length > 0 && (
+          <SubSection title="Services" count={profile.services.length}>
+            <div className="space-y-1.5">
+              {(() => {
+                const svcs = profile.services as { name: string; description?: string; price?: string; category?: string; image_url?: string }[];
+                const grouped = svcs.reduce<Record<string, typeof svcs>>((acc, s) => {
+                  const cat = s.category?.trim() || "Uncategorized";
+                  (acc[cat] ??= []).push(s);
+                  return acc;
+                }, {});
+                const cats = Object.keys(grouped);
+                const hasCategories = cats.length > 1 || cats[0] !== "Uncategorized";
+                return hasCategories ? (
+                  cats.map((cat) => (
+                    <div key={cat}>
+                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-ink-400">{cat}</p>
+                      <div className="space-y-1.5">
+                        {grouped[cat].map((s, i) => (
+                          <div key={i} className="flex items-center gap-2 rounded-xl bg-ink-50 px-3 py-2">
+                            {s.image_url && <img src={s.image_url} alt={s.name} className="h-10 w-10 shrink-0 rounded-lg object-cover" />}
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium">{s.name}</p>
+                              {s.description && <p className="text-[11px] text-ink-400">{s.description}</p>}
+                            </div>
+                            {s.price && <span className="shrink-0 text-xs font-semibold text-ink-600">{s.price}</span>}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))
-              ) : (
-                svcs.map((s, i) => (
-                  <div key={i} className="flex items-center justify-between rounded-xl bg-ink-50 px-3 py-2.5">
-                    <div>
-                      <p className="text-sm font-medium">{s.name}</p>
-                      {s.description && <p className="text-xs text-ink-400">{s.description}</p>}
+                  ))
+                ) : (
+                  svcs.map((s, i) => (
+                    <div key={i} className="flex items-center gap-2 rounded-xl bg-ink-50 px-3 py-2.5">
+                      {s.image_url && <img src={s.image_url} alt={s.name} className="h-10 w-10 shrink-0 rounded-lg object-cover" />}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium">{s.name}</p>
+                        {s.description && <p className="text-[11px] text-ink-400">{s.description}</p>}
+                      </div>
+                      {s.price && <span className="shrink-0 text-xs font-semibold text-ink-600">{s.price}</span>}
                     </div>
-                    {s.price && <span className="text-xs font-semibold text-ink-600">{s.price}</span>}
-                  </div>
-                ))
-              );
-            })()}
-          </div>
-        ) : (
-          <p className="text-sm text-ink-400">Showcase your services</p>
+                  ))
+                );
+              })()}
+            </div>
+          </SubSection>
         )}
-        {profile.website && (profile.services ?? []).length > 0 && (
-          <a
-            href={profile.website}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-3 flex items-center gap-1 text-xs font-medium text-ink-950 hover:underline"
-          >
-            See all services
-            <ChevronRight size={12} />
-          </a>
-        )}
-      </Section>
 
-      {/* Products */}
-      <Section
-        title="Products"
-        icon={<ImageIcon size={16} />}
-        onEdit={() => startEdit("products")}
-      >
-        {(profile.products ?? []).length > 0 ? (
-          <div className="grid grid-cols-2 gap-2">
-            {profile.products.map(
-              (
-                p: {
-                  name: string;
-                  description?: string;
-                  price?: string;
-                  image_url?: string;
-                },
-                i: number
-              ) => (
-                <div
-                  key={i}
-                  className="overflow-hidden rounded-xl border border-ink-100"
-                >
-                  {p.image_url && (
-                    <img
-                      src={p.image_url}
-                      alt={p.name}
-                      className="aspect-square w-full object-cover"
-                    />
-                  )}
-                  <div className="p-2.5">
-                    <p className="text-xs font-medium">{p.name}</p>
-                    {p.price && (
-                      <p className="mt-0.5 text-[11px] font-semibold text-ink-500">
-                        {p.price}
-                      </p>
+        {/* Products sub-section */}
+        {(profile.products ?? []).length > 0 && (
+          <SubSection title="Products" count={profile.products.length}>
+            <div className="grid grid-cols-2 gap-2">
+              {profile.products.map(
+                (
+                  p: { name: string; description?: string; price?: string; image_url?: string },
+                  i: number
+                ) => (
+                  <div key={i} className="overflow-hidden rounded-xl border border-ink-100">
+                    {p.image_url && (
+                      <img src={p.image_url} alt={p.name} className="aspect-square w-full object-cover" />
                     )}
+                    <div className="p-2.5">
+                      <p className="text-xs font-medium">{p.name}</p>
+                      {p.price && (
+                        <p className="mt-0.5 text-[11px] font-semibold text-ink-500">{p.price}</p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )
-            )}
-          </div>
-        ) : (
-          <p className="text-sm text-ink-400">Showcase your products</p>
+                )
+              )}
+            </div>
+          </SubSection>
         )}
-        {profile.website && (profile.products ?? []).length > 0 && (
-          <a
-            href={profile.website}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-3 flex items-center gap-1 text-xs font-medium text-ink-950 hover:underline"
-          >
-            See all products
-            <ChevronRight size={12} />
-          </a>
+
+        {(profile.services ?? []).length === 0 && (profile.products ?? []).length === 0 && (
+          <p className="text-sm text-ink-400">Showcase your services & products</p>
         )}
       </Section>
 
@@ -1101,31 +1083,37 @@ export default function ProfilePage() {
         </EditSheet>
       )}
 
-      {/* Services Edit */}
+      {/* Services & Products Edit */}
       {editing === "services" && (
-        <EditSheet title="Services" onClose={() => setEditing(null)}>
-          <ItemListEditor
-            items={(editForm.services ?? []) as { name: string; description?: string; price?: string; category?: string }[]}
-            onChange={(items) =>
-              setEditForm({ ...editForm, services: items })
-            }
-            label="service"
-            showCategory
-          />
-          <SaveButton saving={saving} onClick={saveProfile} />
-        </EditSheet>
-      )}
-
-      {/* Products Edit */}
-      {editing === "products" && (
-        <EditSheet title="Products" onClose={() => setEditing(null)}>
-          <ItemListEditor
-            items={(editForm.products ?? []) as { name: string; description?: string; price?: string }[]}
-            onChange={(items) =>
-              setEditForm({ ...editForm, products: items })
-            }
-            label="product"
-          />
+        <EditSheet title="Services & Products" onClose={() => setEditing(null)}>
+          <div className="space-y-4">
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-500">Services</p>
+              <ItemListEditor
+                items={(editForm.services ?? []) as { name: string; description?: string; price?: string; category?: string; image_url?: string }[]}
+                onChange={(items) =>
+                  setEditForm({ ...editForm, services: items })
+                }
+                label="service"
+                showCategory
+                showImage
+                profileId={profile.id}
+              />
+            </div>
+            <div className="h-px bg-ink-100" />
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-500">Products</p>
+              <ItemListEditor
+                items={(editForm.products ?? []) as { name: string; description?: string; price?: string; image_url?: string }[]}
+                onChange={(items) =>
+                  setEditForm({ ...editForm, products: items })
+                }
+                label="product"
+                showImage
+                profileId={profile.id}
+              />
+            </div>
+          </div>
           <SaveButton saving={saving} onClick={saveProfile} />
         </EditSheet>
       )}
@@ -1135,45 +1123,85 @@ export default function ProfilePage() {
         <EditSheet title="Manage Gallery" onClose={() => setEditing(null)}>
           <div className="space-y-3">
             {(profile.gallery ?? []).length > 0 && (
-              <div className="grid grid-cols-3 gap-2">
-                {profile.gallery.map((img: { url: string; caption?: string }, i: number) => (
-                  <div key={i} className="group relative aspect-square overflow-hidden rounded-xl">
-                    <img src={img.url} alt={img.caption ?? ""} className="h-full w-full object-cover" />
-                    <button
-                      onClick={() => removeGalleryImage(i)}
-                      className="absolute right-1 top-1 rounded-full bg-ink-950/60 p-1 text-white opacity-0 transition group-hover:opacity-100"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                ))}
+              <div className="space-y-3">
+                {(() => {
+                  const imgs = profile.gallery as { url: string; caption?: string; category?: string }[];
+                  const galleryCats = Array.from(new Set(imgs.map(g => g.category?.trim()).filter(Boolean)));
+                  return (
+                    <>
+                      <datalist id="gallery-cat-options">
+                        {galleryCats.map((cat) => (
+                          <option key={cat} value={cat!} />
+                        ))}
+                      </datalist>
+                      {imgs.map((img, i) => (
+                        <div key={i} className="flex gap-3 rounded-xl border border-ink-200 p-2">
+                          <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg">
+                            <img src={img.url} alt={img.caption ?? ""} className="h-full w-full object-cover" />
+                            <button
+                              onClick={() => removeGalleryImage(i)}
+                              className="absolute right-0.5 top-0.5 rounded-full bg-ink-950/60 p-0.5 text-white transition hover:bg-red-600"
+                            >
+                              <X size={10} />
+                            </button>
+                          </div>
+                          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                            <input
+                              list="gallery-cat-options"
+                              value={img.category ?? ""}
+                              onChange={(e) => updateGalleryItem(i, "category", e.target.value)}
+                              placeholder="Folder / Category"
+                              className="w-full rounded-lg border border-ink-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-ink-400"
+                            />
+                            <input
+                              value={img.caption ?? ""}
+                              onChange={(e) => updateGalleryItem(i, "caption", e.target.value)}
+                              placeholder="Caption (optional)"
+                              className="w-full rounded-lg border border-ink-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-ink-400"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  );
+                })()}
               </div>
             )}
-            <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-ink-200 p-6 text-center transition hover:border-ink-400 hover:bg-ink-50">
-              {galleryUploading ? (
-                <Loader2 size={20} className="animate-spin text-ink-400" />
-              ) : (
-                <Upload size={20} className="text-ink-400" />
-              )}
-              <span className="text-xs font-medium text-ink-500">
-                {galleryUploading ? "Uploading…" : "Tap to add photos"}
-              </span>
-              <span className="text-[10px] text-ink-400">Max 5 MB · JPG, PNG</span>
+            {/* Upload area with category selector */}
+            <div className="rounded-xl border border-ink-200 p-3 space-y-2">
               <input
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                disabled={galleryUploading}
-                onChange={async (e) => {
-                  const files = Array.from(e.target.files ?? []);
-                  for (const f of files) {
-                    await uploadGalleryImage(f);
-                  }
-                  e.target.value = "";
-                }}
+                list="gallery-cat-options"
+                value={galleryUploadCategory}
+                onChange={(e) => setGalleryUploadCategory(e.target.value)}
+                placeholder="Category for new uploads (optional)"
+                className="w-full rounded-lg border border-ink-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-ink-400"
               />
-            </label>
+              <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-ink-200 p-5 text-center transition hover:border-ink-400 hover:bg-ink-50">
+                {galleryUploading ? (
+                  <Loader2 size={20} className="animate-spin text-ink-400" />
+                ) : (
+                  <Upload size={20} className="text-ink-400" />
+                )}
+                <span className="text-xs font-medium text-ink-500">
+                  {galleryUploading ? "Uploading…" : "Tap to add photos"}
+                </span>
+                <span className="text-[10px] text-ink-400">Max 5 MB · JPG, PNG</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  disabled={galleryUploading}
+                  onChange={async (e) => {
+                    const files = Array.from(e.target.files ?? []);
+                    for (const f of files) {
+                      await uploadGalleryImage(f);
+                    }
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+            </div>
           </div>
         </EditSheet>
       )}
@@ -1309,6 +1337,43 @@ function Section({
         </div>
       </div>
     </section>
+  );
+}
+
+function SubSection({
+  title,
+  count,
+  children,
+}: {
+  title: string;
+  count: number;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between rounded-xl bg-ink-50 px-3 py-2.5"
+      >
+        <span className="text-xs font-semibold text-ink-700">
+          {title}
+          <span className="ml-1.5 text-ink-400">({count})</span>
+        </span>
+        <ChevronDown
+          size={14}
+          className={`text-ink-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      <div
+        className={`grid transition-all duration-200 ${open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
+      >
+        <div className="overflow-hidden">
+          <div className="pt-2">{children}</div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1504,30 +1569,112 @@ function ItemListEditor({
   onChange,
   label,
   showCategory = false,
+  showImage = false,
+  profileId,
 }: {
-  items: { name: string; description?: string; price?: string; category?: string }[];
+  items: { name: string; description?: string; price?: string; category?: string; image_url?: string }[];
   onChange: (
-    items: { name: string; description?: string; price?: string; category?: string }[]
+    items: { name: string; description?: string; price?: string; category?: string; image_url?: string }[]
   ) => void;
   label: string;
   showCategory?: boolean;
+  showImage?: boolean;
+  profileId?: string;
 }) {
+  const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
+
+  async function handleImageUpload(index: number, file: File) {
+    if (!profileId) return;
+    const MAX_SIZE = 5 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      alert("Image must be under 5 MB");
+      return;
+    }
+    setUploadingIndex(index);
+    const supabase = createClient();
+    const ext = file.name.split(".").pop();
+    const path = `${profileId}/${label}-${Date.now()}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("profile-media")
+      .upload(path, file, { upsert: true, contentType: file.type || "image/jpeg" });
+
+    if (!uploadError) {
+      const { data: { publicUrl } } = supabase.storage.from("profile-media").getPublicUrl(path);
+      const updated = [...items];
+      updated[index] = { ...items[index], image_url: publicUrl };
+      onChange(updated);
+    }
+    setUploadingIndex(null);
+  }
+
   return (
     <div className="space-y-3">
       {items.map((item, i) => (
         <div key={i} className="rounded-xl border border-ink-200 p-3">
           <div className="flex items-start justify-between">
             <div className="flex-1 space-y-2">
-              <input
-                value={item.name}
-                onChange={(e) => {
-                  const updated = [...items];
-                  updated[i] = { ...item, name: e.target.value };
-                  onChange(updated);
-                }}
-                placeholder={`${label} name`}
-                className="w-full border-none bg-transparent text-sm font-medium outline-none"
-              />
+              {showImage && (
+                <div className="flex items-center gap-2">
+                  {item.image_url ? (
+                    <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg">
+                      <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" />
+                      <button
+                        onClick={() => {
+                          const updated = [...items];
+                          updated[i] = { ...item, image_url: "" };
+                          onChange(updated);
+                        }}
+                        className="absolute right-0.5 top-0.5 rounded-full bg-ink-950/60 p-0.5 text-white hover:bg-red-600"
+                      >
+                        <X size={8} />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="flex h-16 w-16 shrink-0 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-ink-200 transition hover:border-ink-400">
+                      {uploadingIndex === i ? (
+                        <Loader2 size={14} className="animate-spin text-ink-400" />
+                      ) : (
+                        <Camera size={14} className="text-ink-300" />
+                      )}
+                      <span className="text-[8px] text-ink-300">Image</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={uploadingIndex === i}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) handleImageUpload(i, f);
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+                  )}
+                  <input
+                    value={item.name}
+                    onChange={(e) => {
+                      const updated = [...items];
+                      updated[i] = { ...item, name: e.target.value };
+                      onChange(updated);
+                    }}
+                    placeholder={`${label} name`}
+                    className="w-full border-none bg-transparent text-sm font-medium outline-none"
+                  />
+                </div>
+              )}
+              {!showImage && (
+                <input
+                  value={item.name}
+                  onChange={(e) => {
+                    const updated = [...items];
+                    updated[i] = { ...item, name: e.target.value };
+                    onChange(updated);
+                  }}
+                  placeholder={`${label} name`}
+                  className="w-full border-none bg-transparent text-sm font-medium outline-none"
+                />
+              )}
               <input
                 value={item.description ?? ""}
                 onChange={(e) => {
@@ -1551,7 +1698,7 @@ function ItemListEditor({
               {showCategory && (
                 <>
                   <input
-                    list="category-options"
+                    list={`category-options-${label}`}
                     value={item.category ?? ""}
                     onChange={(e) => {
                       const updated = [...items];
@@ -1561,7 +1708,7 @@ function ItemListEditor({
                     placeholder="Department / Category (e.g. IT, Media)"
                     className="w-full rounded-lg border border-ink-200 bg-transparent px-2 py-1.5 text-xs text-ink-500 outline-none focus:border-ink-400"
                   />
-                  <datalist id="category-options">
+                  <datalist id={`category-options-${label}`}>
                     {Array.from(new Set(items.map((it) => it.category?.trim()).filter(Boolean))).map((cat) => (
                       <option key={cat} value={cat!} />
                     ))}
@@ -1580,7 +1727,7 @@ function ItemListEditor({
       ))}
       <button
         onClick={() =>
-          onChange([...items, { name: "", description: "", price: "", ...(showCategory ? { category: "" } : {}) }])
+          onChange([...items, { name: "", description: "", price: "", ...(showCategory ? { category: "" } : {}), ...(showImage ? { image_url: "" } : {}) }])
         }
         className="flex items-center gap-1.5 text-xs font-medium text-ink-500 hover:text-ink-700"
       >

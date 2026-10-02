@@ -36,6 +36,7 @@ import {
   Copy,
   FileText,
   BookUser,
+  Navigation,
   X,
 } from "lucide-react";
 
@@ -75,55 +76,61 @@ function getWhatsAppNumber(
 
 /**
  * Generate unique AI-written review suggestions based on the business's
- * services and products.
+ * services and products, optionally filtered to a specific category.
  */
 function generateReviewSuggestions(
   profile: Profile,
-  count: number = 4
+  count: number = 4,
+  category?: string
 ): string[] {
   const biz = profile.business_name || profile.owner_name || "this business";
-  const services = (
-    profile.services as { name: string; description?: string }[]
-  )?.map((s) => s.name) ?? [];
+  const allServices = (
+    profile.services as { name: string; description?: string; category?: string }[]
+  ) ?? [];
+  const filteredServices = category
+    ? allServices.filter((s) => s.category?.trim() === category)
+    : allServices;
+  const services = filteredServices.map((s) => s.name);
   const products = (
     profile.products as { name: string; description?: string }[]
   )?.map((p) => p.name) ?? [];
   const area = profile.coverage_area || "";
   const years = profile.years_in_business;
+  const catLabel = category || "";
 
   const templates: ((svc: string, prod: string) => string)[] = [
     (svc) =>
-      `Outstanding experience with ${biz}! Their ${svc || "services"} exceeded all my expectations. Highly professional team that truly cares about quality.`,
+      `Outstanding experience with ${biz}${catLabel ? ` (${catLabel})` : ""}! Their ${svc || "services"} exceeded all my expectations. Highly professional team that truly cares about quality.`,
     (svc) =>
       `I've been using ${biz} for ${svc || "their services"} and the results are consistently excellent. Punctual, reliable, and great value for money.`,
     (_, prod) =>
-      `${biz} delivers top-notch ${prod || "products"}. The attention to detail is remarkable. Will definitely recommend to friends and family.`,
+      `${biz} delivers top-notch ${prod || catLabel || "products"}. The attention to detail is remarkable. Will definitely recommend to friends and family.`,
     (svc) =>
-      `Fantastic ${svc || "service"} by ${biz}! They went above and beyond to ensure everything was perfect. A trustworthy business you can count on.`,
+      `Fantastic ${svc || catLabel || "service"} by ${biz}! They went above and beyond to ensure everything was perfect. A trustworthy business you can count on.`,
     () =>
       `Best in ${area || "the area"}! ${biz} provides premium quality at fair prices. ${years ? `With ${years}+ years of experience, they know exactly what they're doing.` : "Their expertise really shows."}`,
     (svc) =>
-      `Extremely satisfied with the ${svc || "work"} done by ${biz}. Clean, professional, and efficient. Would give 6 stars if I could!`,
+      `Extremely satisfied with the ${svc || catLabel || "work"} done by ${biz}. Clean, professional, and efficient. Would give 6 stars if I could!`,
     (_, prod) =>
-      `The ${prod || "quality"} from ${biz} is second to none. Quick turnaround and excellent communication throughout. Highly recommended!`,
+      `The ${prod || catLabel || "quality"} from ${biz} is second to none. Quick turnaround and excellent communication throughout. Highly recommended!`,
     (svc) =>
-      `${biz} transformed my expectations for ${svc || "professional services"}. Their team is knowledgeable, friendly, and delivers on every promise.`,
+      `${biz} transformed my expectations for ${svc || catLabel || "professional services"}. Their team is knowledgeable, friendly, and delivers on every promise.`,
     () =>
       `A gem of a business! ${biz} treats every customer like family. Transparent pricing, no hidden charges, and exceptional results every time.`,
     (svc, prod) =>
-      `I researched many options before choosing ${biz} for ${svc || prod || "my needs"}, and I'm so glad I did. Professional from start to finish.`,
+      `I researched many options before choosing ${biz} for ${svc || prod || catLabel || "my needs"}, and I'm so glad I did. Professional from start to finish.`,
     () =>
       `What sets ${biz} apart is their genuine commitment to customer satisfaction. They don't just meet expectations — they exceed them consistently.`,
     (svc) =>
-      `${biz} is my go-to for ${svc || "everything they offer"}. After trying several alternatives, nothing comes close to their quality and reliability.`,
+      `${biz} is my go-to for ${svc || catLabel || "everything they offer"}. After trying several alternatives, nothing comes close to their quality and reliability.`,
     (_, prod) =>
-      `Impressed by ${biz}'s ${prod || "offerings"}! Great quality, competitive pricing, and the team is always ready to help. Five stars well deserved!`,
+      `Impressed by ${biz}'s ${prod || catLabel || "offerings"}! Great quality, competitive pricing, and the team is always ready to help. Five stars well deserved!`,
     (svc) =>
-      `Working with ${biz} on ${svc || "my project"} was a breeze. They listened to my requirements carefully and delivered exactly what I needed.`,
+      `Working with ${biz} on ${svc || catLabel || "my project"} was a breeze. They listened to my requirements carefully and delivered exactly what I needed.`,
     () =>
       `${biz} has set a new standard in the industry. ${years ? `With ${years} years of experience, ` : ""}Their professionalism and quality are unmatched.`,
     (svc, prod) =>
-      `Cannot say enough good things about ${biz}! Their ${svc || prod || "service"} is outstanding. I've recommended them to everyone I know.`,
+      `Cannot say enough good things about ${biz}! Their ${svc || prod || catLabel || "service"} is outstanding. I've recommended them to everyone I know.`,
   ];
 
   const seed = Date.now();
@@ -169,7 +176,8 @@ export default function PublicProfileView({
     return vars as Record<string, string>;
   }, [ownerTheme, themeMode]);
 
-  const [reviewSuggestions, setReviewSuggestions] = useState<string[]>([]);
+  const [reviewSuggestionsMap, setReviewSuggestionsMap] = useState<Record<string, string[]>>({});
+  const [activeReviewTab, setActiveReviewTab] = useState("All");
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [qrLightbox, setQrLightbox] = useState<string | null>(null);
   const [servicePopup, setServicePopup] = useState<{
@@ -199,17 +207,34 @@ export default function PublicProfileView({
     setProfileUrl(url);
   }, [profile.username, card]);
 
+  /* Build service categories for review tabs */
+  const reviewCategories = useMemo(() => {
+    const svcs = (profile.services as { name: string; category?: string }[]) ?? [];
+    return Array.from(new Set(svcs.map(s => s.category?.trim()).filter(Boolean))) as string[];
+  }, [profile.services]);
+
   useEffect(() => {
-    setReviewSuggestions(generateReviewSuggestions(profile));
-  }, [profile]);
+    const initial: Record<string, string[]> = { All: generateReviewSuggestions(profile) };
+    reviewCategories.forEach((cat) => {
+      initial[cat] = generateReviewSuggestions(profile, 4, cat);
+    });
+    setReviewSuggestionsMap(initial);
+  }, [profile, reviewCategories]);
+
+  const reviewSuggestions = reviewSuggestionsMap[activeReviewTab] ?? [];
 
   const avgRating =
     reviews.length > 0
       ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
       : 0;
 
-  function refreshSuggestions() {
-    setReviewSuggestions(generateReviewSuggestions(profile));
+  function refreshSuggestions(tab?: string) {
+    const key = tab ?? activeReviewTab;
+    const cat = key === "All" ? undefined : key;
+    setReviewSuggestionsMap((prev) => ({
+      ...prev,
+      [key]: generateReviewSuggestions(profile, 4, cat),
+    }));
   }
 
   async function saveContact() {
@@ -408,6 +433,25 @@ export default function PublicProfileView({
               <span className="text-[10px] font-medium text-[var(--muted-foreground)]">Share</span>
             </button>
           </div>
+
+          {/* Get Directions */}
+          {(profile.google_place_id || profile.address) && (
+            <div className="mt-3 px-5">
+              <a
+                href={
+                  profile.google_place_id
+                    ? `https://www.google.com/maps/dir/?api=1&destination=&destination_place_id=${profile.google_place_id}`
+                    : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(profile.address!)}`
+                }
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] py-3 text-xs font-semibold text-[var(--foreground)] transition hover:shadow-card"
+              >
+                <Navigation size={15} />
+                Get Directions
+              </a>
+            </div>
+          )}
         </>
       )}
 
@@ -562,6 +606,25 @@ export default function PublicProfileView({
               </div>
             )}
 
+            {/* Category tabs for review suggestions */}
+            {reviewCategories.length > 0 && (
+              <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+                {["All", ...reviewCategories].map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveReviewTab(tab)}
+                    className={`shrink-0 rounded-full px-3.5 py-1.5 text-[11px] font-semibold transition ${
+                      activeReviewTab === tab
+                        ? "bg-[var(--foreground)] text-[var(--background)]"
+                        : "bg-[var(--accent)] text-[var(--muted-foreground)] hover:bg-[var(--border)]"
+                    }`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* AI-generated review suggestions */}
             <div>
               <div className="mb-2 flex items-center justify-between">
@@ -571,7 +634,7 @@ export default function PublicProfileView({
                     : "Share your experience"}
                 </p>
                 <button
-                  onClick={refreshSuggestions}
+                  onClick={() => refreshSuggestions()}
                   className="flex items-center gap-1 rounded-lg p-1.5 text-[var(--muted-foreground)] transition hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
                   title="Get new suggestions"
                 >

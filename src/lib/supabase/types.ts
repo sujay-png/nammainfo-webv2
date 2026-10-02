@@ -21,6 +21,7 @@ export interface ServiceItem {
 export interface GalleryItem {
   url: string;
   caption?: string;
+  category?: string;
 }
 
 export interface BankAccount {
