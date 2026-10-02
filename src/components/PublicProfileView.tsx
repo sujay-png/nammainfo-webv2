@@ -555,26 +555,25 @@ export default function PublicProfileView({
         )}
 
         {/* ── Write a Google Review ── */}
-        <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3.5">
-            <div className="flex items-center gap-2 font-headline text-sm font-semibold text-[var(--foreground)]">
-              <Star size={15} className="text-[var(--muted-foreground)]" />
-              Write a Google Review
-            </div>
-            {profile.google_place_id && (
+        <CollapsibleSection
+          title="Write a Google Review"
+          icon={<Star size={15} />}
+          badge={reviews.length > 0 ? reviews.length : undefined}
+          headerExtra={
+            profile.google_place_id ? (
               <a
                 href={googleReviewUrl(profile.google_place_id)}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
                 className="flex items-center gap-1 rounded-lg bg-[var(--accent)] px-2 py-1 text-[10px] font-medium text-[var(--muted-foreground)] transition hover:text-[var(--foreground)]"
               >
                 Google Reviews
                 <ExternalLink size={10} />
               </a>
-            )}
-          </div>
-
-          <div className="border-t border-[var(--border)] px-4 py-3">
+            ) : undefined
+          }
+        >
             {/* Existing reviews summary */}
             {reviews.length > 0 && (
               <div className="mb-4 flex items-center gap-3">
@@ -690,8 +689,7 @@ export default function PublicProfileView({
                 ))}
               </div>
             </div>
-          </div>
-        </section>
+        </CollapsibleSection>
 
         {/* ── Banking & Payment Info ── */}
         {bankAccounts.length > 0 && (
@@ -773,44 +771,6 @@ export default function PublicProfileView({
             )}
           </div>
         </CollapsibleSection>
-
-        {/* ── Team ── */}
-        {employees.length > 0 && (
-          <CollapsibleSection title="Team" icon={<Users size={15} />}>
-            <div className="space-y-2">
-              {employees.map((emp) => (
-                <Link
-                  key={emp.id}
-                  href={
-                    profile.username
-                      ? `/${profile.username}/${emp.slug}`
-                      : "#"
-                  }
-                  className="flex items-center gap-3 rounded-xl bg-[var(--accent)] p-3 transition hover:opacity-90"
-                >
-                  {emp.avatar_url ? (
-                    <img
-                      src={emp.avatar_url}
-                      alt={emp.name}
-                      className="h-9 w-9 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--border)] font-headline text-xs font-semibold text-[var(--foreground)]">
-                      {initials(emp.name)}
-                    </div>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-[var(--foreground)]">{emp.name}</p>
-                    <p className="font-mono text-[10px] text-[var(--muted-foreground)]">
-                      {emp.designation}
-                    </p>
-                  </div>
-                  <ChevronRight size={14} className="text-[var(--muted-foreground)]" />
-                </Link>
-              ))}
-            </div>
-          </CollapsibleSection>
-        )}
 
         {/* GST & Address footer */}
         {(profile.gst_number || profile.address) && (
@@ -1001,12 +961,14 @@ function CollapsibleSection({
   icon,
   badge,
   defaultOpen = false,
+  headerExtra,
   children,
 }: {
   title: string;
   icon: React.ReactNode;
   badge?: number;
   defaultOpen?: boolean;
+  headerExtra?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -1022,6 +984,7 @@ function CollapsibleSection({
           {title}
         </div>
         <div className="flex items-center gap-2">
+          {headerExtra}
           {badge !== undefined && badge > 0 && (
             <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-[var(--accent)] px-2 font-mono text-[10px] font-medium text-[var(--muted-foreground)]">
               {badge}
