@@ -217,16 +217,21 @@ export default function EmployeeProfileView({
           </div>
         </div>
 
+        {/* Divider label */}
+        <div className="px-5 py-3">
+          <p className="text-center font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
+            Company Profile
+          </p>
+        </div>
       </div>
 
-      {/* ===== Company sections (services, gallery, etc.) — no duplicate hero ===== */}
+      {/* ===== Full Company Profile (reusing PublicProfileView) ===== */}
       <PublicProfileView
         profile={owner}
         card={card}
         reviews={reviews}
         employees={employees}
         isEmployeeView
-        hideHero
       />
     </div>
   );
