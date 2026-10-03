@@ -1042,6 +1042,12 @@ export default function ProfilePage() {
             onChange={(v) => setEditForm({ ...editForm, address: v })}
           />
           <InputField
+            label="Google Maps Link"
+            value={editForm.google_place_id ?? ""}
+            onChange={(v) => setEditForm({ ...editForm, google_place_id: v || null })}
+            placeholder="Paste your Google Maps link here"
+          />
+          <InputField
             label="Coverage Area"
             value={editForm.coverage_area ?? ""}
             onChange={(v) => setEditForm({ ...editForm, coverage_area: v })}

@@ -441,7 +441,9 @@ export default function PublicProfileView({
               <a
                 href={
                   profile.google_place_id
-                    ? `https://www.google.com/maps/dir/?api=1&destination=&destination_place_id=${profile.google_place_id}`
+                    ? profile.google_place_id.startsWith("http")
+                      ? profile.google_place_id
+                      : `https://www.google.com/maps/dir/?api=1&destination=&destination_place_id=${profile.google_place_id}`
                     : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(profile.address!)}`
                 }
                 target="_blank"
@@ -723,7 +725,7 @@ export default function PublicProfileView({
                       onClick={() => setQrLightbox(acc.qr_url!)}
                       className="mt-2 block"
                     >
-                      <img src={acc.qr_url} alt="Payment QR" className="h-32 w-32 rounded-lg object-contain transition hover:opacity-80" />
+                      <img src={acc.qr_url} alt="Payment QR" loading="lazy" className="h-32 w-32 rounded-lg object-contain transition hover:opacity-80" />
                       <p className="mt-1 text-[9px] text-[var(--muted-foreground)]">Tap to enlarge</p>
                     </button>
                   )}
@@ -1003,7 +1005,7 @@ function ServicesTabs({
       {productsList.map((p, i) => (
         <div key={i} className="overflow-hidden rounded-xl border border-[var(--border)]">
           {p.image_url ? (
-            <img src={p.image_url} alt={p.name} className="aspect-square w-full object-cover" />
+            <img src={p.image_url} alt={p.name} loading="lazy" className="aspect-square w-full object-cover" />
           ) : (
             <div className="flex aspect-square w-full items-center justify-center bg-[var(--accent)] text-2xl">
               {p.emoji || "📦"}
@@ -1238,6 +1240,7 @@ function PublicGallery({
               <img
                 src={img.url}
                 alt={img.caption ?? ""}
+                loading="lazy"
                 className="aspect-square w-full object-cover"
               />
             </button>

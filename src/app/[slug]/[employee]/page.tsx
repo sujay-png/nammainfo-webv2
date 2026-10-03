@@ -69,29 +69,28 @@ export default async function EmployeePage({
   if (!empData) notFound();
   const employee = empData as unknown as Employee;
 
-  // Get the card for the owner
-  const { data: cardData } = await supabase
-    .from("cards")
-    .select("*")
-    .eq("profile_id", owner.id)
-    .eq("is_active", true)
-    .maybeSingle();
-
-  // Fetch reviews for the company
-  const { data: reviewsData } = await supabase
-    .from("reviews")
-    .select("*")
-    .eq("profile_id", owner.id)
-    .order("created_at", { ascending: false })
-    .limit(10);
-
-  // Fetch all employees for team section
-  const { data: employeesData } = await supabase
-    .from("employees")
-    .select("*")
-    .eq("owner_id", owner.id)
-    .eq("is_active", true)
-    .order("created_at");
+  // Fetch card, reviews, and all employees in parallel
+  const [{ data: cardData }, { data: reviewsData }, { data: employeesData }] =
+    await Promise.all([
+      supabase
+        .from("cards")
+        .select("*")
+        .eq("profile_id", owner.id)
+        .eq("is_active", true)
+        .maybeSingle(),
+      supabase
+        .from("reviews")
+        .select("*")
+        .eq("profile_id", owner.id)
+        .order("created_at", { ascending: false })
+        .limit(10),
+      supabase
+        .from("employees")
+        .select("*")
+        .eq("owner_id", owner.id)
+        .eq("is_active", true)
+        .order("created_at"),
+    ]);
 
   return (
     <EmployeeProfileView

@@ -21,15 +21,17 @@ const nextConfig = {
         headers: [{ key: "Content-Type", value: "application/json" }],
       },
       {
-        // Public profile pages — never cache so edits appear instantly
+        // Public profile pages — short CDN cache so edits appear quickly
         source: "/:slug",
         headers: [
           {
             key: "Cache-Control",
-            value: "no-store, no-cache, must-revalidate, proxy-revalidate",
+            value: "public, s-maxage=30, stale-while-revalidate=120",
           },
-          { key: "CDN-Cache-Control", value: "no-store" },
-          { key: "Vercel-CDN-Cache-Control", value: "no-store" },
+          {
+            key: "Vercel-CDN-Cache-Control",
+            value: "s-maxage=30, stale-while-revalidate=120",
+          },
         ],
       },
       {
@@ -37,10 +39,12 @@ const nextConfig = {
         headers: [
           {
             key: "Cache-Control",
-            value: "no-store, no-cache, must-revalidate, proxy-revalidate",
+            value: "public, s-maxage=30, stale-while-revalidate=120",
           },
-          { key: "CDN-Cache-Control", value: "no-store" },
-          { key: "Vercel-CDN-Cache-Control", value: "no-store" },
+          {
+            key: "Vercel-CDN-Cache-Control",
+            value: "s-maxage=30, stale-while-revalidate=120",
+          },
         ],
       },
     ];

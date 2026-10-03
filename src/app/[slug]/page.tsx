@@ -78,21 +78,21 @@ export default async function SlugPage({
       .eq("id", card.id);
   }
 
-  // Fetch reviews
-  const { data: reviewsData } = await supabase
-    .from("reviews")
-    .select("*")
-    .eq("profile_id", profile.id)
-    .order("created_at", { ascending: false })
-    .limit(10);
-
-  // Fetch employees
-  const { data: employeesData } = await supabase
-    .from("employees")
-    .select("*")
-    .eq("owner_id", profile.id)
-    .eq("is_active", true)
-    .order("created_at");
+  // Fetch reviews and employees in parallel
+  const [{ data: reviewsData }, { data: employeesData }] = await Promise.all([
+    supabase
+      .from("reviews")
+      .select("*")
+      .eq("profile_id", profile.id)
+      .order("created_at", { ascending: false })
+      .limit(10),
+    supabase
+      .from("employees")
+      .select("*")
+      .eq("owner_id", profile.id)
+      .eq("is_active", true)
+      .order("created_at"),
+  ]);
 
   return (
     <PublicProfileView
