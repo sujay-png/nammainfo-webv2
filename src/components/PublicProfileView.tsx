@@ -364,7 +364,7 @@ export default function PublicProfileView({
                   <div className="flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-1.5">
                     <Clock size={12} className="text-[var(--muted-foreground)]" />
                     <span className="font-mono text-xs font-medium text-[var(--foreground)]">
-                      {profile.years_in_business} yrs
+                      {profile.years_in_business}+ yrs
                     </span>
                   </div>
                 )}
@@ -394,7 +394,7 @@ export default function PublicProfileView({
               onClick={saveContact}
               className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[var(--foreground)] py-3.5 text-xs font-semibold text-[var(--background)] shadow-card-lg transition hover:opacity-90"
             >
-              <Download size={15} />
+              <UserPlus size={15} />
               Add to Contacts
             </button>
             {profile.website && (

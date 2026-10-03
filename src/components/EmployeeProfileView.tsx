@@ -6,7 +6,7 @@ import { initials } from "@/lib/utils";
 import { getTheme } from "@/lib/themes";
 import PublicProfileView from "./PublicProfileView";
 import {
-  Download,
+  UserPlus,
   Phone,
   Mail,
   Share2,
@@ -165,7 +165,7 @@ export default function EmployeeProfileView({
           onClick={saveContact}
           className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[var(--foreground)] py-3.5 text-xs font-semibold text-[var(--background)] shadow-card-lg transition hover:opacity-90"
         >
-          <Download size={15} />
+          <UserPlus size={15} />
           Add to Contacts
         </button>
         {owner.website && (
