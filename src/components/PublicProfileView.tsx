@@ -967,14 +967,12 @@ function ServicesTabs({
     return servicesList.filter(s => (s.category?.trim() || "") === activeTab);
   }, [servicesList, activeTab, hasServices, hasCategories]);
 
-  return (
-    <CollapsibleSection
-      title={servicesLabel}
-      icon={<Award size={15} />}
-      badge={servicesList.length + productsList.length}
-    >
-      {/* Category tabs */}
-      {hasServices && hasCategories && (
+  const hasBoth = hasServices && hasProducts;
+
+  /* Shared services content block (grid + optional category tabs) */
+  const servicesContent = (
+    <>
+      {hasCategories && (
         <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
           {tabs.map((tab) => (
             <button
@@ -991,50 +989,58 @@ function ServicesTabs({
           ))}
         </div>
       )}
+      <div className="grid grid-cols-2 gap-2">
+        {filteredServices.map((s, i) => (
+          <ServiceCard key={`${s.name}-${i}`} service={s} onTap={onServiceTap} />
+        ))}
+      </div>
+    </>
+  );
 
-      {/* Services grid */}
-      {hasServices && (
-        <>
-          {hasProducts && !hasCategories && (
-            <p className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
-              Services
-            </p>
+  /* Shared products content block */
+  const productsContent = (
+    <div className="grid grid-cols-2 gap-2">
+      {productsList.map((p, i) => (
+        <div key={i} className="overflow-hidden rounded-xl border border-[var(--border)]">
+          {p.image_url ? (
+            <img src={p.image_url} alt={p.name} className="aspect-square w-full object-cover" />
+          ) : (
+            <div className="flex aspect-square w-full items-center justify-center bg-[var(--accent)] text-2xl">
+              {p.emoji || "📦"}
+            </div>
           )}
-          <div className="grid grid-cols-2 gap-2">
-            {filteredServices.map((s, i) => (
-              <ServiceCard key={`${s.name}-${i}`} service={s} onTap={onServiceTap} />
-            ))}
+          <div className="p-2.5">
+            <p className="text-xs font-semibold text-[var(--foreground)]">{p.name}</p>
+            {p.price && (
+              <p className="mt-0.5 font-mono text-[10px] font-semibold text-[var(--muted-foreground)]">{p.price}</p>
+            )}
           </div>
-        </>
-      )}
+        </div>
+      ))}
+    </div>
+  );
 
-      {/* Products */}
-      {hasProducts && (
+  return (
+    <CollapsibleSection
+      title={servicesLabel}
+      icon={<Award size={15} />}
+      badge={servicesList.length + productsList.length}
+    >
+      {hasBoth ? (
+        /* Both exist → inner accordions for each */
+        <div className="space-y-2">
+          <InnerAccordion title="Services" badge={servicesList.length} defaultOpen>
+            {servicesContent}
+          </InnerAccordion>
+          <InnerAccordion title="Products" badge={productsList.length}>
+            {productsContent}
+          </InnerAccordion>
+        </div>
+      ) : (
+        /* Only one exists → show directly, no inner accordion */
         <>
-          {hasServices && (
-            <p className="mb-2 mt-4 font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
-              Products
-            </p>
-          )}
-          <div className="grid grid-cols-2 gap-2">
-            {productsList.map((p, i) => (
-              <div key={i} className="overflow-hidden rounded-xl border border-[var(--border)]">
-                {p.image_url ? (
-                  <img src={p.image_url} alt={p.name} className="aspect-square w-full object-cover" />
-                ) : (
-                  <div className="flex aspect-square w-full items-center justify-center bg-[var(--accent)] text-2xl">
-                    {p.emoji || "📦"}
-                  </div>
-                )}
-                <div className="p-2.5">
-                  <p className="text-xs font-semibold text-[var(--foreground)]">{p.name}</p>
-                  {p.price && (
-                    <p className="mt-0.5 font-mono text-[10px] font-semibold text-[var(--muted-foreground)]">{p.price}</p>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+          {hasServices && servicesContent}
+          {hasProducts && productsContent}
         </>
       )}
     </CollapsibleSection>
@@ -1064,6 +1070,61 @@ function ServiceCard({
         <p className="mt-1 font-mono text-[10px] font-semibold text-[var(--muted-foreground)]">{service.price}</p>
       )}
     </button>
+  );
+}
+
+/**
+ * Inner accordion — used inside a CollapsibleSection for sub-grouping
+ * (e.g. Services / Products within "Services & Products").
+ */
+function InnerAccordion({
+  title,
+  badge,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  badge?: number;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-[var(--border)]">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between px-3.5 py-3"
+      >
+        <span className="font-headline text-xs font-semibold text-[var(--foreground)]">
+          {title}
+        </span>
+        <div className="flex items-center gap-2">
+          {badge !== undefined && badge > 0 && (
+            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--accent)] px-1.5 font-mono text-[9px] font-medium text-[var(--muted-foreground)]">
+              {badge}
+            </span>
+          )}
+          <ChevronDown
+            size={14}
+            className={`text-[var(--muted-foreground)] transition-transform duration-200 ${
+              open ? "rotate-180" : ""
+            }`}
+          />
+        </div>
+      </button>
+      <div
+        className={`grid transition-all duration-200 ease-in-out ${
+          open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+        }`}
+      >
+        <div className="overflow-hidden">
+          <div className="border-t border-[var(--border)] px-3.5 py-3">
+            {children}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
