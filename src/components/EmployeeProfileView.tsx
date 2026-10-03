@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import Link from "next/link";
 import type { Profile, Card, Review, Employee } from "@/lib/supabase/types";
 import { initials } from "@/lib/utils";
 import { getTheme } from "@/lib/themes";
@@ -11,10 +10,17 @@ import {
   Phone,
   Mail,
   Share2,
-  ArrowLeft,
-  Briefcase,
-  Building2,
+  Globe,
 } from "lucide-react";
+
+/**
+ * Ensure a URL string has a protocol prefix.
+ */
+function ensureProtocol(url: string): string {
+  if (!url) return url;
+  if (/^https?:\/\//i.test(url)) return url;
+  return `https://${url}`;
+}
 
 export default function EmployeeProfileView({
   employee,
@@ -52,8 +58,6 @@ export default function EmployeeProfileView({
     );
   }, [owner.username, employee.slug]);
 
-  const ownerUrl = owner.username ? `/${owner.username}` : "/";
-
   function saveContact() {
     const vcardContent = [
       "BEGIN:VCARD",
@@ -63,8 +67,9 @@ export default function EmployeeProfileView({
       `TITLE:${employee.designation}`,
       employee.phone ? `TEL;TYPE=WORK:${employee.phone}` : "",
       employee.email ? `EMAIL:${employee.email}` : "",
-      owner.website ? `URL:${owner.website}` : "",
+      owner.website ? `URL:${ensureProtocol(owner.website)}` : "",
       owner.address ? `ADR;TYPE=WORK:;;${owner.address};;;;` : "",
+      `SOURCE:${profileUrl}`,
       "END:VCARD",
     ]
       .filter(Boolean)
@@ -98,141 +103,129 @@ export default function EmployeeProfileView({
   }
 
   return (
-    <div style={themeVars as React.CSSProperties}>
-      {/* ===== Employee Hero Section ===== */}
-      <div className="mx-auto max-w-lg bg-[var(--background)]">
-        <div className="relative overflow-hidden bg-[var(--foreground)] px-6 pb-8 pt-10">
-          {/* Cover photo background */}
-          {employee.cover_url && (
+    <main
+      className="mx-auto max-w-lg min-h-dvh bg-[var(--background)]"
+      style={themeVars as React.CSSProperties}
+    >
+      {/* ===== Hero — Cover + Avatar (exact same layout as company profile) ===== */}
+      <div className="relative">
+        <div className="h-44 w-full overflow-hidden bg-[var(--foreground)]">
+          {employee.cover_url ? (
             <img
               src={employee.cover_url}
               alt=""
-              className="absolute inset-0 h-full w-full object-cover opacity-30"
+              className="h-full w-full object-cover"
             />
+          ) : owner.cover_url ? (
+            <img
+              src={owner.cover_url}
+              alt=""
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div className="h-full w-full bg-[var(--foreground)]" />
           )}
-          {/* Back to company */}
-          <Link
-            href={ownerUrl}
-            className="relative mb-5 inline-flex items-center gap-1.5 rounded-full bg-[var(--background)]/10 px-3 py-1.5 text-xs font-medium text-[var(--background)]/70 backdrop-blur transition hover:bg-[var(--background)]/20 hover:text-[var(--background)]"
-          >
-            <ArrowLeft size={12} />
-            {owner.business_name ?? "View Company"}
-          </Link>
-
-          <div className="relative">
-
-            {/* Avatar + name */}
-            <div className="flex items-start gap-4">
-              {employee.avatar_url ? (
-                <img
-                  src={employee.avatar_url}
-                  alt=""
-                  className="h-16 w-16 rounded-2xl object-cover ring-1 ring-[var(--background)]/10"
-                />
-              ) : (
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--background)]/10 text-xl font-bold text-[var(--background)] ring-1 ring-[var(--background)]/10">
-                  {initials(employee.name)}
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <h1 className="text-xl font-semibold leading-tight text-[var(--background)]">
-                  {employee.name}
-                </h1>
-                <p className="mt-0.5 text-sm text-[var(--background)]/60">
-                  {employee.designation}
-                </p>
-                <div className="mt-2 flex items-center gap-1.5 text-xs text-[var(--background)]/40">
-                  <Building2 size={11} />
-                  <span>{owner.business_name ?? "Namma Info"}</span>
-                </div>
+        </div>
+        <div className="absolute -bottom-12 left-5">
+          <div className="h-24 w-24 overflow-hidden rounded-2xl border-4 border-[var(--card)] bg-[var(--accent)] shadow-card">
+            {employee.avatar_url ? (
+              <img
+                src={employee.avatar_url}
+                alt=""
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center bg-[var(--foreground)] font-headline text-2xl font-bold text-[var(--background)]">
+                {initials(employee.name)}
               </div>
-            </div>
+            )}
           </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex gap-2 px-4 -translate-y-5">
-          <button
-            onClick={saveContact}
-            className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[var(--foreground)] px-3 py-3.5 text-xs font-semibold text-[var(--background)] shadow-card-lg transition hover:opacity-90"
-          >
-            <Download size={15} />
-            Add to Contacts
-          </button>
-          <button
-            onClick={shareProfile}
-            className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 py-3.5 text-xs font-semibold text-[var(--foreground)] shadow-card transition hover:shadow-card-hover"
-          >
-            <Share2 size={15} />
-            Share Profile
-          </button>
-        </div>
-
-        {/* Quick Contact */}
-        <div className="flex gap-2 px-4 pb-2">
-          {employee.phone && (
-            <a
-              href={`tel:${employee.phone}`}
-              className="flex flex-1 flex-col items-center gap-1.5 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3.5 text-center transition hover:shadow-card"
-            >
-              <Phone size={18} className="text-[var(--foreground)]" />
-              <span className="text-[11px] font-medium text-[var(--muted-foreground)]">Call</span>
-            </a>
-          )}
-          {employee.email && (
-            <a
-              href={`mailto:${employee.email}`}
-              className="flex flex-1 flex-col items-center gap-1.5 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3.5 text-center transition hover:shadow-card"
-            >
-              <Mail size={18} className="text-[var(--foreground)]" />
-              <span className="text-[11px] font-medium text-[var(--muted-foreground)]">Email</span>
-            </a>
-          )}
-        </div>
-
-        {/* Employee About card */}
-        <div className="px-4 pb-2 pt-2">
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
-            <h2 className="mb-3 text-sm font-semibold text-[var(--foreground)]">About</h2>
-            <div className="space-y-3">
-              <div className="flex items-start gap-3">
-                <Briefcase size={16} className="mt-0.5 shrink-0 text-[var(--muted-foreground)]" />
-                <div>
-                  <p className="text-sm font-medium text-[var(--foreground)]">
-                    {employee.designation}
-                  </p>
-                  <p className="text-xs text-[var(--muted-foreground)]">Designation</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <Building2 size={16} className="mt-0.5 shrink-0 text-[var(--muted-foreground)]" />
-                <div>
-                  <p className="text-sm font-medium text-[var(--foreground)]">
-                    {owner.business_name ?? "—"}
-                  </p>
-                  <p className="text-xs text-[var(--muted-foreground)]">Company</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Divider label */}
-        <div className="px-5 py-3">
-          <p className="text-center font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
-            Company Profile
-          </p>
         </div>
       </div>
 
-      {/* ===== Full Company Profile (reusing PublicProfileView) ===== */}
+      {/* ===== Name + info ===== */}
+      <div className="mt-14 px-5">
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="font-headline text-xl font-bold text-[var(--foreground)]">
+              {employee.name}
+            </h1>
+            <p className="text-sm text-[var(--muted-foreground)]">
+              {[employee.designation, owner.business_name]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* ===== Action CTAs ===== */}
+      <div className="mt-5 flex gap-2 px-5">
+        <button
+          onClick={saveContact}
+          className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[var(--foreground)] py-3.5 text-xs font-semibold text-[var(--background)] shadow-card-lg transition hover:opacity-90"
+        >
+          <Download size={15} />
+          Add to Contacts
+        </button>
+        {owner.website && (
+          <a
+            href={ensureProtocol(owner.website)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] py-3.5 text-xs font-semibold text-[var(--foreground)] shadow-card transition hover:shadow-card-hover"
+          >
+            <Globe size={15} />
+            Visit Website
+          </a>
+        )}
+      </div>
+
+      {/* ===== Quick contact ===== */}
+      <div className="mt-4 grid grid-cols-3 gap-2 px-5">
+        {employee.phone && (
+          <a
+            href={`tel:${employee.phone}`}
+            className="flex flex-col items-center gap-1 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 transition hover:shadow-card"
+          >
+            <Phone size={18} className="text-[var(--foreground)]" />
+            <span className="text-[10px] font-medium text-[var(--muted-foreground)]">Call</span>
+          </a>
+        )}
+        {employee.email && (
+          <a
+            href={`mailto:${employee.email}`}
+            className="flex flex-col items-center gap-1 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 transition hover:shadow-card"
+          >
+            <Mail size={18} className="text-[var(--foreground)]" />
+            <span className="text-[10px] font-medium text-[var(--muted-foreground)]">Email</span>
+          </a>
+        )}
+        <button
+          onClick={shareProfile}
+          className="flex flex-col items-center gap-1 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 transition hover:shadow-card"
+        >
+          <Share2 size={18} className="text-[var(--foreground)]" />
+          <span className="text-[10px] font-medium text-[var(--muted-foreground)]">Share</span>
+        </button>
+      </div>
+
+      {/* ===== COMPANY PROFILE label ===== */}
+      <div className="mt-6 px-5">
+        <p className="text-center font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
+          Company Profile
+        </p>
+      </div>
+
+      {/* ===== Company sections (services, gallery, reviews, etc.) — no hero ===== */}
       <PublicProfileView
         profile={owner}
         card={card}
         reviews={reviews}
         employees={employees}
         isEmployeeView
+        hideHero
       />
-    </div>
+    </main>
   );
 }
