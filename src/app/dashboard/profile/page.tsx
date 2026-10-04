@@ -1453,7 +1453,7 @@ function InputField({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className={`w-full border border-ink-200 bg-white px-3 py-2.5 text-sm outline-none transition ${
+          className={`w-full border border-ink-200 bg-white px-3 py-2.5 text-sm text-ink-900 outline-none transition ${
             prefix ? "rounded-r-xl" : "rounded-xl"
           }`}
         />
@@ -1482,7 +1482,7 @@ function TextareaField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         rows={rows}
-        className="w-full resize-none rounded-xl border border-ink-200 bg-white px-3 py-2.5 text-sm outline-none transition"
+        className="w-full resize-none rounded-xl border border-ink-200 bg-white px-3 py-2.5 text-sm text-ink-900 outline-none transition"
       />
     </div>
   );
