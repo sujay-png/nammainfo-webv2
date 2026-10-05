@@ -5,7 +5,7 @@ import { saveContactFromUrl } from "@/lib/save-contact";
 import Link from "next/link";
 import Image from "next/image";
 import type { Profile, Card, Review, Employee } from "@/lib/supabase/types";
-import { initials, googleReviewUrl } from "@/lib/utils";
+import { initials, googleReviewUrl, directionsUrl } from "@/lib/utils";
 import { getTheme } from "@/lib/themes";
 import TapTracker from "@/components/TapTracker";
 import {
@@ -166,6 +166,7 @@ export default function PublicProfileView({
   hideHero?: boolean;
 }) {
   const ownerTheme = getTheme(profile.theme);
+  const directionsHref = directionsUrl(profile);
   const [themeMode, setThemeMode] = useState<"light" | "dark">("light");
 
   useEffect(() => {
@@ -420,17 +421,12 @@ export default function PublicProfileView({
             </button>
           </div>
 
-          {/* Get Directions */}
-          {(profile.google_place_id || profile.address) && (
+          {/* Get Directions — the owner's Maps link, else their address.
+              (Never the Google review link.) */}
+          {directionsHref && (
             <div className="mt-3 px-5">
               <a
-                href={
-                  profile.google_place_id
-                    ? profile.google_place_id.startsWith("http")
-                      ? profile.google_place_id
-                      : `https://www.google.com/maps/dir/?api=1&destination=&destination_place_id=${profile.google_place_id}`
-                    : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(profile.address!)}`
-                }
+                href={directionsHref}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex w-full items-center justify-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] py-3 text-xs font-semibold text-[var(--foreground)] transition hover:shadow-card"
@@ -455,10 +451,15 @@ export default function PublicProfileView({
               </p>
             )}
             {profile.address && (
-              <div className={`${profile.bio ? "mt-3" : ""} flex items-start gap-2 text-xs text-[var(--muted-foreground)]`}>
+              <a
+                href={directionsHref ?? "#"}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`${profile.bio ? "mt-3" : ""} flex items-start gap-2 text-xs text-[var(--muted-foreground)] underline-offset-2 hover:underline`}
+              >
                 <MapPin size={13} className="mt-0.5 shrink-0" />
                 {profile.address}
-              </div>
+              </a>
             )}
             {profile.coverage_area && (
               <div className="mt-1.5 flex items-start gap-2 text-xs text-[var(--muted-foreground)]">

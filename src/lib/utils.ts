@@ -42,6 +42,42 @@ export function slugify(text: string): string {
 }
 
 /**
+ * "Get Directions" link for a profile. Never uses the Google *review*
+ * link. Priority:
+ *   1. The Maps link the owner pasted (maps_url)
+ *   2. Directions to the address from About us
+ *   3. A raw Place ID (ChIJ…) → directions to that place
+ *   4. An older plain Maps link stored in google_place_id (not a review link)
+ */
+export function directionsUrl(p: {
+  maps_url?: string | null;
+  address?: string | null;
+  google_place_id?: string | null;
+}): string | null {
+  const maps = p.maps_url?.trim();
+  if (maps) return /^https?:\/\//i.test(maps) ? maps : `https://${maps}`;
+
+  const address = p.address?.trim();
+  if (address) {
+    return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
+  }
+
+  const pid = p.google_place_id?.trim();
+  if (pid) {
+    if (pid.startsWith("ChIJ")) {
+      return `https://www.google.com/maps/dir/?api=1&destination=&destination_place_id=${pid}`;
+    }
+    if (/^https?:\/\//i.test(pid) && !/(review|g\.page\/r\/)/i.test(pid)) return pid;
+  }
+  return null;
+}
+
+/** Plain "open in Google Maps" link for an address line. */
+export function mapsSearchUrl(address: string): string {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+}
+
+/**
  * Build a Google review URL from a stored google_place_id value.
  *
  * The stored value can be:

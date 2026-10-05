@@ -22,7 +22,10 @@ const nextConfig = {
       },
       {
         // Public profile pages — short CDN cache so edits appear quickly
-        source: "/:slug",
+        // Only real profile pages — not /dashboard, /signup, etc. (those
+        // matched "/:slug" too and were being marked publicly cacheable).
+        source:
+          "/:slug((?!(?:dashboard|signup|onboarding|forgot-password|reset-password|auth|api|c)(?:/|$))[^/.]+)",
         headers: [
           {
             key: "Cache-Control",
@@ -35,7 +38,8 @@ const nextConfig = {
         ],
       },
       {
-        source: "/:slug/:employee",
+        source:
+          "/:slug((?!(?:dashboard|signup|onboarding|forgot-password|reset-password|auth|api|c)(?:/|$))[^/.]+)/:employee",
         headers: [
           {
             key: "Cache-Control",

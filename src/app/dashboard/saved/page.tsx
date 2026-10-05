@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUser } from "@/lib/supabase/current-user";
 import type { Profile } from "@/lib/supabase/types";
 import { initials, formatDistanceToNow } from "@/lib/utils";
 import { Bookmark, ChevronRight, Search } from "lucide-react";
@@ -16,9 +17,7 @@ export default function SavedPage() {
   useEffect(() => {
     (async () => {
       const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return;
 
       // Get connections

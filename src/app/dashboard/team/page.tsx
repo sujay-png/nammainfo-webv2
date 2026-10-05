@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUser } from "@/lib/supabase/current-user";
 import type { Profile, Employee } from "@/lib/supabase/types";
 import { initials } from "@/lib/utils";
 import dynamic from "next/dynamic";
@@ -51,9 +52,7 @@ export default function TeamPage() {
 
   const load = useCallback(async () => {
     const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (!user) return;
 
     const [{ data: p }, { data: emps }] = await Promise.all([

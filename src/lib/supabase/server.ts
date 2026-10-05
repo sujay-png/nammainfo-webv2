@@ -50,3 +50,25 @@ export function createPublicClient() {
     }
   );
 }
+
+/**
+ * Same anon client, but its reads go through Next's data cache for
+ * `revalidateSeconds` — for the public profile pages, so most visits are
+ * served from cache instead of hitting the database every time. (Taps are
+ * counted client-side by <TapTracker />, so caching doesn't affect them.)
+ */
+export function createCachedPublicClient(revalidateSeconds = 30) {
+  return createRawClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      global: {
+        fetch: (url, options = {}) =>
+          fetch(url, {
+            ...options,
+            next: { revalidate: revalidateSeconds },
+          } as RequestInit),
+      },
+    }
+  );
+}

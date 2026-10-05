@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUser } from "@/lib/supabase/current-user";
 import { formatDistanceToNow, initials } from "@/lib/utils";
 import type { Profile, Card, Review, Employee, Connection } from "@/lib/supabase/types";
 
@@ -171,13 +172,11 @@ export default function HomePage() {
   useEffect(() => {
     (async () => {
       const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return;
 
       // Fetch all data in parallel
-      const [profileRes, cardRes, reviewRes, employeeRes, connectionRes] =
+      const [profileRes, cardRes, reviewRes, employeeRes, connectionRes, reviewCountRes] =
         await Promise.all([
           supabase.from("profiles").select("*").eq("id", user.id).single(),
           supabase
@@ -203,6 +202,11 @@ export default function HomePage() {
             .select("*")
             .eq("user_id", user.id)
             .order("created_at", { ascending: false }),
+          // Total review count — fetched in parallel instead of after the rest.
+          supabase
+            .from("reviews")
+            .select("id", { count: "exact", head: true })
+            .eq("profile_id", user.id),
         ]);
 
       if (profileRes.data) setProfile(profileRes.data as unknown as Profile);
@@ -211,15 +215,8 @@ export default function HomePage() {
         setCard(c);
         setTapCount(c.tap_count || 0);
       }
-      if (reviewRes.data) {
-        setReviews(reviewRes.data as unknown as Review[]);
-        // Get total count
-        const { count } = await supabase
-          .from("reviews")
-          .select("*", { count: "exact", head: true })
-          .eq("profile_id", user.id);
-        setReviewCount(count || 0);
-      }
+      if (reviewRes.data) setReviews(reviewRes.data as unknown as Review[]);
+      setReviewCount(reviewCountRes.count || 0);
       if (employeeRes.data) setEmployees(employeeRes.data as unknown as Employee[]);
       if (connectionRes.data) setConnections(connectionRes.data as unknown as Connection[]);
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUser } from "@/lib/supabase/current-user";
 import type { Post, Profile } from "@/lib/supabase/types";
 import { formatDistanceToNow } from "@/lib/utils";
 import { Plus, Megaphone, Calendar, TrendingUp, Newspaper } from "lucide-react";
@@ -32,9 +33,7 @@ export default function FeedPage() {
 
   async function loadFeed() {
     const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (!user) return;
 
     // Get connections
@@ -85,9 +84,7 @@ export default function FeedPage() {
     if (!newContent.trim()) return;
     setPosting(true);
     const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (!user) return;
 
     await supabase.from("posts").insert({

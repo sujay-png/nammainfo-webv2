@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUser } from "@/lib/supabase/current-user";
 import type { Profile, Review } from "@/lib/supabase/types";
 import { initials } from "@/lib/utils";
 import dynamic from "next/dynamic";
@@ -136,9 +137,7 @@ export default function ProfilePage() {
 
   const loadProfile = useCallback(async () => {
     const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (!user) return;
 
     const [{ data: profileData }, { data: reviewData }, { data: cardData }] =
@@ -177,9 +176,7 @@ export default function ProfilePage() {
     setSaving(true);
     const supabase = createClient();
 
-    const { error } = await supabase
-      .from("profiles")
-      .update({
+    const updates: Record<string, unknown> = {
         owner_name: editForm.owner_name ?? null,
         business_name: editForm.business_name ?? null,
         job_title: editForm.job_title ?? null,
@@ -200,7 +197,17 @@ export default function ProfilePage() {
         brochure_url: editForm.brochure_url ?? null,
         google_place_id: editForm.google_place_id ?? null,
         gst_number: editForm.gst_number ?? null,
-      } as Record<string, unknown>)
+      };
+    // maps_url only exists once supabase/migrations/20261006_profiles_maps_url.sql
+    // has been run — send it only when the profile row already has the column
+    // so saving never breaks before that.
+    if ("maps_url" in profile) {
+      updates.maps_url = editForm.maps_url?.trim() || null;
+    }
+
+    const { error } = await supabase
+      .from("profiles")
+      .update(updates as Record<string, unknown>)
       .eq("id", profile.id);
 
     if (!error) {
@@ -596,6 +603,17 @@ export default function ProfilePage() {
             <MapPin size={14} className="mt-0.5 shrink-0 text-ink-400" />
             <span className="text-sm text-ink-500">{profile.address}</span>
           </div>
+        )}
+        {profile.maps_url && (
+          <a
+            href={profile.maps_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-1.5 flex items-center gap-2 text-xs text-ink-500 underline-offset-2 hover:underline"
+          >
+            <MapPin size={14} className="shrink-0 text-ink-400" />
+            Google Maps link added
+          </a>
         )}
         {profile.coverage_area && (
           <div className="mt-2 flex items-start gap-2">
@@ -1046,11 +1064,14 @@ export default function ProfilePage() {
             onChange={(v) => setEditForm({ ...editForm, address: v })}
           />
           <InputField
-            label="Google Maps Link"
-            value={editForm.google_place_id ?? ""}
-            onChange={(v) => setEditForm({ ...editForm, google_place_id: v || null })}
-            placeholder="Paste your Google Maps link here"
+            label="Google Maps Link (for directions)"
+            value={editForm.maps_url ?? ""}
+            onChange={(v) => setEditForm({ ...editForm, maps_url: v || null })}
+            placeholder="Paste your shop's Google Maps link"
           />
+          <p className="-mt-2 text-[11px] text-ink-400">
+            Open your shop in Google Maps → Share → Copy link. Leave empty to use the address above.
+          </p>
           <InputField
             label="Coverage Area"
             value={editForm.coverage_area ?? ""}

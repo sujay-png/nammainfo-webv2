@@ -64,6 +64,8 @@ export interface Profile {
   cover_url: string | null;
   // Added for web — will be migrated
   google_place_id: string | null;
+  /** Google Maps link for "Get Directions" (separate from the reviews link). */
+  maps_url?: string | null;
   products: ServiceItem[];
   theme: string;
 }

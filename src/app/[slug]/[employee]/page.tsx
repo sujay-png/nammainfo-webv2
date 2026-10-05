@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { createPublicClient } from "@/lib/supabase/server";
+import { createCachedPublicClient as createPublicClient } from "@/lib/supabase/server";
 import type { Metadata } from "next";
 import type { Profile, Employee, Review, Card } from "@/lib/supabase/types";
 import EmployeeProfileView from "@/components/EmployeeProfileView";

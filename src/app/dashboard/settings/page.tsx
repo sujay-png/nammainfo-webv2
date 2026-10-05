@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUser } from "@/lib/supabase/current-user";
 import type { Profile } from "@/lib/supabase/types";
 import { useTheme } from "@/components/ThemeProvider";
 import { themes, getTheme } from "@/lib/themes";
@@ -17,6 +18,7 @@ import {
   ExternalLink,
   Moon,
   Sun,
+  Monitor,
   Users,
   Palette,
   Check,
@@ -24,7 +26,7 @@ import {
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { theme, toggleTheme, colorTheme, setColorTheme } = useTheme();
+  const { preference, setPreference, colorTheme, setColorTheme } = useTheme();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -33,9 +35,7 @@ export default function SettingsPage() {
   useEffect(() => {
     (async () => {
       const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return;
 
       const { data } = await supabase
@@ -53,9 +53,7 @@ export default function SettingsPage() {
     setColorTheme(slug);
 
     const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (user) {
       await supabase
         .from("profiles")
@@ -148,27 +146,44 @@ export default function SettingsPage() {
           Appearance
         </p>
 
-        {/* Dark mode toggle */}
-        <button
-          onClick={toggleTheme}
-          className="flex w-full items-center justify-between rounded-2xl px-4 py-3.5 transition hover:bg-[var(--accent)]"
+        {/* Light / Dark / System default */}
+        <div
+          role="radiogroup"
+          aria-label="Appearance"
+          className="space-y-1"
         >
-          <div className="flex items-center gap-3">
-            <span className="text-[var(--muted-foreground)]">
-              {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-            </span>
-            <span className="text-sm font-medium">
-              {theme === "dark" ? "Light Mode" : "Dark Mode"}
-            </span>
-          </div>
-          <div className="relative h-6 w-11 rounded-full bg-[var(--border)] transition-colors">
-            <div
-              className={`absolute top-0.5 h-5 w-5 rounded-full bg-[var(--foreground)] transition-transform ${
-                theme === "dark" ? "translate-x-5" : "translate-x-0.5"
-              }`}
-            />
-          </div>
-        </button>
+          {(
+            [
+              { value: "light", label: "Light mode", icon: <Sun size={18} /> },
+              { value: "dark", label: "Dark mode", icon: <Moon size={18} /> },
+              { value: "system", label: "System default", icon: <Monitor size={18} /> },
+            ] as const
+          ).map((opt) => {
+            const selected = preference === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => setPreference(opt.value)}
+                className="flex w-full items-center justify-between rounded-2xl px-4 py-3.5 transition hover:bg-[var(--accent)]"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-[var(--muted-foreground)]">{opt.icon}</span>
+                  <span className="text-sm font-medium">{opt.label}</span>
+                </div>
+                <span
+                  className={`flex h-5 w-5 items-center justify-center rounded-full border-2 transition-colors ${
+                    selected ? "border-[var(--foreground)]" : "border-[var(--border)]"
+                  }`}
+                >
+                  {selected && <span className="h-2.5 w-2.5 rounded-full bg-[var(--foreground)]" />}
+                </span>
+              </button>
+            );
+          })}
+        </div>
 
         {/* Theme picker toggle */}
         <button
