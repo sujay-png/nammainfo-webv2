@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import type { Profile, Card, Review, Employee } from "@/lib/supabase/types";
 import { initials, googleReviewUrl } from "@/lib/utils";
 import { getTheme } from "@/lib/themes";
@@ -312,24 +313,30 @@ export default function PublicProfileView({
         <>
           {/* Hero — Cover + Avatar */}
           <div className="relative">
-            <div className="h-44 w-full overflow-hidden bg-[var(--foreground)]">
+            <div className="relative h-44 w-full overflow-hidden bg-[var(--foreground)]">
               {profile.cover_url ? (
-                <img
+                <Image
                   src={profile.cover_url}
                   alt=""
-                  className="h-full w-full object-cover"
+                  fill
+                  sizes="(max-width: 512px) 100vw, 512px"
+                  className="object-cover"
+                  priority
                 />
               ) : (
                 <div className="h-full w-full bg-[var(--foreground)]" />
               )}
             </div>
             <div className="absolute -bottom-12 left-5">
-              <div className="h-24 w-24 overflow-hidden rounded-2xl border-4 border-[var(--card)] bg-[var(--accent)] shadow-card">
+              <div className="relative h-24 w-24 overflow-hidden rounded-2xl border-4 border-[var(--card)] bg-[var(--accent)] shadow-card">
                 {profile.logo_url ? (
-                  <img
+                  <Image
                     src={profile.logo_url}
                     alt=""
-                    className="h-full w-full object-cover"
+                    fill
+                    sizes="96px"
+                    className="object-cover"
+                    priority
                   />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center bg-[var(--foreground)] font-headline text-2xl font-bold text-[var(--background)]">
@@ -725,7 +732,9 @@ export default function PublicProfileView({
                       onClick={() => setQrLightbox(acc.qr_url!)}
                       className="mt-2 block"
                     >
-                      <img src={acc.qr_url} alt="Payment QR" loading="lazy" className="h-32 w-32 rounded-lg object-contain transition hover:opacity-80" />
+                      <div className="relative h-32 w-32">
+                        <Image src={acc.qr_url} alt="Payment QR" fill sizes="128px" className="rounded-lg object-contain transition hover:opacity-80" loading="lazy" />
+                      </div>
                       <p className="mt-1 text-[9px] text-[var(--muted-foreground)]">Tap to enlarge</p>
                     </button>
                   )}
@@ -1049,7 +1058,9 @@ function ServicesTabs({
         {filteredProducts.map((p, i) => (
           <div key={i} className="overflow-hidden rounded-xl border border-[var(--border)]">
             {p.image_url ? (
-              <img src={p.image_url} alt={p.name} loading="lazy" className="aspect-square w-full object-cover" />
+              <div className="relative aspect-square w-full">
+                <Image src={p.image_url} alt={p.name} fill sizes="(max-width: 512px) 50vw, 240px" className="object-cover" loading="lazy" />
+              </div>
             ) : (
               <div className="flex aspect-square w-full items-center justify-center bg-[var(--accent)] text-2xl">
                 {p.emoji || "📦"}
@@ -1282,12 +1293,16 @@ function PublicGallery({
               onClick={() => onImageTap(globalIdx >= 0 ? globalIdx : i)}
               className="overflow-hidden rounded-lg transition active:scale-95"
             >
-              <img
-                src={img.url}
-                alt={img.caption ?? ""}
-                loading="lazy"
-                className="aspect-square w-full object-cover"
-              />
+              <div className="relative aspect-square w-full">
+                <Image
+                  src={img.url}
+                  alt={img.caption ?? ""}
+                  fill
+                  sizes="(max-width: 512px) 33vw, 160px"
+                  className="object-cover"
+                  loading="lazy"
+                />
+              </div>
             </button>
           );
         })}

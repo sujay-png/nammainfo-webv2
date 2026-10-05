@@ -5,8 +5,9 @@ import PublicProfileView from "@/components/PublicProfileView";
 import type { Metadata } from "next";
 import type { Profile, Card, Review, Employee } from "@/lib/supabase/types";
 
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
+// ISR: revalidate every 30 seconds so edits appear quickly
+// while repeat visitors get a cached page instantly
+export const revalidate = 30;
 
 export async function generateMetadata({
   params,
@@ -38,13 +39,7 @@ export default async function SlugPage({
 
   if (profileByUsername) {
     profile = profileByUsername as unknown as Profile;
-    const { data: cardData } = await supabase
-      .from("cards")
-      .select("*")
-      .eq("profile_id", profile.id)
-      .eq("is_active", true)
-      .maybeSingle();
-    card = cardData as Card | null;
+    // card will be fetched in parallel with reviews + employees below
   } else {
     // Check by card slug
     const isUuid =
@@ -70,16 +65,25 @@ export default async function SlugPage({
 
   if (!profile) notFound();
 
-  // Increment tap count
+  // Increment tap count — fire-and-forget (don't block render)
   if (card) {
-    await supabase
+    supabase
       .from("cards")
       .update({ tap_count: (card.tap_count || 0) + 1 })
-      .eq("id", card.id);
+      .eq("id", card.id)
+      .then(() => {});
   }
 
-  // Fetch reviews and employees in parallel
-  const [{ data: reviewsData }, { data: employeesData }] = await Promise.all([
+  // Fetch card, reviews and employees in parallel
+  const [{ data: cardDataParallel }, { data: reviewsData }, { data: employeesData }] = await Promise.all([
+    card
+      ? Promise.resolve({ data: card })
+      : supabase
+          .from("cards")
+          .select("*")
+          .eq("profile_id", profile.id)
+          .eq("is_active", true)
+          .maybeSingle(),
     supabase
       .from("reviews")
       .select("*")
@@ -93,6 +97,7 @@ export default async function SlugPage({
       .eq("is_active", true)
       .order("created_at"),
   ]);
+  if (!card) card = cardDataParallel as Card | null;
 
   return (
     <PublicProfileView

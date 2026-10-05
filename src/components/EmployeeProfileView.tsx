@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import Image from "next/image";
 import type { Profile, Card, Review, Employee } from "@/lib/supabase/types";
 import { initials } from "@/lib/utils";
 import { getTheme } from "@/lib/themes";
@@ -109,30 +110,39 @@ export default function EmployeeProfileView({
     >
       {/* ===== Hero — Cover + Avatar (exact same layout as company profile) ===== */}
       <div className="relative">
-        <div className="h-44 w-full overflow-hidden bg-[var(--foreground)]">
+        <div className="relative h-44 w-full overflow-hidden bg-[var(--foreground)]">
           {employee.cover_url ? (
-            <img
+            <Image
               src={employee.cover_url}
               alt=""
-              className="h-full w-full object-cover"
+              fill
+              sizes="(max-width: 512px) 100vw, 512px"
+              className="object-cover"
+              priority
             />
           ) : owner.cover_url ? (
-            <img
+            <Image
               src={owner.cover_url}
               alt=""
-              className="h-full w-full object-cover"
+              fill
+              sizes="(max-width: 512px) 100vw, 512px"
+              className="object-cover"
+              priority
             />
           ) : (
             <div className="h-full w-full bg-[var(--foreground)]" />
           )}
         </div>
         <div className="absolute -bottom-12 left-5">
-          <div className="h-24 w-24 overflow-hidden rounded-2xl border-4 border-[var(--card)] bg-[var(--accent)] shadow-card">
+          <div className="relative h-24 w-24 overflow-hidden rounded-2xl border-4 border-[var(--card)] bg-[var(--accent)] shadow-card">
             {employee.avatar_url ? (
-              <img
+              <Image
                 src={employee.avatar_url}
                 alt=""
-                className="h-full w-full object-cover"
+                fill
+                sizes="96px"
+                className="object-cover"
+                priority
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center bg-[var(--foreground)] font-headline text-2xl font-bold text-[var(--background)]">

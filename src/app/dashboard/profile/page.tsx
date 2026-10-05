@@ -4,7 +4,11 @@ import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Profile, Review } from "@/lib/supabase/types";
 import { initials } from "@/lib/utils";
-import CropModal from "@/components/CropModal";
+import dynamic from "next/dynamic";
+
+const CropModal = dynamic(() => import("@/components/CropModal"), {
+  ssr: false,
+});
 import {
   Edit3,
   Plus,

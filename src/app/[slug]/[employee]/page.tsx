@@ -4,8 +4,8 @@ import type { Metadata } from "next";
 import type { Profile, Employee, Review, Card } from "@/lib/supabase/types";
 import EmployeeProfileView from "@/components/EmployeeProfileView";
 
-export const dynamic = "force-dynamic";
-export const fetchCache = "force-no-store";
+// ISR: revalidate every 30 seconds
+export const revalidate = 30;
 
 export async function generateMetadata({
   params,

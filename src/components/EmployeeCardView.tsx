@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import type { Profile, Employee } from "@/lib/supabase/types";
 import { initials } from "@/lib/utils";
 import {
@@ -96,11 +97,16 @@ export default function EmployeeCardView({
           {/* Avatar + name */}
           <div className="flex items-start gap-4">
             {employee.avatar_url ? (
-              <img
-                src={employee.avatar_url}
-                alt=""
-                className="h-16 w-16 rounded-2xl object-cover ring-1 ring-white/10"
-              />
+              <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-2xl ring-1 ring-white/10">
+                <Image
+                  src={employee.avatar_url}
+                  alt=""
+                  fill
+                  sizes="64px"
+                  className="object-cover"
+                  priority
+                />
+              </div>
             ) : (
               <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10 text-xl font-bold ring-1 ring-white/10">
                 {initials(employee.name)}
