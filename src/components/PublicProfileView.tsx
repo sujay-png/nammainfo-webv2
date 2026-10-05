@@ -288,7 +288,7 @@ export default function PublicProfileView({
   /* Cast arrays once */
   const socialLinks = (profile.social_links as { platform: string; url: string }[]) ?? [];
   const servicesList = (profile.services as { name: string; description?: string; price?: string; emoji?: string; category?: string }[]) ?? [];
-  const productsList = (profile.products as { name: string; image_url?: string; price?: string; emoji?: string }[]) ?? [];
+  const productsList = (profile.products as { name: string; image_url?: string; price?: string; emoji?: string; category?: string }[]) ?? [];
   const galleryList = (profile.gallery as { url: string; category?: string; caption?: string }[]) ?? [];
   const bankAccounts = (profile.bank_accounts as { bank_name?: string; account_holder?: string; account_number?: string; ifsc?: string; upi_id?: string; qr_url?: string }[]) ?? [];
 
@@ -936,7 +936,7 @@ function ServicesTabs({
   onServiceTap,
 }: {
   servicesList: { name: string; description?: string; price?: string; emoji?: string; category?: string }[];
-  productsList: { name: string; image_url?: string; price?: string; emoji?: string }[];
+  productsList: { name: string; image_url?: string; price?: string; emoji?: string; category?: string }[];
   servicesLabel: string;
   hasServices: boolean;
   hasProducts: boolean;
@@ -951,7 +951,7 @@ function ServicesTabs({
 
   const hasCategories = categories.length > 0;
 
-  /* "All" tab + category tabs + optional "Products" tab */
+  /* "All" tab + category tabs */
   const tabs = useMemo(() => {
     const t: string[] = [];
     if (hasCategories) {
@@ -968,6 +968,32 @@ function ServicesTabs({
     if (!hasCategories || activeTab === "All") return servicesList;
     return servicesList.filter(s => (s.category?.trim() || "") === activeTab);
   }, [servicesList, activeTab, hasServices, hasCategories]);
+
+  /* Build category tabs from products */
+  const productCategories = useMemo(() => {
+    if (!hasProducts) return [] as string[];
+    const cats = Array.from(new Set(productsList.map(p => p.category?.trim()).filter(Boolean))) as string[];
+    return cats;
+  }, [productsList, hasProducts]);
+
+  const hasProductCategories = productCategories.length > 0;
+
+  const productTabs = useMemo(() => {
+    const t: string[] = [];
+    if (hasProductCategories) {
+      t.push("All", ...productCategories);
+    }
+    return t;
+  }, [productCategories, hasProductCategories]);
+
+  const [activeProductTab, setActiveProductTab] = useState("All");
+
+  /* Filter products by active tab */
+  const filteredProducts = useMemo(() => {
+    if (!hasProducts) return [];
+    if (!hasProductCategories || activeProductTab === "All") return productsList;
+    return productsList.filter(p => (p.category?.trim() || "") === activeProductTab);
+  }, [productsList, activeProductTab, hasProducts, hasProductCategories]);
 
   const hasBoth = hasServices && hasProducts;
 
@@ -999,27 +1025,46 @@ function ServicesTabs({
     </>
   );
 
-  /* Shared products content block */
+  /* Shared products content block (grid + optional category tabs) */
   const productsContent = (
-    <div className="grid grid-cols-2 gap-2">
-      {productsList.map((p, i) => (
-        <div key={i} className="overflow-hidden rounded-xl border border-[var(--border)]">
-          {p.image_url ? (
-            <img src={p.image_url} alt={p.name} loading="lazy" className="aspect-square w-full object-cover" />
-          ) : (
-            <div className="flex aspect-square w-full items-center justify-center bg-[var(--accent)] text-2xl">
-              {p.emoji || "📦"}
-            </div>
-          )}
-          <div className="p-2.5">
-            <p className="text-xs font-semibold text-[var(--foreground)]">{p.name}</p>
-            {p.price && (
-              <p className="mt-0.5 font-mono text-[10px] font-semibold text-[var(--muted-foreground)]">{p.price}</p>
-            )}
-          </div>
+    <>
+      {hasProductCategories && (
+        <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+          {productTabs.map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveProductTab(tab)}
+              className={`shrink-0 rounded-full px-3.5 py-1.5 text-[11px] font-semibold transition ${
+                activeProductTab === tab
+                  ? "bg-[var(--foreground)] text-[var(--background)]"
+                  : "bg-[var(--accent)] text-[var(--muted-foreground)] hover:bg-[var(--border)]"
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
         </div>
-      ))}
-    </div>
+      )}
+      <div className="grid grid-cols-2 gap-2">
+        {filteredProducts.map((p, i) => (
+          <div key={i} className="overflow-hidden rounded-xl border border-[var(--border)]">
+            {p.image_url ? (
+              <img src={p.image_url} alt={p.name} loading="lazy" className="aspect-square w-full object-cover" />
+            ) : (
+              <div className="flex aspect-square w-full items-center justify-center bg-[var(--accent)] text-2xl">
+                {p.emoji || "📦"}
+              </div>
+            )}
+            <div className="p-2.5">
+              <p className="text-xs font-semibold text-[var(--foreground)]">{p.name}</p>
+              {p.price && (
+                <p className="mt-0.5 font-mono text-[10px] font-semibold text-[var(--muted-foreground)]">{p.price}</p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
   );
 
   return (

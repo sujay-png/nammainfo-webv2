@@ -1115,11 +1115,12 @@ export default function ProfilePage() {
             <div>
               <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-500">Products</p>
               <ItemListEditor
-                items={(editForm.products ?? []) as { name: string; description?: string; price?: string; image_url?: string }[]}
+                items={(editForm.products ?? []) as { name: string; description?: string; price?: string; category?: string; image_url?: string }[]}
                 onChange={(items) =>
                   setEditForm({ ...editForm, products: items })
                 }
                 label="product"
+                showCategory
                 showImage
                 profileId={profile.id}
               />
@@ -1716,7 +1717,7 @@ function ItemListEditor({
                       updated[i] = { ...item, category: e.target.value };
                       onChange(updated);
                     }}
-                    placeholder="Department / Category (e.g. IT, Media)"
+                    placeholder={label === "product" ? "Collection / Category (e.g. Electronics, Clothing)" : "Department / Category (e.g. IT, Media)"}
                     className="w-full rounded-lg border border-ink-200 bg-transparent px-2 py-1.5 text-xs text-ink-500 outline-none focus:border-ink-400"
                   />
                   <datalist id={`category-options-${label}`}>
