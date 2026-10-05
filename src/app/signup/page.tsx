@@ -52,7 +52,7 @@ function SignUpForm() {
           password,
         });
         if (signInError) throw signInError;
-        router.push(onboardingUrl);
+        router.push("/dashboard");
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Something went wrong.";
