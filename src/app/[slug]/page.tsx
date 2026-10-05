@@ -65,14 +65,9 @@ export default async function SlugPage({
 
   if (!profile) notFound();
 
-  // Increment tap count — fire-and-forget (don't block render)
-  if (card) {
-    supabase
-      .from("cards")
-      .update({ tap_count: (card.tap_count || 0) + 1 })
-      .eq("id", card.id)
-      .then(() => {});
-  }
+  // Tap counting happens client-side in <TapTracker /> (rendered by
+  // PublicProfileView) — this page is ISR-cached, so code here doesn't
+  // run once per visitor, and the anon key can't UPDATE cards anyway.
 
   // Fetch card, reviews and employees in parallel
   const [{ data: cardDataParallel }, { data: reviewsData }, { data: employeesData }] = await Promise.all([

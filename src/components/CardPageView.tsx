@@ -2,6 +2,7 @@ import { Download, MapPin } from "lucide-react";
 import CardPreview from "@/components/CardPreview";
 import ContactButtons from "@/components/ContactButtons";
 import AppCta from "@/components/AppCta";
+import TapTracker from "@/components/TapTracker";
 import type { Card, Profile } from "@/lib/supabase/types";
 
 /**
@@ -17,6 +18,7 @@ export default function CardPageView({
 }) {
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col gap-5 px-4 py-10 sm:py-16">
+      <TapTracker profileId={profile.id} cardId={card.id} />
       <CardPreview profile={profile} />
 
       <ContactButtons profile={profile} cardSlug={card.public_slug} />

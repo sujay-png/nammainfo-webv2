@@ -128,7 +128,16 @@ export default function SettingsPage() {
         <SettingsItem
           icon={<CreditCard size={18} />}
           label="Membership"
-          sublabel={profile?.is_member ? "Active" : "Free plan"}
+          sublabel={(() => {
+            if (!profile) return "";
+            const day = 86400000;
+            const joined = new Date(profile.created_at);
+            const expires = profile.membership_expires_at
+              ? new Date(profile.membership_expires_at)
+              : new Date(joined.getTime() + 365 * day);
+            const left = Math.max(0, Math.ceil((expires.getTime() - Date.now()) / day));
+            return left > 0 ? `${left} day${left === 1 ? "" : "s"} left` : "Expired — renew";
+          })()}
           onClick={() => {}}
         />
       </div>

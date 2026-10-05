@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { saveContactFromUrl } from "@/lib/save-contact";
 import Image from "next/image";
 import type { Profile, Card, Review, Employee } from "@/lib/supabase/types";
 import { initials } from "@/lib/utils";
@@ -41,8 +42,7 @@ export default function EmployeeProfileView({
 
   useEffect(() => {
     const isDark =
-      document.documentElement.classList.contains("dark") ||
-      window.matchMedia("(prefers-color-scheme: dark)").matches;
+      document.documentElement.classList.contains("dark");
     setThemeMode(isDark ? "dark" : "light");
   }, []);
 
@@ -60,48 +60,10 @@ export default function EmployeeProfileView({
   }, [owner.username, employee.slug]);
 
   function saveContact() {
-    const vcardContent = [
-      "BEGIN:VCARD",
-      "VERSION:3.0",
-      `FN:${employee.name}`,
-      (() => {
-        const parts = employee.name.trim().split(/\s+/);
-        if (parts.length > 1) return `N:${parts.slice(1).join(" ")};${parts[0]};;;`;
-        return `N:;${parts[0]};;;`;
-      })(),
-      `ORG:${owner.business_name ?? ""}`,
-      `TITLE:${employee.designation}`,
-      employee.phone ? `TEL;TYPE=WORK:${employee.phone}` : "",
-      employee.email ? `EMAIL:${employee.email}` : "",
-      owner.website ? `URL:${ensureProtocol(owner.website)}` : "",
-      owner.address ? `ADR;TYPE=WORK:;;${owner.address};;;;` : "",
-      `SOURCE:${profileUrl}`,
-      "END:VCARD",
-    ]
-      .filter(Boolean)
-      .join("\r\n");
-
-    const fileName = `${employee.name.replace(/[^a-z0-9 ]/gi, "").trim()}.vcf`;
-    const blob = new Blob([vcardContent], { type: "text/vcard;charset=utf-8" });
-    const blobUrl = URL.createObjectURL(blob);
-
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-    if (isIOS) {
-      window.location.href = blobUrl;
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
-    } else {
-      const a = document.createElement("a");
-      a.href = blobUrl;
-      a.download = fileName;
-      a.style.display = "none";
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(blobUrl);
-      }, 100);
-    }
+    saveContactFromUrl(
+      `/api/vcard/employee/${employee.id}`,
+      `${employee.name.replace(/[^a-z0-9 ]/gi, "").trim() || "contact"}.vcf`
+    );
   }
 
   async function shareProfile() {

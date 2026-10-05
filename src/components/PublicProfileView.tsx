@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { saveContactFromUrl } from "@/lib/save-contact";
 import Link from "next/link";
 import Image from "next/image";
 import type { Profile, Card, Review, Employee } from "@/lib/supabase/types";
 import { initials, googleReviewUrl } from "@/lib/utils";
 import { getTheme } from "@/lib/themes";
+import TapTracker from "@/components/TapTracker";
 import {
   Download,
   Phone,
@@ -167,8 +169,7 @@ export default function PublicProfileView({
   const [themeMode, setThemeMode] = useState<"light" | "dark">("light");
 
   useEffect(() => {
-    const isDark = document.documentElement.classList.contains("dark") ||
-      window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const isDark = document.documentElement.classList.contains("dark");
     setThemeMode(isDark ? "dark" : "light");
   }, []);
 
@@ -240,57 +241,10 @@ export default function PublicProfileView({
   }
 
   async function saveContact() {
-    const vcardContent = [
-      "BEGIN:VCARD",
-      "VERSION:3.0",
-      `FN:${profile.owner_name || profile.business_name || "Contact"}`,
-      (() => {
-        const parts = (profile.owner_name || "").trim().split(/\s+/);
-        if (parts.length > 1) return `N:${parts.slice(1).join(" ")};${parts[0]};;;`;
-        return `N:;${parts[0] || profile.business_name || "Contact"};;;`;
-      })(),
-      `ORG:${profile.business_name ?? ""}`,
-      `TITLE:${profile.job_title ?? ""}`,
-      profile.phone ? `TEL;TYPE=WORK:${profile.phone}` : "",
-      profile.email ? `EMAIL:${profile.email}` : "",
-      profile.website ? `URL:${ensureProtocol(profile.website)}` : "",
-      profile.address ? `ADR;TYPE=WORK:;;${profile.address};;;;` : "",
-      profile.bio ? `NOTE:${profile.bio.replace(/\n/g, "\\n")}` : "",
-      `SOURCE:${profileUrl}`,
-      "END:VCARD",
-    ]
-      .filter(Boolean)
-      .join("\r\n");
-
-    const fileName = `${(profile.owner_name ?? profile.business_name ?? "contact")
-      .replace(/[^a-z0-9 ]/gi, "")
-      .trim()}.vcf`;
-
-    // Use a server endpoint to serve the vCard with correct headers.
-    // iOS Safari requires Content-Disposition + proper Content-Type to
-    // trigger the native "Add to Contacts" flow.
-    const blob = new Blob([vcardContent], { type: "text/vcard;charset=utf-8" });
-    const blobUrl = URL.createObjectURL(blob);
-
-    // On iOS, location.href with a blob URL triggers the Contacts import;
-    // on other platforms, use an anchor download.
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-    if (isIOS) {
-      window.location.href = blobUrl;
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
-    } else {
-      const a = document.createElement("a");
-      a.href = blobUrl;
-      a.download = fileName;
-      a.style.display = "none";
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(blobUrl);
-      }, 100);
-    }
+    saveContactFromUrl(
+      `/api/vcard/${profile.id}`,
+      `${(profile.owner_name ?? profile.business_name ?? "contact").replace(/[^a-z0-9 ]/gi, "").trim() || "contact"}.vcf`
+    );
   }
 
   async function shareProfile() {
@@ -332,6 +286,7 @@ export default function PublicProfileView({
       className={`mx-auto max-w-lg bg-[var(--background)] ${hideHero ? "" : "min-h-dvh"}`}
       style={themeVars as React.CSSProperties}
     >
+      {!isEmployeeView && <TapTracker profileId={profile.id} cardId={card?.id} />}
       {!hideHero && (
         <>
           {/* Hero — Cover + Avatar */}
@@ -859,7 +814,7 @@ export default function PublicProfileView({
             <X size={20} />
           </button>
           <div
-            className="rounded-2xl bg-white p-6"
+            className="rounded-2xl bg-[#fff] p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <img

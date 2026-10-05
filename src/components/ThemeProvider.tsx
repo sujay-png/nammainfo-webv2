@@ -46,6 +46,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setColorThemeState(storedColor);
     document.documentElement.classList.toggle("dark", mode === "dark");
     applyColorTheme(storedColor, mode);
+
+    // Follow the phone's light/dark setting live, as long as the user
+    // hasn't picked a mode explicitly in Settings.
+    const mql = window.matchMedia("(prefers-color-scheme: dark)");
+    const onSystemChange = (e: MediaQueryListEvent) => {
+      if (localStorage.getItem("theme")) return;
+      const next: Mode = e.matches ? "dark" : "light";
+      setTheme(next);
+      document.documentElement.classList.toggle("dark", next === "dark");
+      applyColorTheme(localStorage.getItem("colorTheme") || "default", next);
+    };
+    mql.addEventListener?.("change", onSystemChange);
+    return () => mql.removeEventListener?.("change", onSystemChange);
   }, []);
 
   const toggleTheme = () => {

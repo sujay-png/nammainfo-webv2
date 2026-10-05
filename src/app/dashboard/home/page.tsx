@@ -8,12 +8,12 @@ import {
   Eye,
   TrendingUp,
   CheckCircle2,
-  Crown,
   ChevronRight,
   Activity,
   Zap,
   BarChart3,
   UserPlus,
+  CalendarClock,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -67,6 +67,89 @@ function StatCard({
       <p className="font-headline text-2xl font-semibold text-[var(--foreground)]">
         {value}
       </p>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Card validity (1 year from joining) + day countdown                */
+/* ------------------------------------------------------------------ */
+
+const VALIDITY_DAYS = 365;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function startOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function fmtDate(d: Date) {
+  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function ValidityCard({ profile }: { profile: Profile }) {
+  const joined = startOfDay(new Date(profile.created_at));
+  // A renewal sets membership_expires_at; otherwise the card is valid for
+  // 365 days from the day they joined.
+  const expires = profile.membership_expires_at
+    ? startOfDay(new Date(profile.membership_expires_at))
+    : new Date(joined.getTime() + VALIDITY_DAYS * DAY_MS);
+
+  const today = startOfDay(new Date());
+  const daysLeft = Math.max(0, Math.round((expires.getTime() - today.getTime()) / DAY_MS));
+  const totalDays = Math.max(1, Math.round((expires.getTime() - joined.getTime()) / DAY_MS));
+  const pctLeft = Math.min(100, Math.max(0, (daysLeft / totalDays) * 100));
+  const expired = daysLeft === 0;
+  const endingSoon = !expired && daysLeft <= 30;
+
+  const tone = expired
+    ? "border-red-500/30 bg-red-500/5"
+    : endingSoon
+      ? "border-amber-500/30 bg-amber-500/5"
+      : "border-[var(--border)] bg-[var(--card)]";
+  const barColor = expired ? "bg-red-500" : endingSoon ? "bg-amber-500" : "bg-[var(--primary)]";
+
+  return (
+    <div className={`rounded-2xl border p-4 ${tone}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--muted)] text-[var(--foreground)]">
+            <CalendarClock size={20} strokeWidth={1.6} />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-[var(--foreground)]">
+              Member since {fmtDate(joined)}
+            </p>
+            <p className="font-mono text-[11px] text-[var(--muted-foreground)]">
+              {expired ? `Expired on ${fmtDate(expires)}` : `Valid till ${fmtDate(expires)}`}
+            </p>
+          </div>
+        </div>
+        <div className="text-right">
+          <p
+            className={`font-headline text-2xl font-semibold leading-none ${
+              expired ? "text-red-500" : endingSoon ? "text-amber-600 dark:text-amber-400" : "text-[var(--foreground)]"
+            }`}
+          >
+            {daysLeft}
+          </p>
+          <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
+            {daysLeft === 1 ? "day left" : "days left"}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[var(--muted)]">
+        <div className={`h-full rounded-full transition-all duration-500 ${barColor}`} style={{ width: `${pctLeft}%` }} />
+      </div>
+
+      {(expired || endingSoon) && (
+        <Link
+          href="/dashboard/settings"
+          className="mt-3 inline-flex rounded-lg bg-[var(--primary)] px-3 py-1.5 font-mono text-[11px] font-medium text-[var(--primary-foreground)]"
+        >
+          {expired ? "Renew card" : "Renew now"}
+        </Link>
+      )}
     </div>
   );
 }
@@ -194,48 +277,8 @@ export default function HomePage() {
         <StatCard icon={Eye} label="Connections" value={connections.length} />
       </div>
 
-      {/* Membership status */}
-      <div
-        className={`rounded-2xl border p-4 ${
-          profile.is_member
-            ? "border-amber-500/30 bg-amber-500/5"
-            : "border-[var(--border)] bg-[var(--card)]"
-        }`}
-      >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div
-              className={`flex h-10 w-10 items-center justify-center rounded-xl ${
-                profile.is_member
-                  ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                  : "bg-[var(--muted)] text-[var(--muted-foreground)]"
-              }`}
-            >
-              <Crown size={20} strokeWidth={1.6} />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-[var(--foreground)]">
-                {profile.is_member ? "Premium Member" : "Free Plan"}
-              </p>
-              <p className="font-mono text-[11px] text-[var(--muted-foreground)]">
-                {profile.is_member && profile.membership_expires_at
-                  ? `Expires ${new Date(profile.membership_expires_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`
-                  : profile.is_member
-                    ? "Active membership"
-                    : "Upgrade to unlock all features"}
-              </p>
-            </div>
-          </div>
-          {!profile.is_member && (
-            <Link
-              href="/dashboard/settings"
-              className="rounded-lg bg-[var(--primary)] px-3 py-1.5 font-mono text-[11px] font-medium text-[var(--primary-foreground)]"
-            >
-              Upgrade
-            </Link>
-          )}
-        </div>
-      </div>
+      {/* Card validity — 1 year from the day they joined */}
+      <ValidityCard profile={profile} />
 
       {/* Profile completion */}
       {completionPct < 100 && (
