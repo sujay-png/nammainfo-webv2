@@ -262,17 +262,27 @@ export default function PublicProfileView({
       .filter(Boolean)
       .join("\r\n");
 
-    const blob = new Blob([vcardContent], { type: "text/vcard" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${(profile.owner_name ?? profile.business_name ?? "contact")
+    const fileName = `${(profile.owner_name ?? profile.business_name ?? "contact")
       .replace(/[^a-z0-9 ]/gi, "")
       .trim()}.vcf`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+
+    // iOS Safari needs a data: URI to trigger the Contacts import flow;
+    // blob: URLs just download a file that iOS ignores.
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    if (isIOS) {
+      const dataUri = "data:text/vcard;charset=utf-8," + encodeURIComponent(vcardContent);
+      window.open(dataUri);
+    } else {
+      const blob = new Blob([vcardContent], { type: "text/vcard" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
   }
 
   async function shareProfile() {

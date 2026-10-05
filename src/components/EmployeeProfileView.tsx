@@ -81,15 +81,21 @@ export default function EmployeeProfileView({
       .filter(Boolean)
       .join("\r\n");
 
-    const blob = new Blob([vcardContent], { type: "text/vcard" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${employee.name.replace(/[^a-z0-9 ]/gi, "").trim()}.vcf`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const fileName = `${employee.name.replace(/[^a-z0-9 ]/gi, "").trim()}.vcf`;
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    if (isIOS) {
+      window.open("data:text/vcard;charset=utf-8," + encodeURIComponent(vcardContent));
+    } else {
+      const blob = new Blob([vcardContent], { type: "text/vcard" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
   }
 
   async function shareProfile() {
