@@ -64,6 +64,11 @@ export default function EmployeeProfileView({
       "BEGIN:VCARD",
       "VERSION:3.0",
       `FN:${employee.name}`,
+      (() => {
+        const parts = employee.name.trim().split(/\s+/);
+        if (parts.length > 1) return `N:${parts.slice(1).join(" ")};${parts[0]};;;`;
+        return `N:;${parts[0]};;;`;
+      })(),
       `ORG:${owner.business_name ?? ""}`,
       `TITLE:${employee.designation}`,
       employee.phone ? `TEL;TYPE=WORK:${employee.phone}` : "",

@@ -243,14 +243,19 @@ export default function PublicProfileView({
     const vcardContent = [
       "BEGIN:VCARD",
       "VERSION:3.0",
-      `FN:${profile.owner_name ?? ""}`,
+      `FN:${profile.owner_name || profile.business_name || "Contact"}`,
+      (() => {
+        const parts = (profile.owner_name || "").trim().split(/\s+/);
+        if (parts.length > 1) return `N:${parts.slice(1).join(" ")};${parts[0]};;;`;
+        return `N:;${parts[0] || profile.business_name || "Contact"};;;`;
+      })(),
       `ORG:${profile.business_name ?? ""}`,
       `TITLE:${profile.job_title ?? ""}`,
       profile.phone ? `TEL;TYPE=WORK:${profile.phone}` : "",
       profile.email ? `EMAIL:${profile.email}` : "",
       profile.website ? `URL:${ensureProtocol(profile.website)}` : "",
       profile.address ? `ADR;TYPE=WORK:;;${profile.address};;;;` : "",
-      profile.bio ? `NOTE:${profile.bio}` : "",
+      profile.bio ? `NOTE:${profile.bio.replace(/\n/g, "\\n")}` : "",
       `SOURCE:${profileUrl}`,
       "END:VCARD",
     ]
