@@ -1226,8 +1226,9 @@ export default function ProfilePage() {
       {editing === "banking" && (
         <EditSheet title="Banking & Payments" onClose={() => setEditing(null)}>
           <BankAccountsEditor
-            accounts={(editForm.bank_accounts ?? []) as { bank_name?: string; account_holder?: string; account_number?: string; ifsc?: string; upi_id?: string }[]}
+            accounts={(editForm.bank_accounts ?? []) as { bank_name?: string; account_holder?: string; account_number?: string; ifsc?: string; upi_id?: string; qr_url?: string }[]}
             onChange={(accounts) => setEditForm({ ...editForm, bank_accounts: accounts } as Partial<Profile>)}
+            profileId={profile.id}
           />
           <SaveButton saving={saving} onClick={saveProfile} />
         </EditSheet>
@@ -1757,10 +1758,44 @@ function ItemListEditor({
 function BankAccountsEditor({
   accounts,
   onChange,
+  profileId,
 }: {
-  accounts: { bank_name?: string; account_holder?: string; account_number?: string; ifsc?: string; upi_id?: string }[];
-  onChange: (accounts: { bank_name?: string; account_holder?: string; account_number?: string; ifsc?: string; upi_id?: string }[]) => void;
+  accounts: { bank_name?: string; account_holder?: string; account_number?: string; ifsc?: string; upi_id?: string; qr_url?: string }[];
+  onChange: (accounts: { bank_name?: string; account_holder?: string; account_number?: string; ifsc?: string; upi_id?: string; qr_url?: string }[]) => void;
+  profileId: string;
 }) {
+  const [qrUploading, setQrUploading] = useState<number | null>(null);
+
+  async function uploadQr(file: File, index: number) {
+    const MAX_SIZE = 5 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      alert("QR image must be under 5 MB");
+      return;
+    }
+    setQrUploading(index);
+    const supabase = createClient();
+    const ext = file.name.split(".").pop();
+    const path = `${profileId}/qr-${index}-${Date.now()}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("profile-media")
+      .upload(path, file, { upsert: true, contentType: file.type });
+
+    if (!uploadError) {
+      const { data: { publicUrl } } = supabase.storage.from("profile-media").getPublicUrl(path);
+      const updated = [...accounts];
+      updated[index] = { ...accounts[index], qr_url: publicUrl };
+      onChange(updated);
+    }
+    setQrUploading(null);
+  }
+
+  function removeQr(index: number) {
+    const updated = [...accounts];
+    updated[index] = { ...accounts[index], qr_url: undefined };
+    onChange(updated);
+  }
+
   return (
     <div className="space-y-3">
       {accounts.map((acc, i) => (
@@ -1817,6 +1852,50 @@ function BankAccountsEditor({
                 placeholder="UPI ID (e.g. name@upi)"
                 className="w-full border-none bg-transparent text-xs text-ink-500 outline-none"
               />
+
+              {/* QR Code Upload */}
+              <div className="pt-1">
+                {acc.qr_url ? (
+                  <div className="flex items-center gap-3 rounded-lg border border-ink-100 p-2">
+                    <img
+                      src={acc.qr_url}
+                      alt="Payment QR"
+                      className="h-16 w-16 rounded-lg object-contain"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium text-ink-600">Payment QR</p>
+                    </div>
+                    <button
+                      onClick={() => removeQr(i)}
+                      className="rounded-lg p-1.5 text-ink-400 transition hover:bg-red-50 hover:text-red-500"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-ink-200 p-2.5 transition hover:border-ink-400 hover:bg-ink-50">
+                    {qrUploading === i ? (
+                      <Loader2 size={16} className="animate-spin text-ink-400" />
+                    ) : (
+                      <QrCode size={16} className="text-ink-400" />
+                    )}
+                    <span className="text-xs font-medium text-ink-500">
+                      {qrUploading === i ? "Uploading…" : "Upload Payment QR"}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={qrUploading === i}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) uploadQr(f, i);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                )}
+              </div>
             </div>
             <button
               onClick={() => onChange(accounts.filter((_, idx) => idx !== i))}
@@ -1829,7 +1908,7 @@ function BankAccountsEditor({
       ))}
       <button
         onClick={() =>
-          onChange([...accounts, { bank_name: "", account_holder: "", account_number: "", ifsc: "", upi_id: "" }])
+          onChange([...accounts, { bank_name: "", account_holder: "", account_number: "", ifsc: "", upi_id: "", qr_url: "" }])
         }
         className="flex items-center gap-1.5 text-xs font-medium text-ink-500 hover:text-ink-700"
       >
