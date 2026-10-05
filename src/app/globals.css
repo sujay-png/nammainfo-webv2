@@ -137,3 +137,16 @@ select {
     ),
     linear-gradient(155deg, #2b0e09 0%, #4a1811 45%, #1b1b1f 100%);
 }
+
+/* Sign-up hero: the floating NFC card */
+@keyframes auth-card-float {
+  0%, 100% { transform: rotateX(14deg) rotateY(-16deg) rotateZ(3deg) translateY(0); }
+  50%      { transform: rotateX(10deg) rotateY(-10deg) rotateZ(2deg) translateY(-8px); }
+}
+.auth-card-float {
+  transform-style: preserve-3d;
+  animation: auth-card-float 6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-card-float { animation: none; transform: rotateX(12deg) rotateY(-14deg) rotateZ(3deg); }
+}
