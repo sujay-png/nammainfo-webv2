@@ -266,22 +266,30 @@ export default function PublicProfileView({
       .replace(/[^a-z0-9 ]/gi, "")
       .trim()}.vcf`;
 
-    // iOS Safari needs a data: URI to trigger the Contacts import flow;
-    // blob: URLs just download a file that iOS ignores.
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    // Use a server endpoint to serve the vCard with correct headers.
+    // iOS Safari requires Content-Disposition + proper Content-Type to
+    // trigger the native "Add to Contacts" flow.
+    const blob = new Blob([vcardContent], { type: "text/vcard;charset=utf-8" });
+    const blobUrl = URL.createObjectURL(blob);
+
+    // On iOS, location.href with a blob URL triggers the Contacts import;
+    // on other platforms, use an anchor download.
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
     if (isIOS) {
-      const dataUri = "data:text/vcard;charset=utf-8," + encodeURIComponent(vcardContent);
-      window.open(dataUri);
+      window.location.href = blobUrl;
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
     } else {
-      const blob = new Blob([vcardContent], { type: "text/vcard" });
-      const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url;
+      a.href = blobUrl;
       a.download = fileName;
+      a.style.display = "none";
       document.body.appendChild(a);
       a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+      }, 100);
     }
   }
 

@@ -82,19 +82,25 @@ export default function EmployeeProfileView({
       .join("\r\n");
 
     const fileName = `${employee.name.replace(/[^a-z0-9 ]/gi, "").trim()}.vcf`;
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const blob = new Blob([vcardContent], { type: "text/vcard;charset=utf-8" });
+    const blobUrl = URL.createObjectURL(blob);
+
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
     if (isIOS) {
-      window.open("data:text/vcard;charset=utf-8," + encodeURIComponent(vcardContent));
+      window.location.href = blobUrl;
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
     } else {
-      const blob = new Blob([vcardContent], { type: "text/vcard" });
-      const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url;
+      a.href = blobUrl;
       a.download = fileName;
+      a.style.display = "none";
       document.body.appendChild(a);
       a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+      }, 100);
     }
   }
 
