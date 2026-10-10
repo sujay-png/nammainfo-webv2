@@ -14,6 +14,7 @@ import { clsx } from "clsx";
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { useTheme } from "@/components/ThemeProvider";
+import { flushPendingSaves } from "@/lib/saved-cards";
 
 const tabs = [
   { href: "/dashboard/home", label: "Home", icon: Home },
@@ -37,6 +38,13 @@ export default function DashboardLayout({
       const supabase = createClient();
       const user = await getCurrentUser();
       if (!user) return;
+
+      // Remember this phone has an account, and save any cards that were
+      // tapped while signed out.
+      try {
+        localStorage.setItem("nammainfo:hasAccount", "1");
+      } catch {}
+      flushPendingSaves();
 
       const { data } = await supabase
         .from("profiles")

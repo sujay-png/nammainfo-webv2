@@ -4,51 +4,72 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentUser } from "@/lib/supabase/current-user";
-import type { Profile } from "@/lib/supabase/types";
+import {
+  flushPendingSaves,
+  readSavedCache,
+  writeSavedCache,
+  type SavedCardSummary,
+} from "@/lib/saved-cards";
 import { initials, formatDistanceToNow } from "@/lib/utils";
 import { Bookmark, ChevronRight, Search } from "lucide-react";
 
 export default function SavedPage() {
   const router = useRouter();
-  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [profiles, setProfiles] = useState<SavedCardSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
-      const supabase = createClient();
       const user = await getCurrentUser();
-      if (!user) return;
+      if (!user || cancelled) return;
 
-      // Get connections
+      // 1. Instant: show what we already know (includes cards saved a
+      //    moment ago on a profile page).
+      const cached = readSavedCache(user.id);
+      if (cached) {
+        setProfiles(cached);
+        setLoading(false);
+      }
+
+      // 2. Background: save anything tapped while signed out, then refresh.
+      await flushPendingSaves();
+      const supabase = createClient();
       const { data: connections } = await supabase
         .from("connections")
         .select("connected_user_id, created_at")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
-      if (connections && connections.length > 0) {
-        const ids = connections.map(
-          (c: { connected_user_id: string }) => c.connected_user_id
-        );
+      const rows = (connections ?? []) as { connected_user_id: string; created_at: string }[];
+      let fresh: SavedCardSummary[] = [];
+      if (rows.length > 0) {
         const { data: profileData } = await supabase
           .from("profiles")
-          .select("*")
-          .in("id", ids);
+          .select("id, owner_name, business_name, job_title, logo_url, avatar_url, username, slug")
+          .in("id", rows.map((r) => r.connected_user_id));
 
-        if (profileData) {
-          // Preserve the connections order
-          const profileMap = new Map(
-            (profileData as unknown as Profile[]).map((p) => [p.id, p])
-          );
-          const ordered = ids
-            .map((id: string) => profileMap.get(id))
-            .filter(Boolean) as Profile[];
-          setProfiles(ordered);
-        }
+        const byId = new Map(
+          ((profileData ?? []) as Omit<SavedCardSummary, "saved_at">[]).map((p) => [p.id, p])
+        );
+        // Preserve the connections order (most recently tapped first)
+        fresh = rows
+          .map((r) => {
+            const p = byId.get(r.connected_user_id);
+            return p ? { ...p, saved_at: r.created_at } : null;
+          })
+          .filter(Boolean) as SavedCardSummary[];
       }
+
+      if (cancelled) return;
+      setProfiles(fresh);
+      writeSavedCache(user.id, fresh);
       setLoading(false);
     })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const filtered = profiles.filter((p) => {
@@ -112,10 +133,11 @@ export default function SavedPage() {
               }}
               className="flex w-full items-center gap-3 rounded-2xl border border-ink-100 bg-white p-3.5 text-left transition hover:shadow-card"
             >
-              {profile.logo_url ? (
+              {profile.logo_url || profile.avatar_url ? (
                 <img
-                  src={profile.logo_url}
+                  src={(profile.logo_url || profile.avatar_url)!}
                   alt=""
+                  loading="lazy"
                   className="h-12 w-12 rounded-xl object-cover"
                 />
               ) : (
@@ -132,6 +154,11 @@ export default function SavedPage() {
                     .filter(Boolean)
                     .join(" · ")}
                 </p>
+                {profile.saved_at && (
+                  <p className="mt-0.5 font-mono text-[10px] text-ink-300">
+                    Saved {formatDistanceToNow(profile.saved_at)}
+                  </p>
+                )}
               </div>
               <ChevronRight size={16} className="shrink-0 text-ink-300" />
             </button>

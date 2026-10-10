@@ -8,6 +8,7 @@ import type { Profile, Card, Review, Employee } from "@/lib/supabase/types";
 import { initials, googleReviewUrl, directionsUrl } from "@/lib/utils";
 import { getTheme } from "@/lib/themes";
 import TapTracker from "@/components/TapTracker";
+import AutoSaveCard from "@/components/AutoSaveCard";
 import {
   Download,
   Phone,
@@ -288,6 +289,20 @@ export default function PublicProfileView({
       style={themeVars as React.CSSProperties}
     >
       {!isEmployeeView && <TapTracker profileId={profile.id} cardId={card?.id} />}
+      {!isEmployeeView && (
+        <AutoSaveCard
+          card={{
+            id: profile.id,
+            owner_name: profile.owner_name,
+            business_name: profile.business_name,
+            job_title: profile.job_title,
+            logo_url: profile.logo_url,
+            avatar_url: profile.avatar_url,
+            username: profile.username,
+            slug: card?.public_slug ?? profile.slug ?? null,
+          }}
+        />
+      )}
       {!hideHero && (
         <>
           {/* Hero — Cover + Avatar */}

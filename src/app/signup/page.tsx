@@ -17,6 +17,7 @@ import {
   MailCheck,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { flushPendingSaves } from "@/lib/saved-cards";
 
 /* ------------------------------------------------------------------ */
 /*  Hero: a floating "physical" NFC card — always dark, so it reads     */
@@ -165,7 +166,13 @@ function SignUpForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [mode, setMode] = useState<"signup" | "signin">("signup");
+  const [mode, setMode] = useState<"signup" | "signin">(
+    searchParams.get("mode") === "signin" ? "signin" : "signup"
+  );
+  // Where to go after signing in (only same-site paths), e.g. back to the
+  // card you were saving.
+  const nextParam = searchParams.get("next");
+  const next = nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : null;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(searchParams.get("error"));
   const [checkEmail, setCheckEmail] = useState(false);
@@ -197,6 +204,10 @@ function SignUpForm() {
 
         if (data.session) {
           // Email confirmation is off — we're signed in immediately.
+          try {
+            localStorage.setItem("nammainfo:hasAccount", "1");
+          } catch {}
+          await flushPendingSaves();
           router.push(onboardingUrl);
         } else {
           // Confirmation email sent; the link carries them straight to
@@ -209,7 +220,11 @@ function SignUpForm() {
           password,
         });
         if (signInError) throw signInError;
-        router.push("/dashboard");
+        try {
+          localStorage.setItem("nammainfo:hasAccount", "1");
+        } catch {}
+        await flushPendingSaves();
+        router.push(next ?? "/dashboard");
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Something went wrong.";
