@@ -15,6 +15,7 @@ import {
   QrCode,
   Share2,
   MailCheck,
+  BookmarkPlus,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { flushPendingSaves } from "@/lib/saved-cards";
@@ -76,9 +77,9 @@ function HeroCard() {
   );
 }
 
-function HeroPanel({ fromTap }: { fromTap: boolean }) {
+function HeroPanel({ fromTap, hideOnMobile = false }: { fromTap: boolean; hideOnMobile?: boolean }) {
   return (
-    <section className="relative overflow-hidden bg-[#0a0a0a] px-6 pb-12 pt-7 text-[#fafafa] lg:flex lg:min-h-dvh lg:w-1/2 lg:flex-col lg:justify-between lg:px-14 lg:py-12">
+    <section className={`${hideOnMobile ? "hidden " : ""}relative overflow-hidden bg-[#0a0a0a] px-6 pb-12 pt-7 text-[#fafafa] lg:flex lg:min-h-dvh lg:w-1/2 lg:flex-col lg:justify-between lg:px-14 lg:py-12`}>
       {/* dotted grid */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.08)_1px,transparent_1px)] [background-size:18px_18px] [mask-image:radial-gradient(ellipse_at_center,black_30%,transparent_75%)]" />
       <div className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-white/[0.06] blur-3xl" />
@@ -173,6 +174,9 @@ function SignUpForm() {
   // card you were saving.
   const nextParam = searchParams.get("next");
   const next = nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : null;
+  // Came from "Save this card before you go?" on someone's profile.
+  const saveId = searchParams.get("save");
+  const saveName = searchParams.get("name") || "this card";
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(searchParams.get("error"));
   const [checkEmail, setCheckEmail] = useState(false);
@@ -197,7 +201,15 @@ function SignUpForm() {
           email,
           password,
           options: {
-            emailRedirectTo: `${window.location.origin}${onboardingUrl}`,
+            // In the save-card flow there's no onboarding: the confirmation
+            // link lands them in Saved Cards (via /onboarding?saved=1, an
+            // already-allowed redirect that forwards straight on).
+            emailRedirectTo: saveId
+              ? `${window.location.origin}/onboarding?saved=1`
+              : `${window.location.origin}${onboardingUrl}`,
+            // Stored on the account, so the card is saved even if the
+            // confirmation email is opened in another browser or app.
+            data: saveId ? { pending_save: saveId } : undefined,
           },
         });
         if (signUpError) throw signUpError;
@@ -208,7 +220,7 @@ function SignUpForm() {
             localStorage.setItem("nammainfo:hasAccount", "1");
           } catch {}
           await flushPendingSaves();
-          router.push(onboardingUrl);
+          router.push(saveId ? "/dashboard/saved" : onboardingUrl);
         } else {
           // Confirmation email sent; the link carries them straight to
           // /onboarding (with ?ref preserved) once they click it.
@@ -224,7 +236,7 @@ function SignUpForm() {
           localStorage.setItem("nammainfo:hasAccount", "1");
         } catch {}
         await flushPendingSaves();
-        router.push(next ?? "/dashboard");
+        router.push(saveId ? "/dashboard/saved" : next ?? "/dashboard");
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Something went wrong.";
@@ -274,9 +286,9 @@ function SignUpForm() {
 
   return (
     <main className="min-h-dvh bg-[var(--background)] lg:flex">
-      <HeroPanel fromTap={!!ref} />
+      <HeroPanel fromTap={!!ref} hideOnMobile={!!saveId} />
 
-      <section className="relative -mt-6 rounded-t-[28px] border-t border-[var(--border)] bg-[var(--background)] px-6 pb-12 pt-7 lg:border-t-0 lg:mt-0 lg:flex lg:w-1/2 lg:items-center lg:justify-center lg:rounded-none lg:px-14">
+      <section className={`relative bg-[var(--background)] px-6 pb-12 lg:mt-0 lg:flex lg:w-1/2 lg:items-center lg:justify-center lg:rounded-none lg:border-t-0 lg:px-14 lg:pt-7 ${saveId ? "pt-12" : "-mt-6 rounded-t-[28px] border-t border-[var(--border)] pt-7"}`}>
         <div className="mx-auto w-full max-w-sm animate-fade-in">
           {/* Mode switch */}
           <div
@@ -307,13 +319,29 @@ function SignUpForm() {
 
           <div className="mt-7">
             <h1 className="font-headline text-[26px] font-semibold tracking-tight text-[var(--foreground)]">
-              {isSignup ? "Create your card" : "Welcome back"}
+              {saveId
+                ? isSignup
+                  ? "Create account to save"
+                  : "Sign in to save"
+                : isSignup
+                  ? "Create your card"
+                  : "Welcome back"}
             </h1>
             <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-              {isSignup
-                ? "Free to start. Set up in under a minute."
-                : "Sign in to manage your card and see who tapped it."}
+              {saveId
+                ? `Just your email and a password — ${saveName} goes straight into your Saved Cards.`
+                : isSignup
+                  ? "Free to start. Set up in under a minute."
+                  : "Sign in to manage your card and see who tapped it."}
             </p>
+            {saveId && (
+              <div className="mt-4 inline-flex max-w-full items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--card)] py-1.5 pl-1.5 pr-3.5 text-xs font-medium text-[var(--foreground)]">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--muted)]">
+                  <BookmarkPlus size={13} />
+                </span>
+                <span className="truncate">Saving {saveName}</span>
+              </div>
+            )}
           </div>
 
           <form onSubmit={handleSubmit} className="mt-7 space-y-4">
@@ -416,7 +444,7 @@ function SignUpForm() {
                 </>
               ) : (
                 <>
-                  {isSignup ? "Create my card" : "Sign in"}
+                  {saveId ? (isSignup ? "Create account & save" : "Sign in & save") : isSignup ? "Create my card" : "Sign in"}
                   <ArrowRight size={17} className="transition-transform group-hover:translate-x-0.5" />
                 </>
               )}

@@ -36,6 +36,23 @@ export default function OnboardingPage() {
     bio: "",
   });
 
+  // Arrived from a sign-up confirmation email in the "save this card"
+  // flow — no onboarding steps; go straight to Saved Cards.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("saved") !== "1") return;
+    const supabase = createClient();
+    const go = () => router.replace("/dashboard/saved");
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) return go();
+      const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+        if (session) {
+          sub.subscription.unsubscribe();
+          go();
+        }
+      });
+    });
+  }, [router]);
+
   useEffect(() => {
     // Pre-fill email from auth
     (async () => {

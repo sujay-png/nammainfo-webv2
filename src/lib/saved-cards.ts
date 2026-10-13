@@ -73,21 +73,47 @@ export function queuePendingSave(ownerId: string) {
   } catch {}
 }
 
-/** Saves any cards tapped while signed out. Safe to call anywhere, any time. */
-export async function flushPendingSaves() {
-  const pending = readPending();
-  if (pending.length === 0) return;
+/**
+ * Saves any cards tapped while signed out. Two sources:
+ *  - this browser's local queue (signed in on the same phone), and
+ *  - `pending_save` on the account itself, set at sign-up — so it still
+ *    works if the confirmation email is opened in another browser/app.
+ * Concurrent callers share one run, so a page that awaits this always
+ * sees the save finished before it loads the list.
+ */
+let inflight: Promise<void> | null = null;
+
+export function flushPendingSaves(): Promise<void> {
+  if (!inflight) {
+    inflight = doFlush().finally(() => {
+      inflight = null;
+    });
+  }
+  return inflight;
+}
+
+async function doFlush() {
   const user = await getCurrentUser();
   if (!user) return;
+
+  const fromAccount = (user.user_metadata as { pending_save?: string | null } | undefined)?.pending_save;
+  const ids = new Set(readPending());
+  if (fromAccount) ids.add(fromAccount);
+  ids.delete(user.id);
+  if (ids.size === 0) return;
+
+  const supabase = createClient();
+  const results = await Promise.all(
+    Array.from(ids).map((id) => supabase.rpc("save_card", { p_owner_id: id } as never))
+  );
+  if (results.some((r) => r.error)) return; // keep the queue; retry next time
+
   try {
     localStorage.removeItem(PENDING_KEY);
   } catch {}
-  const supabase = createClient();
-  await Promise.all(
-    pending
-      .filter((id) => id !== user.id)
-      .map((id) => supabase.rpc("save_card", { p_owner_id: id } as never))
-  );
+  if (fromAccount) {
+    await supabase.auth.updateUser({ data: { pending_save: null } }).catch(() => {});
+  }
 }
 
 /* ---------- save / unsave ---------- */

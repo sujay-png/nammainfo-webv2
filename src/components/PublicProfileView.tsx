@@ -78,74 +78,130 @@ function getWhatsAppNumber(
   return wa.url.replace(/[^0-9]/g, "");
 }
 
-/**
- * Generate unique AI-written review suggestions based on the business's
- * services and products, optionally filtered to a specific category.
- */
+/* ------------------------------------------------------------------ */
+/*  Review suggestions                                                  */
+/*                                                                      */
+/*  Each suggestion is a full 3-paragraph review about ONE specific     */
+/*  service/product the owner has listed:                               */
+/*    1. about the company                                              */
+/*    2. about the service/product itself (uses its description)        */
+/*    3. recommending it to others                                      */
+/*  The service/product name appears in every paragraph. Paragraph      */
+/*  templates are mixed randomly, so refreshing gives fresh wording.    */
+/* ------------------------------------------------------------------ */
+
+type ReviewItem = { name: string; description?: string; category?: string; kind: "service" | "product" };
+
+function pick<T>(arr: T[], used: Set<number>): T {
+  const free = arr.map((_, i) => i).filter((i) => !used.has(i));
+  const pool = free.length ? free : arr.map((_, i) => i);
+  const idx = pool[Math.floor(Math.random() * pool.length)];
+  used.add(idx);
+  return arr[idx];
+}
+
+/** First sentence of a description, cleaned up to slot into a sentence. */
+function descPhrase(desc?: string): string | null {
+  if (!desc) return null;
+  const first = desc.trim().split(/(?<=[.!?])\s+/)[0]?.replace(/[.!?\s]+$/, "") ?? "";
+  if (first.length < 8 || first.length > 180) return null;
+  // lower-case the first letter unless it looks like an acronym/name
+  return /^[A-Z][a-z]/.test(first) ? first[0].toLowerCase() + first.slice(1) : first;
+}
+
 function generateReviewSuggestions(
   profile: Profile,
   count: number = 4,
   category?: string
 ): string[] {
   const biz = profile.business_name || profile.owner_name || "this business";
-  const allServices = (
-    profile.services as { name: string; description?: string; category?: string }[]
-  ) ?? [];
-  const filteredServices = category
-    ? allServices.filter((s) => s.category?.trim() === category)
-    : allServices;
-  const services = filteredServices.map((s) => s.name);
-  const products = (
-    profile.products as { name: string; description?: string }[]
-  )?.map((p) => p.name) ?? [];
-  const area = profile.coverage_area || "";
+  const owner = profile.owner_name && profile.business_name ? profile.owner_name.split(" ")[0] : null;
+  const area = profile.coverage_area?.trim() || "";
   const years = profile.years_in_business;
-  const catLabel = category || "";
+  const clients = profile.clients_served;
 
-  const templates: ((svc: string, prod: string) => string)[] = [
+  const services = ((profile.services as ReviewItem[]) ?? []).map((s) => ({ ...s, kind: "service" as const }));
+  const products = ((profile.products as ReviewItem[]) ?? []).map((p) => ({ ...p, kind: "product" as const }));
+  let items: ReviewItem[] = [...services, ...products].filter((it) => it?.name?.trim());
+  if (category) items = items.filter((it) => it.category?.trim() === category);
+  if (items.length === 0) {
+    items = [{ name: category || "their service", kind: "service" }];
+  }
+
+  // ---------- Paragraph 1: the company ----------
+  const p1: ((svc: string) => string)[] = [
     (svc) =>
-      `Outstanding experience with ${biz}${catLabel ? ` (${catLabel})` : ""}! Their ${svc || "services"} exceeded all my expectations. Highly professional team that truly cares about quality.`,
+      `I recently got in touch with ${biz} for ${svc}, and from the very first conversation it was clear this is a business that takes its customers seriously. ${years ? `With ${years}+ years in the field, they` : "They"} came across as experienced, honest and genuinely interested in understanding what I needed rather than just making a sale.`,
     (svc) =>
-      `I've been using ${biz} for ${svc || "their services"} and the results are consistently excellent. Punctual, reliable, and great value for money.`,
-    (_, prod) =>
-      `${biz} delivers top-notch ${prod || catLabel || "products"}. The attention to detail is remarkable. Will definitely recommend to friends and family.`,
+      `${biz} was recommended to me when I was looking for ${svc}${area ? ` in ${area}` : ""}, and I can now see why people speak so highly of them. The team is professional, approachable and very transparent about pricing and timelines, which immediately made me comfortable working with them.`,
     (svc) =>
-      `Fantastic ${svc || catLabel || "service"} by ${biz}! They went above and beyond to ensure everything was perfect. A trustworthy business you can count on.`,
-    () =>
-      `Best in ${area || "the area"}! ${biz} provides premium quality at fair prices. ${years ? `With ${years}+ years of experience, they know exactly what they're doing.` : "Their expertise really shows."}`,
+      `I have dealt with quite a few businesses over the years, but ${biz} really stands out. When I approached them for ${svc}, ${owner ? `${owner} and the team` : "the team"} were quick to respond, patient with all my questions and clear about what to expect at every step.`,
     (svc) =>
-      `Extremely satisfied with the ${svc || catLabel || "work"} done by ${biz}. Clean, professional, and efficient. Would give 6 stars if I could!`,
-    (_, prod) =>
-      `The ${prod || catLabel || "quality"} from ${biz} is second to none. Quick turnaround and excellent communication throughout. Highly recommended!`,
+      `What impressed me first about ${biz} was how organised and customer-focused they are. ${clients ? `Having served ${clients}+ clients, they` : "They"} clearly know how to handle ${svc} properly, and the whole experience felt smooth and well managed from start to finish.`,
     (svc) =>
-      `${biz} transformed my expectations for ${svc || catLabel || "professional services"}. Their team is knowledgeable, friendly, and delivers on every promise.`,
-    () =>
-      `A gem of a business! ${biz} treats every customer like family. Transparent pricing, no hidden charges, and exceptional results every time.`,
-    (svc, prod) =>
-      `I researched many options before choosing ${biz} for ${svc || prod || catLabel || "my needs"}, and I'm so glad I did. Professional from start to finish.`,
-    () =>
-      `What sets ${biz} apart is their genuine commitment to customer satisfaction. They don't just meet expectations — they exceed them consistently.`,
+      `Choosing ${biz} for ${svc} turned out to be one of the best decisions I made. They have a very friendly and professional approach, communicate clearly and make you feel valued as a customer rather than just another order.`,
     (svc) =>
-      `${biz} is my go-to for ${svc || catLabel || "everything they offer"}. After trying several alternatives, nothing comes close to their quality and reliability.`,
-    (_, prod) =>
-      `Impressed by ${biz}'s ${prod || catLabel || "offerings"}! Great quality, competitive pricing, and the team is always ready to help. Five stars well deserved!`,
-    (svc) =>
-      `Working with ${biz} on ${svc || catLabel || "my project"} was a breeze. They listened to my requirements carefully and delivered exactly what I needed.`,
-    () =>
-      `${biz} has set a new standard in the industry. ${years ? `With ${years} years of experience, ` : ""}Their professionalism and quality are unmatched.`,
-    (svc, prod) =>
-      `Cannot say enough good things about ${biz}! Their ${svc || prod || catLabel || "service"} is outstanding. I've recommended them to everyone I know.`,
+      `${biz} is the kind of business you rarely come across these days — reliable, honest and committed to quality. I reached out to them for ${svc}${area ? ` here in ${area}` : ""} and was impressed by how seriously they took my requirements right from the beginning.`,
   ];
 
-  const seed = Date.now();
-  const shuffled = [...templates].sort(
-    () => Math.sin(seed * Math.random()) - 0.5
-  );
+  // ---------- Paragraph 2: the service / product ----------
+  const p2: ((svc: string, desc: string | null, kind: ReviewItem["kind"]) => string)[] = [
+    (svc, desc, kind) =>
+      `Coming to the ${svc} itself, the quality was excellent.${desc ? ` They delivered exactly what they promise — ${desc} — and it was done to a very high standard.` : ""} Everything was ${kind === "product" ? "well made and exactly as described" : "completed on time and with great attention to detail"}, and I didn't have to follow up even once.`,
+    (svc, desc, kind) =>
+      `The ${svc} ${kind === "product" ? "I bought" : "they provided"} was outstanding.${desc ? ` As described, it is ${desc}, and it truly lived up to that.` : ""} You can tell they use the right methods and care about the finer details — the end result was better than I had expected.`,
+    (svc, desc, kind) =>
+      `I was particularly happy with the ${svc}.${desc ? ` What they offer — ${desc} — is exactly what I was looking for.` : ""} They explained everything clearly, ${kind === "product" ? "helped me choose the right option" : "kept me updated throughout the work"}, and the final result was neat, professional and worth every rupee.`,
+    (svc, desc) =>
+      `When it comes to ${svc}, ${biz} really knows what they are doing.${desc ? ` Their offering covers ${desc}, and every part of it was handled well.` : ""} The quality, the finishing and the overall value for money were all excellent, and any small questions I had were answered immediately.`,
+    (svc, desc, kind) =>
+      `The ${svc} was handled with a lot of care and professionalism.${desc ? ` I especially appreciated that it includes ${desc}.` : ""} ${kind === "product" ? "The product quality is top-notch and it was delivered in perfect condition." : "The work was neat, efficient and finished within the promised time."} It's clear they take pride in what they do.`,
+    (svc, desc) =>
+      `I'm genuinely impressed with how the ${svc} turned out.${desc ? ` It's ${desc}, and they delivered on every bit of it.` : ""} The pricing was fair and transparent, there were no hidden charges, and the attention to quality really shows in the final result.`,
+  ];
 
-  return shuffled.slice(0, count).map((fn) => {
-    const svc = services[Math.floor(Math.random() * (services.length || 1))] ?? "";
-    const prod = products[Math.floor(Math.random() * (products.length || 1))] ?? "";
-    return fn(svc, prod);
+  // Extra detail sentence for paragraph 2 — keeps it a full paragraph
+  // even when the owner hasn't written a description.
+  const p2extra: ((svc: string) => string)[] = [
+    (svc) => `From the first discussion to the final delivery of the ${svc}, the whole process was smooth and stress-free.`,
+    (svc) => `They also took the time to explain how to get the most out of the ${svc}, which I really appreciated.`,
+    (svc) => `Even after the ${svc} was delivered, they followed up to make sure I was completely satisfied.`,
+    (svc) => `Compared to other places I checked for ${svc}, the quality-to-price ratio here is far better.`,
+    (svc) => `It's obvious they have done ${svc} many times before — everything was handled confidently and correctly.`,
+    (svc) => `Small requests and changes regarding the ${svc} were handled happily, without any extra fuss.`,
+  ];
+
+  // ---------- Paragraph 3: recommendation ----------
+  const p3: ((svc: string) => string)[] = [
+    (svc) =>
+      `I would highly recommend ${biz} to anyone looking for ${svc}. They are trustworthy, skilled and deliver real value — I will definitely be going back to them, and I have already recommended them to my friends and family.`,
+    (svc) =>
+      `If you need ${svc}${area ? ` in ${area}` : ""}, don't look any further than ${biz}. Professional service, great quality and a team that truly cares. Five stars from me without any hesitation!`,
+    (svc) =>
+      `Anyone considering ${svc} should definitely talk to ${biz} first. You'll get honest advice, quality work and excellent after-service. I'm a happy customer and will gladly recommend them to others.`,
+    (svc) =>
+      `Overall, a fantastic experience. For ${svc}, ${biz} is now my first choice and I'd recommend them to anyone who values quality and reliability. Keep up the great work!`,
+    (svc) =>
+      `I'm happy to recommend ${biz} for ${svc} to friends, family and colleagues. It's rare to find a business this dependable, and they have certainly earned a loyal customer in me.`,
+    (svc) =>
+      `To sum up — if ${svc} is what you need, ${biz} is the right place to go. Excellent quality, fair pricing and genuinely good people to work with. Highly recommended!`,
+  ];
+
+  const used1 = new Set<number>();
+  const used2 = new Set<number>();
+  const used3 = new Set<number>();
+  const usedX = new Set<number>();
+  // Spread suggestions across different services/products first.
+  const order = [...items].sort(() => Math.random() - 0.5);
+
+  return Array.from({ length: count }, (_, i) => {
+    const item = order[i % order.length];
+    const svc = item.name.trim();
+    return [
+      pick(p1, used1)(svc),
+      `${pick(p2, used2)(svc, descPhrase(item.description), item.kind)} ${pick(p2extra, usedX)(svc)}`,
+      pick(p3, used3)(svc),
+    ].join("\n\n");
   });
 }
 
@@ -671,7 +727,7 @@ export default function PublicProfileView({
                         />
                       ))}
                     </div>
-                    <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
+                    <p className="whitespace-pre-line text-xs leading-relaxed text-[var(--muted-foreground)]">
                       {text}
                     </p>
                     <p className="mt-2 flex items-center gap-1 font-mono text-[9px] font-medium text-[var(--muted-foreground)]">
