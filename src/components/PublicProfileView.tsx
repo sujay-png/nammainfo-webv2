@@ -38,6 +38,7 @@ import {
   CreditCard,
   Wallet,
   Copy,
+  Check,
   FileText,
   BookUser,
   Navigation,
@@ -241,6 +242,8 @@ export default function PublicProfileView({
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [qrLightbox, setQrLightbox] = useState<string | null>(null);
   const [copiedToast, setCopiedToast] = useState(false);
+  // The review the visitor just copied — drives the "Review copied" sheet.
+  const [copiedReview, setCopiedReview] = useState<string | null>(null);
   const [servicePopup, setServicePopup] = useState<{
     name: string;
     description?: string;
@@ -706,15 +709,11 @@ export default function PublicProfileView({
                   <button
                     key={i}
                     onClick={() => {
-                      navigator.clipboard?.writeText(text);
-                      setCopiedToast(true);
-                      setTimeout(() => setCopiedToast(false), 2500);
-                      if (profile.google_place_id) {
-                        window.open(
-                          googleReviewUrl(profile.google_place_id),
-                          "_blank"
-                        );
-                      }
+                      // Copy first, then show a clear "Review copied" sheet.
+                      // Google opens from the sheet's button, so people see
+                      // the message (and how to paste) before they leave.
+                      copyText(text);
+                      setCopiedReview(text);
                     }}
                     className="w-full rounded-xl border border-[var(--border)] p-3 text-left transition hover:border-[var(--foreground)]/20 hover:shadow-card"
                   >
@@ -973,6 +972,15 @@ export default function PublicProfileView({
         </div>
       )}
       {/* ===== COPIED TOAST ===== */}
+      {copiedReview !== null && (
+        <ReviewCopiedSheet
+          text={copiedReview}
+          googleUrl={profile.google_place_id ? googleReviewUrl(profile.google_place_id) : null}
+          onCopyAgain={() => copyText(copiedReview)}
+          onClose={() => setCopiedReview(null)}
+        />
+      )}
+
       {copiedToast && (
         <div className="fixed bottom-6 left-1/2 z-[80] -translate-x-1/2 animate-[fadeInUp_0.2s_ease-out] rounded-full bg-[var(--foreground)] px-4 py-2 text-xs font-medium text-[var(--background)] shadow-lg">
           ✓ Review text copied — paste it on Google!
@@ -984,6 +992,156 @@ export default function PublicProfileView({
 
 /* ================================================================== */
 /*  Sub-components                                                     */
+/* ================================================================== */
+
+/** Clipboard copy with a fallback for older in-app browsers. */
+function copyText(text: string) {
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).catch(() => legacyCopy(text));
+  } else {
+    legacyCopy(text);
+  }
+}
+
+function legacyCopy(text: string) {
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+  } catch {}
+}
+
+/**
+ * Shown right after a review suggestion is tapped: makes it obvious the
+ * text is already copied, and shows how to paste it on Google — people
+ * were giving 5 stars and leaving without pasting.
+ */
+function ReviewCopiedSheet({
+  text,
+  googleUrl,
+  onCopyAgain,
+  onClose,
+}: {
+  text: string;
+  googleUrl: string | null;
+  onCopyAgain: () => void;
+  onClose: () => void;
+}) {
+  const [copiedAgain, setCopiedAgain] = useState(false);
+
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  const steps = googleUrl
+    ? [
+        "Tap the 5 stars on Google",
+        "Long-press the review box and tap Paste",
+        "Tap Post — done!",
+      ]
+    : ["Open the review page you want to post on", "Long-press the text box and tap Paste", "Post your review"];
+
+  return (
+    <div
+      className="fixed inset-0 z-[85] flex items-end justify-center bg-black/55 backdrop-blur-[2px] sm:items-center"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="review-copied-title"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md animate-slide-up rounded-t-[28px] bg-[var(--background)] px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-3 shadow-2xl sm:rounded-[28px] sm:pb-6"
+      >
+        <div className="mx-auto mb-5 h-1 w-10 rounded-full bg-[var(--border)] sm:hidden" />
+
+        <div className="flex items-center gap-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white">
+            <Check size={22} strokeWidth={3} />
+          </span>
+          <div>
+            <h2 id="review-copied-title" className="font-headline text-lg font-semibold tracking-tight text-[var(--foreground)]">
+              Review copied!
+            </h2>
+            <p className="text-xs text-[var(--muted-foreground)]">
+              It&apos;s on your clipboard — just paste it{googleUrl ? " on Google" : ""}.
+            </p>
+          </div>
+        </div>
+
+        {/* What was copied */}
+        <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3">
+          <div className="mb-1 flex gap-0.5">
+            {[1, 2, 3, 4, 5].map((s) => (
+              <Star key={s} size={10} className="fill-amber-500 text-amber-500" />
+            ))}
+          </div>
+          <p className="line-clamp-3 whitespace-pre-line text-xs leading-relaxed text-[var(--muted-foreground)]">
+            {text}
+          </p>
+        </div>
+
+        {/* How to paste */}
+        <ol className="mt-4 space-y-2.5">
+          {steps.map((step, i) => (
+            <li key={i} className="flex items-center gap-3 text-sm text-[var(--foreground)]">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--muted)] font-mono text-[11px] font-semibold">
+                {i + 1}
+              </span>
+              {step}
+            </li>
+          ))}
+        </ol>
+
+        {googleUrl ? (
+          <a
+            href={googleUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => setTimeout(onClose, 300)}
+            className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-[var(--primary)] py-4 text-sm font-semibold text-[var(--primary-foreground)] transition active:scale-[0.99]"
+          >
+            Open Google &amp; paste review
+            <ExternalLink size={16} />
+          </a>
+        ) : (
+          <button
+            type="button"
+            onClick={onClose}
+            className="mt-6 w-full rounded-2xl bg-[var(--primary)] py-4 text-sm font-semibold text-[var(--primary-foreground)] transition active:scale-[0.99]"
+          >
+            Got it
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={() => {
+            onCopyAgain();
+            setCopiedAgain(true);
+            setTimeout(() => setCopiedAgain(false), 1500);
+          }}
+          className="mt-2 flex w-full items-center justify-center gap-1.5 py-3 text-sm font-medium text-[var(--muted-foreground)] transition hover:text-[var(--foreground)]"
+        >
+          {copiedAgain ? <Check size={14} /> : <Copy size={14} />}
+          {copiedAgain ? "Copied again" : "Copy again"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ================================================================== */
 /* ================================================================== */
 
 function ServicesTabs({
