@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import type { Profile } from "@/lib/supabase/types";
 import { useTheme } from "@/components/ThemeProvider";
+import { SHOW_INSTALL_EVENT, isRunningAsApp } from "@/components/InstallAppPrompt";
 import { themes, getTheme } from "@/lib/themes";
 import {
   LogOut,
@@ -19,6 +20,7 @@ import {
   Moon,
   Sun,
   Monitor,
+  Smartphone,
   Users,
   Palette,
   Check,
@@ -31,6 +33,8 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showThemes, setShowThemes] = useState(false);
+  const [runningAsApp, setRunningAsApp] = useState(true);
+  useEffect(() => setRunningAsApp(isRunningAsApp()), []);
 
   useEffect(() => {
     (async () => {
@@ -252,6 +256,14 @@ export default function SettingsPage() {
 
       {/* Other settings */}
       <div className="mt-4 space-y-1">
+        {!runningAsApp && (
+          <SettingsItem
+            icon={<Smartphone size={18} />}
+            label="Add to home screen"
+            sublabel="Open your dashboard like an app"
+            onClick={() => window.dispatchEvent(new Event(SHOW_INSTALL_EVENT))}
+          />
+        )}
         <SettingsItem
           icon={<Bell size={18} />}
           label="Notifications"
