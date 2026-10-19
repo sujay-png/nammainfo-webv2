@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowDown, Download, PlusSquare, Share, X } from "lucide-react";
+import { ArrowDown, Download, Menu, MonitorDown, MoreVertical, PlusSquare, Share, X } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
 /*  "Add to Home Screen" for the owner dashboard                         */
@@ -51,9 +51,24 @@ export function isRunningAsApp(): boolean {
   );
 }
 
-type Platform = "android" | "ios-safari" | "ios-other" | "ios-inapp" | "none";
+type Platform =
+  | "android" // one-tap install available
+  | "ios-safari"
+  | "ios-other"
+  | "ios-inapp"
+  // Manual steps — used when the browser hasn't given us one-tap install
+  // (not ready yet, an earlier prompt was dismissed, or a desktop browser).
+  // These only show when the owner taps "Add to home screen" in Settings.
+  | "android-chrome"
+  | "android-samsung"
+  | "android-firefox"
+  | "android-inapp"
+  | "desktop-chromium"
+  | "mac-safari"
+  | "unsupported"
+  | "none";
 
-function detectPlatform(): Platform {
+function detectPlatform(manualAllowed: boolean): Platform {
   const ua = navigator.userAgent;
   const isIOS =
     /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
@@ -62,7 +77,19 @@ function detectPlatform(): Platform {
     if (/CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua)) return "ios-other";
     return "ios-safari";
   }
-  return deferredPrompt ? "android" : "none";
+  if (deferredPrompt) return "android";
+  if (!manualAllowed) return "none";
+
+  const isAndroid = /Android/i.test(ua);
+  if (isAndroid) {
+    if (/FBAN|FBAV|Instagram|; wv\)|Line\/|LinkedInApp|Snapchat/i.test(ua)) return "android-inapp";
+    if (/SamsungBrowser/i.test(ua)) return "android-samsung";
+    if (/Firefox/i.test(ua)) return "android-firefox";
+    return "android-chrome";
+  }
+  if (/Edg\/|Chrome\/|Chromium/i.test(ua) && !/OPR\//.test(ua)) return "desktop-chromium";
+  if (/Macintosh/.test(ua) && /Safari/.test(ua) && !/Chrome|Firefox/.test(ua)) return "mac-safari";
+  return "unsupported";
 }
 
 export default function InstallAppPrompt() {
@@ -94,7 +121,7 @@ export default function InstallAppPrompt() {
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     function maybeShow(force = false) {
-      const p = detectPlatform();
+      const p = detectPlatform(force);
       setPlatform(p);
       if (p === "none") return;
       if (!force && snoozed()) return;
@@ -108,6 +135,9 @@ export default function InstallAppPrompt() {
         setOpen(false); // installed
         return;
       }
+      // One-tap install just became available — upgrade an open sheet
+      // showing manual steps, or show it if not snoozed.
+      setPlatform("android");
       maybeShow();
     };
     const onForceShow = () => maybeShow(true);
@@ -229,6 +259,83 @@ export default function InstallAppPrompt() {
             </Step>
           </ol>
         ) : null}
+
+        {platform === "android-chrome" && (
+          <ol className="mt-6 space-y-3">
+            <Step n={1}>
+              Tap the <Pill><MoreVertical size={14} /> menu</Pill> at the top right of Chrome
+            </Step>
+            <Step n={2}>
+              Tap <Pill><Download size={14} /> Install app</Pill> or <Pill>Add to Home screen</Pill>
+            </Step>
+            <Step n={3}>
+              Tap <Pill>Install</Pill> to confirm
+            </Step>
+          </ol>
+        )}
+
+        {platform === "android-samsung" && (
+          <ol className="mt-6 space-y-3">
+            <Step n={1}>
+              Tap the <Pill><Menu size={14} /> menu</Pill> at the bottom right
+            </Step>
+            <Step n={2}>
+              Tap <Pill>Add page to</Pill> then <Pill>Home screen</Pill>
+            </Step>
+            <Step n={3}>
+              Tap <Pill>Add</Pill> to confirm
+            </Step>
+          </ol>
+        )}
+
+        {platform === "android-firefox" && (
+          <ol className="mt-6 space-y-3">
+            <Step n={1}>
+              Tap the <Pill><MoreVertical size={14} /> menu</Pill>
+            </Step>
+            <Step n={2}>
+              Tap <Pill>Add to Home screen</Pill>
+            </Step>
+          </ol>
+        )}
+
+        {platform === "desktop-chromium" && (
+          <ol className="mt-6 space-y-3">
+            <Step n={1}>
+              Click the <Pill><MonitorDown size={14} /> install</Pill> icon at the right end of the address bar
+            </Step>
+            <Step n={2}>
+              Or open the <Pill><MoreVertical size={14} /> menu</Pill> and choose <Pill>Install Namma Info</Pill>
+            </Step>
+          </ol>
+        )}
+
+        {platform === "mac-safari" && (
+          <ol className="mt-6 space-y-3">
+            <Step n={1}>
+              In the menu bar, click <Pill>File</Pill>
+            </Step>
+            <Step n={2}>
+              Choose <Pill>Add to Dock</Pill>
+            </Step>
+          </ol>
+        )}
+
+        {(platform === "android-inapp" || platform === "unsupported") && (
+          <div className="mt-6 rounded-2xl bg-[var(--muted)] p-4 text-sm leading-relaxed text-[var(--foreground)]">
+            {platform === "android-inapp" ? (
+              <>
+                This page is open inside another app. Tap the <strong>⋮</strong> menu and choose{" "}
+                <strong>Open in Chrome</strong>, then come back to Settings.
+              </>
+            ) : (
+              <>
+                This browser can&apos;t add apps to the home screen. Open your dashboard in{" "}
+                <strong>Chrome</strong> (Android) or <strong>Safari</strong> (iPhone) to install it.
+              </>
+            )}
+          </div>
+        )}
 
         {platform === "ios-inapp" && (
           <div className="mt-6 rounded-2xl bg-[var(--muted)] p-4 text-sm leading-relaxed text-[var(--foreground)]">
