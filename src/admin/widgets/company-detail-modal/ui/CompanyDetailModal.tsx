@@ -7,7 +7,6 @@ import {
   Users,
   Trash2,
   ExternalLink,
-  Plus,
   Clock,
   Search,
   Loader2,
@@ -182,47 +181,6 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
     }
   };
 
-  // Direct Quick Extend 1 Year
-  const handleExtend1Year = async () => {
-    const baseDate = editExpiryDate
-      ? new Date(`${editExpiryDate}T23:59:59.000Z`).getTime()
-      : current.membershipExpiresAt
-      ? new Date(current.membershipExpiresAt).getTime()
-      : Date.now();
-    const newExpiry = new Date(baseDate + 365 * 24 * 60 * 60 * 1000).toISOString();
-
-    setActionLoading(true);
-    try {
-      await updateCompanyValidity(current.id, {
-        subscriptionPlan: "pro",
-        membershipExpiresAt: newExpiry,
-      });
-
-      setDetails((prev) =>
-        prev
-          ? {
-              ...prev,
-              subscriptionPlan: "pro",
-              membershipExpiresAt: newExpiry,
-              employees: (prev.employees || []).map((e) => ({
-                ...e,
-                isPremium: true,
-                subscriptionExpiresAt: newExpiry,
-              })),
-            }
-          : null
-      );
-      setEditPlan("pro");
-      setEditExpiryDate(formatDateInput(newExpiry));
-      setSavedSuccess(true);
-      setTimeout(() => setSavedSuccess(false), 2500);
-      onRefresh();
-    } catch (err: any) {
-      alert(`Failed to extend validity: ${err.message}`);
-    } finally {
-      setActionLoading(false);
-    }
-  };
 
   return (
     <>
@@ -454,21 +412,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                 )}
 
                 {/* Action Controls */}
-                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-4">
-                  <div className="flex items-center gap-2">
-                    {editPlan === "pro" && (
-                      <button
-                        type="button"
-                        onClick={handleExtend1Year}
-                        disabled={actionLoading}
-                        className="flex items-center gap-1.5 rounded-[5px] border border-[var(--border)] bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-[var(--foreground)] hover:bg-[var(--accent)]/80 transition-colors disabled:opacity-40"
-                      >
-                        <Plus size={13} />
-                        <span>+1 Year Extension</span>
-                      </button>
-                    )}
-                  </div>
-
+                <div className="flex items-center justify-end border-t border-[var(--border)] pt-4">
                   <Button
                     variant={savedSuccess ? "secondary" : "primary"}
                     size="sm"
