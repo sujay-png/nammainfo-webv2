@@ -27,10 +27,10 @@ export async function GET(request: Request) {
       );
     }
 
-    // 2. Fetch all employees to aggregate assigned ID counts
+    // 2. Fetch all employees to aggregate assigned ID counts and active cards
     const { data: employees, error: employeesError } = await supabase
       .from("employees")
-      .select("id, owner_id, is_premium, is_active");
+      .select("id, owner_id, is_premium, is_active, subscription_started_at, subscription_expires_at");
 
     if (employeesError) {
       console.warn("[Admin API] Warning fetching employees:", employeesError.message);
@@ -38,6 +38,8 @@ export async function GET(request: Request) {
 
     const employeeMap = new Map<string, number>();
     const premiumEmployeeMap = new Map<string, number>();
+    const employeeExpiryMap = new Map<string, string>();
+    const employeeStartMap = new Map<string, string>();
     if (employees) {
       for (const emp of employees) {
         const count = employeeMap.get(emp.owner_id) || 0;
@@ -45,6 +47,19 @@ export async function GET(request: Request) {
         if (emp.is_premium) {
           const premCount = premiumEmployeeMap.get(emp.owner_id) || 0;
           premiumEmployeeMap.set(emp.owner_id, premCount + 1);
+
+          if (emp.subscription_expires_at) {
+            const currentExp = employeeExpiryMap.get(emp.owner_id);
+            if (!currentExp || new Date(emp.subscription_expires_at).getTime() > new Date(currentExp).getTime()) {
+              employeeExpiryMap.set(emp.owner_id, emp.subscription_expires_at);
+            }
+          }
+          if (emp.subscription_started_at) {
+            const currentStart = employeeStartMap.get(emp.owner_id);
+            if (!currentStart || new Date(emp.subscription_started_at).getTime() < new Date(currentStart).getTime()) {
+              employeeStartMap.set(emp.owner_id, emp.subscription_started_at);
+            }
+          }
         }
       }
     }
@@ -91,10 +106,23 @@ export async function GET(request: Request) {
         ? Number(p.purchased_id_count) 
         : employeeCardsIssued;
 
-      // Primary cards count:
+      // Determine if company has an active Pro subscription:
+      // Either by profile subscription tier OR by having active premium team cards issued
+      const hasActiveCards = employeeCardsIssued > 0;
+      const hasActiveMembership = Boolean(
+        p.subscription_plan === "pro" ||
+        p.subscription_plan === "starter" ||
+        p.subscription_plan === "enterprise" ||
+        p.subscription_plan === "lifetime" ||
+        (p.is_member === true && p.membership_expires_at)
+      );
+
+      const isPro = hasActiveMembership || hasActiveCards;
+      const plan: SubscriptionPlanType = isPro ? "pro" : "free";
+
       // Primary cards count:
       let primaryCardCount = 0;
-      if (p.subscription_plan === "free") {
+      if (plan === "free") {
         primaryCardCount = 0;
       } else if (p.primary_card_count !== undefined && p.primary_card_count !== null) {
         primaryCardCount = Number(p.primary_card_count);
@@ -109,31 +137,16 @@ export async function GET(request: Request) {
       // Total cards issued for this company
       const totalCardsIssued = primaryCardCount + employeeCardsIssued;
 
-      // Plan mapping: strictly "free" | "pro"
-      let plan: SubscriptionPlanType = "free";
-      if (p.subscription_plan === "free") {
-        plan = "free";
-      } else if (
-        p.subscription_plan === "pro" ||
-        p.subscription_plan === "starter" ||
-        p.subscription_plan === "enterprise" ||
-        p.subscription_plan === "lifetime"
-      ) {
-        plan = "pro";
-      } else if (p.is_member === true && p.membership_expires_at) {
-        plan = "pro";
-      } else {
-        plan = "free";
-      }
-
       // Expiry dates: Free plan has NO subscription expiry
       let expiresAt: string | null = null;
       let startedAt: string | null = null;
 
       if (plan === "pro") {
-        startedAt = p.subscription_started_at || p.created_at;
+        startedAt = p.subscription_started_at || employeeStartMap.get(p.id) || p.created_at;
         if (p.membership_expires_at) {
           expiresAt = p.membership_expires_at;
+        } else if (employeeExpiryMap.get(p.id)) {
+          expiresAt = employeeExpiryMap.get(p.id)!;
         } else if (p.created_at) {
           const joined = new Date(p.created_at).getTime();
           expiresAt = new Date(joined + 365 * 24 * 60 * 60 * 1000).toISOString();

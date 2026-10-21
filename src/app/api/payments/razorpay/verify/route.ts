@@ -177,6 +177,7 @@ export async function POST(req: Request) {
         .update({
           membership_expires_at: newExpiry,
           is_member: true,
+          subscription_plan: "pro",
           status: "active",
         })
         .eq("id", user.id);
