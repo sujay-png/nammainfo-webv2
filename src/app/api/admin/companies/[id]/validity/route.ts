@@ -41,16 +41,12 @@ export async function POST(
     if (parsed.data.purchasedIdCount !== undefined) {
       updates.purchased_id_count = parsed.data.purchasedIdCount;
     }
-    if (parsed.data.primaryCardCount !== undefined) {
-      updates.primary_card_count = parsed.data.primaryCardCount;
-    }
     if (parsed.data.subscriptionPlan !== undefined) {
       updates.subscription_plan = parsed.data.subscriptionPlan;
       updates.is_member = parsed.data.subscriptionPlan !== "free";
       if (parsed.data.subscriptionPlan === "free") {
         updates.membership_expires_at = null;
         updates.subscription_started_at = null;
-        updates.primary_card_count = 0;
       }
     }
 
@@ -59,20 +55,10 @@ export async function POST(
     }
 
     const supabase = auth.adminSupabase;
-    let { error: updateError } = await supabase
+    const { error: updateError } = await supabase
       .from("profiles")
       .update(updates)
       .eq("id", id);
-
-    // If primary_card_count column does not exist yet in Postgres, retry without it
-    if (updateError && updateError.message?.includes("primary_card_count")) {
-      delete updates.primary_card_count;
-      const retry = await supabase
-        .from("profiles")
-        .update(updates)
-        .eq("id", id);
-      updateError = retry.error;
-    }
 
     if (updateError) {
       console.error("[Admin API] Failed to update profile validity:", updateError);
@@ -82,28 +68,30 @@ export async function POST(
       );
     }
 
-    // Synchronize team members automatically so individual validity setting is not needed
-    if (parsed.data.subscriptionPlan !== undefined || parsed.data.membershipExpiresAt !== undefined) {
-      const empUpdates: Record<string, any> = {};
-      if (parsed.data.subscriptionPlan !== undefined) {
-        empUpdates.is_premium = parsed.data.subscriptionPlan !== "free";
-      }
-      if (parsed.data.subscriptionPlan === "free") {
-        empUpdates.is_premium = false;
-        empUpdates.subscription_expires_at = null;
-        empUpdates.subscription_started_at = null;
-      } else if (parsed.data.membershipExpiresAt !== undefined) {
-        empUpdates.subscription_expires_at = parsed.data.membershipExpiresAt;
-      }
-      if (parsed.data.subscriptionStartedAt !== undefined && parsed.data.subscriptionPlan !== "free") {
+    // Synchronize team members according to company plan:
+    // If company is set to Free -> all team members become Free
+    if (parsed.data.subscriptionPlan === "free") {
+      await supabase
+        .from("employees")
+        .update({
+          is_premium: false,
+          subscription_expires_at: null,
+          subscription_started_at: null,
+        })
+        .eq("owner_id", id);
+    } else if (parsed.data.membershipExpiresAt !== undefined) {
+      // If company validity is renewed/updated, sync expiry only for employees on Pro plan
+      const empUpdates: Record<string, any> = {
+        subscription_expires_at: parsed.data.membershipExpiresAt,
+      };
+      if (parsed.data.subscriptionStartedAt !== undefined) {
         empUpdates.subscription_started_at = parsed.data.subscriptionStartedAt;
       }
-      if (Object.keys(empUpdates).length > 0) {
-        await supabase
-          .from("employees")
-          .update(empUpdates)
-          .eq("owner_id", id);
-      }
+      await supabase
+        .from("employees")
+        .update(empUpdates)
+        .eq("owner_id", id)
+        .eq("is_premium", true);
     }
 
     return NextResponse.json({ success: true, updates });

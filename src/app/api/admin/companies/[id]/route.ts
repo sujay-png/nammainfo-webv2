@@ -58,10 +58,10 @@ export async function GET(
 
     // Employee IDs quota & issued count (only active premium employees)
     const premiumEmployees = employees.filter((e) => e.isPremium);
-    const employeeCardsIssued = premiumEmployees.length;
-    const purchasedCount = (p.purchased_id_count && p.purchased_id_count > employeeCardsIssued) 
+    const premEmpCount = premiumEmployees.length;
+    const purchasedCount = (p.purchased_id_count && p.purchased_id_count > premEmpCount) 
       ? Number(p.purchased_id_count) 
-      : employeeCardsIssued;
+      : premEmpCount;
 
     // Determine latest employee expiry and earliest start date among active premium cards
     let latestEmployeeExpiry: string | null = null;
@@ -79,33 +79,27 @@ export async function GET(
       }
     }
 
+    const now = Date.now();
+    const hasValidEmpExpiry = Boolean(latestEmployeeExpiry && new Date(latestEmployeeExpiry).getTime() > now);
+
     // Determine if company has an active Pro subscription:
-    // Either by profile subscription tier OR by having active premium team cards issued
-    const hasActiveCards = employeeCardsIssued > 0;
-    const hasActiveMembership = Boolean(
+    const hasCompanyProPlan = Boolean(
       p.subscription_plan === "pro" ||
       p.subscription_plan === "starter" ||
       p.subscription_plan === "enterprise" ||
       p.subscription_plan === "lifetime" ||
-      (p.is_member === true && p.membership_expires_at)
+      (p.is_member === true && p.membership_expires_at && new Date(p.membership_expires_at).getTime() > now) ||
+      (p.membership_expires_at && new Date(p.membership_expires_at).getTime() > now) ||
+      hasValidEmpExpiry
     );
 
-    const isPro = hasActiveMembership || hasActiveCards;
-    const plan: SubscriptionPlanType = isPro ? "pro" : "free";
+    const plan: SubscriptionPlanType = hasCompanyProPlan ? "pro" : "free";
 
-    // Primary card count
-    let primaryCardCount = 0;
-    if (plan === "free") {
-      primaryCardCount = 0;
-    } else if (p.primary_card_count !== undefined && p.primary_card_count !== null) {
-      primaryCardCount = Number(p.primary_card_count);
-    } else if (
-      p.subscription_plan === "pro" ||
-      p.subscription_plan === "lifetime" ||
-      p.card_designed === true
-    ) {
-      primaryCardCount = 1;
-    }
+    // Primary card count: if someone has pro plan then 1 primary card, else 0
+    const primaryCardCount = plan === "pro" ? 1 : 0;
+
+    // Team cards in use: active premium team members within Pro company
+    const employeeCardsIssued = plan === "pro" ? premiumEmployees.length : 0;
 
     const totalCardsIssued = primaryCardCount + employeeCardsIssued;
 

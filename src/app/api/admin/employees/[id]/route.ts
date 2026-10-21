@@ -33,6 +33,10 @@ export async function POST(
     const updates: Record<string, any> = {};
     if (parsed.data.isPremium !== undefined) {
       updates.is_premium = parsed.data.isPremium;
+      if (!parsed.data.isPremium) {
+        updates.subscription_started_at = null;
+        updates.subscription_expires_at = null;
+      }
     }
     if (parsed.data.subscriptionStartedAt !== undefined) {
       updates.subscription_started_at = parsed.data.subscriptionStartedAt;
@@ -68,3 +72,5 @@ export async function POST(
     );
   }
 }
+
+export const PATCH = POST;

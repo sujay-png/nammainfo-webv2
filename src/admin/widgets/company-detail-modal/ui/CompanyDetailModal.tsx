@@ -23,6 +23,7 @@ import {
 import {
   fetchCompanyDetails,
   updateCompanyValidity,
+  updateEmployeeValidity,
 } from "@/admin/entities/company/api/company-api";
 import type {
   Company,
@@ -130,7 +131,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
     }
   };
 
-  // Direct Save Company Plan & Dates (Cascades automatically to team)
+  // Direct Save Company Plan & Dates
   const handleSaveCompanyPlan = async () => {
     const finalExpiry = editPlan === "free"
       ? null
@@ -153,23 +154,27 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
         primaryCardCount: editPlan === "free" ? 0 : 1,
       });
 
-      setDetails((prev) =>
-        prev
-          ? {
-              ...prev,
-              subscriptionPlan: editPlan,
-              subscriptionStartedAt: finalStart,
-              membershipExpiresAt: finalExpiry,
-              primaryCardCount: editPlan === "free" ? 0 : 1,
-              employees: (prev.employees || []).map((e) => ({
-                ...e,
-                isPremium: editPlan !== "free",
-                subscriptionStartedAt: finalStart,
-                subscriptionExpiresAt: finalExpiry,
-              })),
-            }
-          : null
-      );
+      setDetails((prev) => {
+        if (!prev) return null;
+        const updatedEmployees = (prev.employees || []).map((e) => ({
+          ...e,
+          // If company is set to free, team becomes free; if pro, keep existing team allocation
+          isPremium: editPlan === "free" ? false : e.isPremium,
+          subscriptionStartedAt: editPlan === "free" ? null : (e.isPremium ? finalStart : e.subscriptionStartedAt),
+          subscriptionExpiresAt: editPlan === "free" ? null : (e.isPremium ? finalExpiry : e.subscriptionExpiresAt),
+        }));
+        const premiumCount = updatedEmployees.filter((e) => e.isPremium).length;
+        const primaryCount = editPlan === "free" ? 0 : 1;
+        return {
+          ...prev,
+          subscriptionPlan: editPlan,
+          subscriptionStartedAt: finalStart,
+          membershipExpiresAt: finalExpiry,
+          primaryCardCount: primaryCount,
+          totalCardsIssued: primaryCount + premiumCount,
+          employees: updatedEmployees,
+        };
+      });
 
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 2500);
@@ -178,6 +183,57 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
       alert(`Failed to update validity: ${err.message}`);
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  // State for updating an individual employee plan
+  const [updatingEmpId, setUpdatingEmpId] = useState<string | null>(null);
+
+  // Individual employee plan toggle (Free Plan vs Pro Plan)
+  const handleEmployeePlanChange = async (employeeId: string, newPlan: "pro" | "free") => {
+    if (newPlan === "pro" && current.subscriptionPlan === "free") {
+      alert("This company is currently on the Free Plan. Please upgrade the company to Pro Plan first in the 'Subscription & Plan' tab before assigning Pro cards to team members.");
+      return;
+    }
+
+    setUpdatingEmpId(employeeId);
+    try {
+      const isPremium = newPlan === "pro";
+      const start = isPremium ? (current.subscriptionStartedAt || new Date().toISOString()) : null;
+      const expiry = isPremium ? (current.membershipExpiresAt || `${calculateOneYearLater(new Date().toISOString().split("T")[0])}T23:59:59.000Z`) : null;
+
+      await updateEmployeeValidity(employeeId, {
+        isPremium,
+        subscriptionStartedAt: start,
+        subscriptionExpiresAt: expiry,
+      });
+
+      setDetails((prev) => {
+        if (!prev) return null;
+        const updatedEmployees = (prev.employees || []).map((e) =>
+          e.id === employeeId
+            ? {
+                ...e,
+                isPremium,
+                subscriptionStartedAt: start,
+                subscriptionExpiresAt: expiry,
+              }
+            : e
+        );
+        const premiumCount = updatedEmployees.filter((e) => e.isPremium).length;
+        const primaryCount = prev.subscriptionPlan === "pro" ? 1 : 0;
+        return {
+          ...prev,
+          employees: updatedEmployees,
+          totalCardsIssued: primaryCount + premiumCount,
+        };
+      });
+
+      onRefresh();
+    } catch (err: any) {
+      alert(`Failed to update team member plan: ${err.message}`);
+    } finally {
+      setUpdatingEmpId(null);
     }
   };
 
@@ -434,16 +490,16 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
             </div>
           )}
 
-          {/* Tab 3: Team Members List (Read-only inheritance) */}
+          {/* Tab 3: Team Members List */}
           {activeTab === "employees" && (
             <div className="space-y-4">
-              {/* Team Validity Inheritance Notice */}
+              {/* Team Members & Cards Allocation Notice */}
               <div className="rounded-[5px] border border-[var(--border)] bg-[var(--accent)]/30 p-3.5 text-xs">
                 <span className="font-semibold text-[var(--foreground)] block">
-                  Automatic Team Plan & Validity Inheritance
+                  Team Members & Card Allocation
                 </span>
                 <p className="mt-1 text-[11px] text-[var(--muted-foreground)] leading-relaxed">
-                  All team members automatically inherit the primary company plan ({current.subscriptionPlan === "pro" ? "Pro" : "Free"}) and validity duration. When the company renews or upgrades, all team members are automatically synced.
+                  Assign individual card plans for team members. If a manual order was placed without purchasing extra team cards, set members to <span className="font-semibold text-[var(--foreground)]">Free Plan</span>. Set to <span className="font-semibold text-emerald-400">Pro Plan</span> for members with purchased card slots.
                 </p>
               </div>
 
@@ -533,12 +589,27 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                           </div>
 
                           <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-[var(--border)] shrink-0">
-                            <Badge variant={current.subscriptionPlan === "pro" ? "pro" : "free"}>
-                              {current.subscriptionPlan === "pro" ? "Pro" : "Free"}
-                            </Badge>
+                            <div className="flex items-center gap-2">
+                              <select
+                                value={emp.isPremium && current.subscriptionPlan === "pro" ? "pro" : "free"}
+                                onChange={(e) => handleEmployeePlanChange(emp.id, e.target.value as "pro" | "free")}
+                                disabled={updatingEmpId === emp.id}
+                                className={`rounded-[5px] border px-2.5 py-1 text-xs font-semibold outline-none cursor-pointer transition-all ${
+                                  emp.isPremium && current.subscriptionPlan === "pro"
+                                    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400 focus:border-emerald-500"
+                                    : "border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] focus:border-[var(--foreground)]"
+                                }`}
+                              >
+                                <option value="pro" className="bg-[#18181b] text-emerald-400 font-medium">Pro Plan (Team Card)</option>
+                                <option value="free" className="bg-[#18181b] text-gray-300 font-medium">Free Plan (No Card)</option>
+                              </select>
+                              {updatingEmpId === emp.id && (
+                                <Loader2 size={13} className="animate-spin text-[var(--muted-foreground)]" />
+                              )}
+                            </div>
 
-                            <span className="font-mono text-[11px] text-[var(--muted-foreground)]">
-                              {current.subscriptionPlan === "free"
+                            <span className="font-mono text-[11px] text-[var(--muted-foreground)] min-w-[70px] text-right">
+                              {!emp.isPremium || current.subscriptionPlan === "free"
                                 ? "N/A"
                                 : validity.label}
                             </span>

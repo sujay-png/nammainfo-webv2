@@ -94,45 +94,45 @@ export async function GET(request: Request) {
     let expiredCardsCount = 0;
     let suspendedCount = 0;
 
-    // Strictly filter out platform administrator accounts so they are not treated as customer companies
+    // Strictly filter out platform administrator & internal agency accounts so they are not treated as customer companies
     const customerProfiles = (profiles || []).filter(
-      (p: any) => !p.is_admin && p.email !== "aksharadigitalindia@outlook.com"
+      (p: any) =>
+        !p.is_admin &&
+        p.email !== "aksharadigitalindia@outlook.com" &&
+        p.email !== "adithyaputhraya@gmail.com"
     );
 
     const companies: Company[] = customerProfiles.map((p: any) => {
       const assignedCount = employeeMap.get(p.id) || 0;
-      const employeeCardsIssued = premiumEmployeeMap.get(p.id) || 0;
-      const purchasedCount = (p.purchased_id_count && p.purchased_id_count > employeeCardsIssued) 
-        ? Number(p.purchased_id_count) 
-        : employeeCardsIssued;
+      const premEmpCount = premiumEmployeeMap.get(p.id) || 0;
+      const latestEmpExpiry = employeeExpiryMap.get(p.id);
+      const hasValidEmpExpiry = Boolean(latestEmpExpiry && new Date(latestEmpExpiry).getTime() > now);
 
       // Determine if company has an active Pro subscription:
-      // Either by profile subscription tier OR by having active premium team cards issued
-      const hasActiveCards = employeeCardsIssued > 0;
-      const hasActiveMembership = Boolean(
+      // Either by profile subscription tier or an active membership expiry or valid employee subscription
+      const hasCompanyProPlan = Boolean(
         p.subscription_plan === "pro" ||
         p.subscription_plan === "starter" ||
         p.subscription_plan === "enterprise" ||
         p.subscription_plan === "lifetime" ||
-        (p.is_member === true && p.membership_expires_at)
+        (p.is_member === true && p.membership_expires_at && new Date(p.membership_expires_at).getTime() > now) ||
+        (p.membership_expires_at && new Date(p.membership_expires_at).getTime() > now) ||
+        hasValidEmpExpiry
       );
 
-      const isPro = hasActiveMembership || hasActiveCards;
-      const plan: SubscriptionPlanType = isPro ? "pro" : "free";
+      const plan: SubscriptionPlanType = hasCompanyProPlan ? "pro" : "free";
 
-      // Primary cards count:
-      let primaryCardCount = 0;
-      if (plan === "free") {
-        primaryCardCount = 0;
-      } else if (p.primary_card_count !== undefined && p.primary_card_count !== null) {
-        primaryCardCount = Number(p.primary_card_count);
-      } else if (
-        p.subscription_plan === "pro" ||
-        p.subscription_plan === "lifetime" ||
-        p.card_designed === true
-      ) {
-        primaryCardCount = 1;
-      }
+      // 1. Primary Card: "logic is simple if someone has pro plan then they will have 1 primary card"
+      const primaryCardCount = plan === "pro" ? 1 : 0;
+
+      // 2. Team Cards: "and the teams card will be the team within them"
+      // Only active premium team members within an active Pro company count as team cards
+      const employeeCardsIssued = plan === "pro" ? premEmpCount : 0;
+
+      // 3. Purchased ID Count
+      const purchasedCount = (p.purchased_id_count && p.purchased_id_count > employeeCardsIssued) 
+        ? Number(p.purchased_id_count) 
+        : employeeCardsIssued;
 
       // Total cards issued for this company
       const totalCardsIssued = primaryCardCount + employeeCardsIssued;
@@ -145,8 +145,8 @@ export async function GET(request: Request) {
         startedAt = p.subscription_started_at || employeeStartMap.get(p.id) || p.created_at;
         if (p.membership_expires_at) {
           expiresAt = p.membership_expires_at;
-        } else if (employeeExpiryMap.get(p.id)) {
-          expiresAt = employeeExpiryMap.get(p.id)!;
+        } else if (latestEmpExpiry) {
+          expiresAt = latestEmpExpiry;
         } else if (p.created_at) {
           const joined = new Date(p.created_at).getTime();
           expiresAt = new Date(joined + 365 * 24 * 60 * 60 * 1000).toISOString();
@@ -182,12 +182,12 @@ export async function GET(request: Request) {
       }
 
       // Cards in use: count active cards for non-suspended, non-expired companies
-      if (status !== "suspended" && status !== "expired" && totalCardsIssued > 0) {
+      if (status !== "suspended" && status !== "expired") {
         totalCardsInUseAll += totalCardsIssued;
+        totalPrimaryCardsAll += primaryCardCount;
+        totalEmployeeCardsAll += employeeCardsIssued;
       }
 
-      totalPrimaryCardsAll += primaryCardCount;
-      totalEmployeeCardsAll += employeeCardsIssued;
       totalCardsIssuedAll += totalCardsIssued;
       totalAssignedIdsAll += assignedCount;
 
