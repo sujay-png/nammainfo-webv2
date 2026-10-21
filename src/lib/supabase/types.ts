@@ -68,6 +68,12 @@ export interface Profile {
   maps_url?: string | null;
   products: ServiceItem[];
   theme: string;
+  is_admin?: boolean;
+  status?: "active" | "suspended" | "expired" | "pending";
+  subscription_plan?: string;
+  primary_card_count?: number;
+  purchased_id_count?: number;
+  subscription_started_at?: string | null;
 }
 
 export type ProfileInsert = Partial<Profile> & { id: string };
@@ -134,6 +140,10 @@ export interface Employee {
   avatar_url: string | null;
   cover_url: string | null;
   is_active: boolean;
+  is_premium?: boolean;
+  subscription_started_at?: string | null;
+  subscription_expires_at?: string | null;
+  status?: "active" | "suspended" | "unassigned";
   created_at: string;
 }
 

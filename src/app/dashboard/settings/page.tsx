@@ -22,7 +22,10 @@ import {
   Users,
   Palette,
   Check,
+  Package,
 } from "lucide-react";
+import UpgradeToProModal from "@/components/UpgradeToProModal";
+import RenewalModal from "@/components/RenewalModal";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -31,6 +34,9 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showThemes, setShowThemes] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [showRenewalModal, setShowRenewalModal] = useState(false);
+  const [teamCount, setTeamCount] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -38,12 +44,12 @@ export default function SettingsPage() {
       const user = await getCurrentUser();
       if (!user) return;
 
-      const { data } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single();
-      if (data) setProfile(data as unknown as Profile);
+      const [profRes, empRes] = await Promise.all([
+        supabase.from("profiles").select("*").eq("id", user.id).single(),
+        supabase.from("employees").select("id", { count: "exact", head: true }).eq("owner_id", user.id).eq("is_active", true),
+      ]);
+      if (profRes.data) setProfile(profRes.data as unknown as Profile);
+      setTeamCount(empRes.count || 0);
       setLoading(false);
     })();
   }, []);
@@ -115,28 +121,48 @@ export default function SettingsPage() {
         <SettingsItem
           icon={<User size={18} />}
           label="Edit Profile"
+          sublabel="Personal details, bio, logo & contacts"
           onClick={() => router.push("/dashboard/profile")}
         />
         <SettingsItem
           icon={<Users size={18} />}
           label="Team / Employees"
-          sublabel="Manage your team"
+          sublabel="Manage your organization team members"
           onClick={() => router.push("/dashboard/team")}
         />
         <SettingsItem
+          icon={<Package size={18} />}
+          label="Card Orders & Fulfillment"
+          sublabel="Track physical NFC card production & delivery"
+          onClick={() => router.push("/dashboard/orders")}
+        />
+        <SettingsItem
           icon={<CreditCard size={18} />}
-          label="Membership"
-          sublabel={(() => {
+          label="Membership & Plan"
+          sublabel="Digital vanity link and NFC card access"
+          badge={(() => {
             if (!profile) return "";
+            if (profile.subscription_plan === "lifetime") return "Lifetime";
+            if (profile.subscription_plan === "free" || (!profile.is_member && !profile.membership_expires_at)) {
+              return "Free Tier";
+            }
             const day = 86400000;
-            const joined = new Date(profile.created_at);
-            const expires = profile.membership_expires_at
-              ? new Date(profile.membership_expires_at)
-              : new Date(joined.getTime() + 365 * day);
+            const expires = new Date(profile.membership_expires_at!);
             const left = Math.max(0, Math.ceil((expires.getTime() - Date.now()) / day));
-            return left > 0 ? `${left} day${left === 1 ? "" : "s"} left` : "Expired — renew";
+            return left > 0 ? `Pro (${left}d)` : "Expired";
           })()}
-          onClick={() => {}}
+          onClick={() => {
+            const isMember = Boolean(
+              profile?.subscription_plan === "pro" ||
+              profile?.subscription_plan === "lifetime" ||
+              profile?.is_member
+            );
+            if (isMember) {
+              setShowRenewalModal(true);
+            } else {
+              setShowUpgradeModal(true);
+            }
+          }}
         />
       </div>
 
@@ -282,6 +308,31 @@ export default function SettingsPage() {
       <p className="mt-6 text-center font-mono text-[11px] text-[var(--muted-foreground)]">
         Namma Info v2.0 · Made with care
       </p>
+
+
+
+      {/* Upgrade to Pro Modal (for Free Tier) */}
+      {profile && (
+        <UpgradeToProModal
+          isOpen={showUpgradeModal}
+          onClose={() => setShowUpgradeModal(false)}
+          profile={profile}
+        />
+      )}
+
+      {/* Organization Renewal Modal (for Pro Tier) */}
+      {profile && (
+        <RenewalModal
+          isOpen={showRenewalModal}
+          onClose={() => setShowRenewalModal(false)}
+          profile={profile}
+          employeesCount={teamCount}
+          onSuccess={() => {
+            setShowRenewalModal(false);
+            window.location.reload();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -290,41 +341,52 @@ function SettingsItem({
   icon,
   label,
   sublabel,
+  badge,
   onClick,
   href,
 }: {
   icon: React.ReactNode;
   label: string;
   sublabel?: string;
+  badge?: string;
   onClick?: () => void;
   href?: string;
 }) {
   const content = (
-    <>
-      <div className="flex items-center gap-3">
-        <span className="text-[var(--muted-foreground)]">{icon}</span>
-        <span className="text-sm font-medium">{label}</span>
+    <div className="flex w-full items-center justify-between gap-3 min-w-0">
+      <div className="flex items-center gap-3 min-w-0 flex-1">
+        <span className="text-[var(--muted-foreground)] shrink-0">{icon}</span>
+        <div className="min-w-0 text-left">
+          <p className="text-sm font-medium text-[var(--foreground)] leading-snug">
+            {label}
+          </p>
+          {sublabel && (
+            <p className="text-xs text-[var(--muted-foreground)] leading-snug mt-0.5">
+              {sublabel}
+            </p>
+          )}
+        </div>
       </div>
-      <div className="flex items-center gap-2">
-        {sublabel && (
-          <span className="text-xs text-[var(--muted-foreground)]">
-            {sublabel}
+      <div className="flex items-center gap-2 shrink-0 ml-2">
+        {badge && (
+          <span className="font-mono text-[10px] font-semibold text-[var(--foreground)] px-2 py-0.5 rounded-full bg-[var(--accent)] border border-[var(--border)]">
+            {badge}
           </span>
         )}
         {href ? (
-          <ExternalLink size={14} className="text-[var(--muted-foreground)]" />
+          <ExternalLink size={14} className="text-[var(--muted-foreground)] shrink-0" />
         ) : (
-          <ChevronRight size={14} className="text-[var(--muted-foreground)]" />
+          <ChevronRight size={14} className="text-[var(--muted-foreground)] shrink-0" />
         )}
       </div>
-    </>
+    </div>
   );
 
   if (href) {
     return (
       <a
         href={href}
-        className="flex items-center justify-between rounded-2xl px-4 py-3.5 transition hover:bg-[var(--accent)]"
+        className="flex w-full items-center rounded-2xl px-4 py-3 transition hover:bg-[var(--accent)] cursor-pointer"
       >
         {content}
       </a>
@@ -334,7 +396,7 @@ function SettingsItem({
   return (
     <button
       onClick={onClick}
-      className="flex w-full items-center justify-between rounded-2xl px-4 py-3.5 transition hover:bg-[var(--accent)]"
+      className="flex w-full items-center rounded-2xl px-4 py-3 transition hover:bg-[var(--accent)] text-left cursor-pointer"
     >
       {content}
     </button>

@@ -10,6 +10,7 @@ import dynamic from "next/dynamic";
 const CropModal = dynamic(() => import("@/components/CropModal"), {
   ssr: false,
 });
+import UpgradeToProModal from "@/components/UpgradeToProModal";
 import {
   Edit3,
   Plus,
@@ -56,6 +57,7 @@ export default function ProfilePage() {
   const [editing, setEditing] = useState<EditSection>(null);
   const [saving, setSaving] = useState(false);
   const [cardSlug, setCardSlug] = useState<string | null>(null);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   // Edit form states
   const [editForm, setEditForm] = useState<Partial<Profile>>({});
@@ -219,6 +221,15 @@ export default function ProfilePage() {
 
 
   async function shareProfile() {
+    const isFree =
+      profile?.subscription_plan === "free" ||
+      (!profile?.is_member && !profile?.membership_expires_at);
+
+    if (isFree) {
+      setShowUpgradeModal(true);
+      return;
+    }
+
     const url = profile?.username
       ? `${window.location.origin}/${profile.username}`
       : cardSlug
@@ -1316,6 +1327,15 @@ export default function ProfilePage() {
           }
           onCancel={handleCropCancel}
           onConfirm={handleCropConfirm}
+        />
+      )}
+
+      {/* Upgrade to Pro Modal */}
+      {profile && (
+        <UpgradeToProModal
+          isOpen={showUpgradeModal}
+          onClose={() => setShowUpgradeModal(false)}
+          profile={profile}
         />
       )}
     </div>

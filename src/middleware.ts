@@ -36,6 +36,35 @@ export async function middleware(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const user = data?.claims?.sub ? { id: data.claims.sub } : null;
 
+  // Subdomain routing: if request is on admin.* subdomain, rewrite to /admin
+  const host = request.headers.get("host") || "";
+  if (host.startsWith("admin.") && !request.nextUrl.pathname.startsWith("/api")) {
+    if (!request.nextUrl.pathname.startsWith("/admin")) {
+      const url = request.nextUrl.clone();
+      url.pathname = `/admin${request.nextUrl.pathname === "/" ? "" : request.nextUrl.pathname}`;
+      return NextResponse.rewrite(url);
+    }
+  }
+
+  // Protect admin routes — redirect to /admin/login if not signed in
+  const isAdminRoute =
+    request.nextUrl.pathname === "/admin" ||
+    request.nextUrl.pathname.startsWith("/admin/");
+  const isLoginPage = request.nextUrl.pathname.startsWith("/admin/login");
+
+  if (isAdminRoute && !isLoginPage && !user) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/admin/login";
+    return NextResponse.redirect(url);
+  }
+
+  // Redirect signed-in admin from /admin/login to /admin
+  if (isLoginPage && user) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/admin";
+    return NextResponse.redirect(url);
+  }
+
   // Protect dashboard routes
   if (request.nextUrl.pathname.startsWith("/dashboard") && !user) {
     const url = request.nextUrl.clone();
@@ -47,7 +76,8 @@ export async function middleware(request: NextRequest) {
   if (
     (request.nextUrl.pathname === "/signup" ||
       request.nextUrl.pathname === "/") &&
-    user
+    user &&
+    !host.startsWith("admin.")
   ) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
@@ -58,8 +88,15 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Only the routes that actually need an auth decision. Public profile
-  // pages (/<username>, /c/<id>, …) no longer pay for an auth check on
-  // every visitor's request.
-  matcher: ["/", "/signup", "/dashboard/:path*", "/onboarding/:path*"],
+  // Routes needing auth decision and admin routing
+  matcher: [
+    "/",
+    "/signup",
+    "/dashboard",
+    "/dashboard/:path*",
+    "/onboarding/:path*",
+    "/admin",
+    "/admin/:path*",
+  ],
 };
+

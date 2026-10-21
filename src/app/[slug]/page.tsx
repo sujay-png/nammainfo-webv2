@@ -72,6 +72,8 @@ export async function generateMetadata({
   };
 }
 
+import GatedProfileView from "@/components/GatedProfileView";
+
 export default async function SlugPage({
   params,
 }: {
@@ -82,6 +84,34 @@ export default async function SlugPage({
   if (!result) notFound();
 
   const { profile } = result;
+
+  // Access Control: Suspended account
+  if (profile.status === "suspended") {
+    return <GatedProfileView profile={profile} reason="suspended" />;
+  }
+
+  // Check plan & expiry
+  const isLifetime =
+    profile.subscription_plan === "lifetime" ||
+    (profile.membership_expires_at
+      ? new Date(profile.membership_expires_at).getFullYear() >= 2090
+      : false);
+
+  const isFree =
+    profile.subscription_plan === "free" ||
+    (!profile.is_member && !profile.membership_expires_at);
+
+  if (isFree) {
+    return <GatedProfileView profile={profile} reason="free" />;
+  }
+
+  if (!isLifetime && profile.membership_expires_at) {
+    const expiryTime = new Date(profile.membership_expires_at).getTime();
+    if (expiryTime < Date.now()) {
+      return <GatedProfileView profile={profile} reason="expired" />;
+    }
+  }
+
   const supabase = createCachedPublicClient();
 
   // Tap counting happens client-side in <TapTracker /> (rendered by
