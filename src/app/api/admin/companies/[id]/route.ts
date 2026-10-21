@@ -64,7 +64,9 @@ export async function GET(
 
     // Primary card count
     let primaryCardCount = 0;
-    if (p.primary_card_count !== undefined && p.primary_card_count !== null) {
+    if (p.subscription_plan === "free") {
+      primaryCardCount = 0;
+    } else if (p.primary_card_count !== undefined && p.primary_card_count !== null) {
       primaryCardCount = Number(p.primary_card_count);
     } else if (
       p.subscription_plan === "pro" ||
@@ -78,13 +80,16 @@ export async function GET(
 
     // Plan mapping: strictly "free" | "pro"
     let plan: SubscriptionPlanType = "free";
-    if (
+    if (p.subscription_plan === "free") {
+      plan = "free";
+    } else if (
       p.subscription_plan === "pro" ||
       p.subscription_plan === "starter" ||
       p.subscription_plan === "enterprise" ||
-      p.subscription_plan === "lifetime" ||
-      totalCardsIssued > 0
+      p.subscription_plan === "lifetime"
     ) {
+      plan = "pro";
+    } else if (p.is_member === true && p.membership_expires_at) {
       plan = "pro";
     } else {
       plan = "free";

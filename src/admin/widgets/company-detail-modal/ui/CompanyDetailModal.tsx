@@ -70,8 +70,8 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
           setDetails(data);
           const activePlan = data.subscriptionPlan === "pro" ? "pro" : "free";
           setEditPlan(activePlan);
-          setEditStartDate(formatDateInput(data.subscriptionStartedAt));
-          setEditExpiryDate(formatDateInput(data.membershipExpiresAt));
+          setEditStartDate(activePlan === "pro" ? formatDateInput(data.subscriptionStartedAt) : "");
+          setEditExpiryDate(activePlan === "pro" ? formatDateInput(data.membershipExpiresAt) : "");
         })
         .catch((err) => {
           console.error("Failed to load company details:", err);
@@ -93,12 +93,41 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
   const isExpired = current.status === "expired" || (!validity.isLifetime && validity.isExpired);
   const teamCount = current.employees?.length || 0;
 
+  // Helper: exactly 1 year later (e.g. 2026-10-21 -> 2027-10-21)
+  const calculateOneYearLater = (dateStr: string): string => {
+    if (!dateStr || !dateStr.includes("-")) return "";
+    const [y, m, d] = dateStr.split("-").map(Number);
+    if (!y || !m || !d) return "";
+    if (m === 2 && d === 29) {
+      const nextY = y + 1;
+      const isLeap = (nextY % 4 === 0 && nextY % 100 !== 0) || (nextY % 400 === 0);
+      return `${nextY}-02-${isLeap ? "29" : "28"}`;
+    }
+    const nextY = y + 1;
+    const mm = String(m).padStart(2, "0");
+    const dd = String(d).padStart(2, "0");
+    return `${nextY}-${mm}-${dd}`;
+  };
+
   // Plan Selection handler
   const handlePlanSelect = (newPlan: SubscriptionPlanType) => {
     setEditPlan(newPlan);
-    if (newPlan === "pro" && !editExpiryDate) {
-      const nextYear = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-      setEditExpiryDate(nextYear);
+    if (newPlan === "pro") {
+      const today = new Date().toISOString().split("T")[0];
+      const start = editStartDate || today;
+      setEditStartDate(start);
+      setEditExpiryDate(calculateOneYearLater(start));
+    } else if (newPlan === "free") {
+      setEditStartDate("");
+      setEditExpiryDate("");
+    }
+  };
+
+  // Start Date change handler: automatically sets expiry date to 1 year later
+  const handleStartDateChange = (val: string) => {
+    setEditStartDate(val);
+    if (val) {
+      setEditExpiryDate(calculateOneYearLater(val));
     }
   };
 
@@ -108,13 +137,13 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
       ? null
       : editExpiryDate
       ? new Date(`${editExpiryDate}T23:59:59.000Z`).toISOString()
-      : current.membershipExpiresAt;
+      : null;
 
     const finalStart = editPlan === "free"
       ? null
       : editStartDate
       ? new Date(editStartDate).toISOString()
-      : current.subscriptionStartedAt;
+      : null;
 
     setActionLoading(true);
     try {
@@ -122,6 +151,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
         subscriptionPlan: editPlan,
         subscriptionStartedAt: finalStart,
         membershipExpiresAt: finalExpiry,
+        primaryCardCount: editPlan === "free" ? 0 : 1,
       });
 
       setDetails((prev) =>
@@ -131,6 +161,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
               subscriptionPlan: editPlan,
               subscriptionStartedAt: finalStart,
               membershipExpiresAt: finalExpiry,
+              primaryCardCount: editPlan === "free" ? 0 : 1,
               employees: (prev.employees || []).map((e) => ({
                 ...e,
                 isPremium: editPlan !== "free",
@@ -399,7 +430,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                       <input
                         type="date"
                         value={editStartDate}
-                        onChange={(e) => setEditStartDate(e.target.value)}
+                        onChange={(e) => handleStartDateChange(e.target.value)}
                         className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-xs font-medium outline-none focus:border-[var(--foreground)]"
                       />
                     </div>

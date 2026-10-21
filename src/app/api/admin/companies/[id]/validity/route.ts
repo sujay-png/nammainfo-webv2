@@ -49,6 +49,8 @@ export async function POST(
       updates.is_member = parsed.data.subscriptionPlan !== "free";
       if (parsed.data.subscriptionPlan === "free") {
         updates.membership_expires_at = null;
+        updates.subscription_started_at = null;
+        updates.primary_card_count = 0;
       }
     }
 
@@ -87,11 +89,13 @@ export async function POST(
         empUpdates.is_premium = parsed.data.subscriptionPlan !== "free";
       }
       if (parsed.data.subscriptionPlan === "free") {
+        empUpdates.is_premium = false;
         empUpdates.subscription_expires_at = null;
+        empUpdates.subscription_started_at = null;
       } else if (parsed.data.membershipExpiresAt !== undefined) {
         empUpdates.subscription_expires_at = parsed.data.membershipExpiresAt;
       }
-      if (parsed.data.subscriptionStartedAt !== undefined) {
+      if (parsed.data.subscriptionStartedAt !== undefined && parsed.data.subscriptionPlan !== "free") {
         empUpdates.subscription_started_at = parsed.data.subscriptionStartedAt;
       }
       if (Object.keys(empUpdates).length > 0) {
