@@ -5,46 +5,28 @@ import {
   CreditCard,
   Star,
   Users,
-  Eye,
   TrendingUp,
   CheckCircle2,
   ChevronRight,
-  Activity,
-  Zap,
+  User,
   BarChart3,
   UserPlus,
   CalendarClock,
+  ArrowRight,
+  Edit3,
+  Scan,
+  Settings,
+  Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { formatDistanceToNow, initials } from "@/lib/utils";
 import type { Profile, Card, Review, Employee, Connection } from "@/lib/supabase/types";
-
-/* ------------------------------------------------------------------ */
-/*  Profile-completion helpers                                         */
-/* ------------------------------------------------------------------ */
-
-interface CompletionItem {
-  label: string;
-  done: boolean;
-  href: string;
-}
-
-function getCompletionItems(profile: Profile, card: Card | null): CompletionItem[] {
-  return [
-    { label: "Add business name", done: !!profile.business_name, href: "/dashboard/profile" },
-    { label: "Upload logo", done: !!profile.logo_url, href: "/dashboard/profile" },
-    { label: "Upload cover photo", done: !!profile.cover_url, href: "/dashboard/profile" },
-    { label: "Write a bio", done: !!profile.bio, href: "/dashboard/profile" },
-    { label: "Add phone number", done: !!profile.phone, href: "/dashboard/profile" },
-    { label: "Add email", done: !!profile.email, href: "/dashboard/profile" },
-    { label: "Set username", done: !!profile.username, href: "/dashboard/profile" },
-    { label: "Add services", done: profile.services?.length > 0, href: "/dashboard/profile" },
-    { label: "Add social links", done: profile.social_links?.length > 0, href: "/dashboard/profile" },
-    { label: "Activate a card", done: !!card?.is_active, href: "/dashboard/scanner" },
-  ];
-}
+import UpgradeToProModal from "@/components/UpgradeToProModal";
+import RenewalModal from "@/components/RenewalModal";
+import { calculateRenewalCost } from "@/lib/pricing";
+import { calculateProfileCompletion } from "@/lib/profile-completion";
 
 /* ------------------------------------------------------------------ */
 /*  Stat card                                                          */
@@ -87,10 +69,126 @@ function fmtDate(d: Date) {
   return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 }
 
-function ValidityCard({ profile }: { profile: Profile }) {
+function ValidityCard({
+  profile,
+  employeesCount,
+  onOpenUpgrade,
+  onOpenRenewal,
+}: {
+  profile: Profile;
+  employeesCount: number;
+  onOpenUpgrade: () => void;
+  onOpenRenewal: () => void;
+}) {
   const joined = startOfDay(new Date(profile.created_at));
-  // A renewal sets membership_expires_at; otherwise the card is valid for
-  // 365 days from the day they joined.
+
+  const isFree =
+    profile.subscription_plan === "free" ||
+    (!profile.is_member && !profile.membership_expires_at);
+
+  const isLifetime =
+    profile.subscription_plan === "lifetime" ||
+    (profile.membership_expires_at
+      ? new Date(profile.membership_expires_at).getFullYear() >= 2090
+      : false);
+
+  if (isFree) {
+    return (
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-4 shadow-sm">
+        {/* Top Header: Identity on left, Free Tier right-aligned */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)] border border-[var(--border)] text-[var(--foreground)]">
+              <CreditCard size={18} strokeWidth={1.7} />
+            </div>
+            <div>
+              <span className="font-medium text-sm text-[var(--foreground)] block">
+                Account Status
+              </span>
+              <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                Member since {fmtDate(joined)}
+              </p>
+            </div>
+          </div>
+
+          <span className="font-mono text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] text-right">
+            Free Tier
+          </span>
+        </div>
+
+        <button
+          onClick={onOpenUpgrade}
+          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
+        >
+          <Sparkles size={14} />
+          <span>Upgrade to Pro</span>
+          <ArrowRight size={14} />
+        </button>
+
+        {/* Structured specs row - no wrapping glitches, crisp scannability */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-[var(--border)]">
+          <div className="p-2.5 rounded-xl bg-[var(--accent)]/40 border border-[var(--border)]">
+            <span className="block font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
+              Subscription
+            </span>
+            <span className="block font-mono text-xs font-semibold text-[var(--foreground)] mt-0.5">
+              Free (Digital)
+            </span>
+          </div>
+
+          <div className="p-2.5 rounded-xl bg-[var(--accent)]/40 border border-[var(--border)]">
+            <span className="block font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
+              Validity
+            </span>
+            <span className="block font-mono text-xs font-semibold text-[var(--foreground)] mt-0.5">
+              N/A
+            </span>
+          </div>
+
+          <div className="col-span-2 sm:col-span-1 p-2.5 rounded-xl bg-[var(--accent)]/40 border border-[var(--border)]">
+            <span className="block font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
+              Physical Card
+            </span>
+            <span className="block font-mono text-xs font-semibold text-[var(--muted-foreground)] mt-0.5">
+              Unclaimed
+            </span>
+          </div>
+        </div>
+
+        {/* Pro features callout */}
+        <div className="p-3 rounded-xl bg-[var(--accent)]/30 border border-[var(--border)] text-xs text-[var(--muted-foreground)] leading-relaxed">
+          Upgrade to unlock your custom public URL (<code className="font-mono text-[11px] text-[var(--foreground)]">namma.info/{profile.username || "your-name"}</code>) and receive your personalized physical NFC smart business card with express doorstep delivery.
+        </div>
+      </div>
+    );
+  }
+
+  if (isLifetime) {
+    const totalCards = 1 + employeesCount;
+    return (
+      <div className="rounded-2xl border border-purple-500/30 bg-purple-500/5 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-500/10 text-purple-600">
+              <CalendarClock size={20} strokeWidth={1.6} />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-[var(--foreground)]">
+                Member since {fmtDate(joined)}
+              </p>
+              <p className="font-mono text-[11px] text-purple-600 dark:text-purple-400 font-semibold">
+                Lifetime Organization Access (Permanent)
+              </p>
+              <p className="font-mono text-[10px] text-[var(--muted-foreground)] mt-0.5">
+                {totalCards} Total Cards (1 Primary + {employeesCount} Team)
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const expires = profile.membership_expires_at
     ? startOfDay(new Date(profile.membership_expires_at))
     : new Date(joined.getTime() + VALIDITY_DAYS * DAY_MS);
@@ -100,7 +198,11 @@ function ValidityCard({ profile }: { profile: Profile }) {
   const totalDays = Math.max(1, Math.round((expires.getTime() - joined.getTime()) / DAY_MS));
   const pctLeft = Math.min(100, Math.max(0, (daysLeft / totalDays) * 100));
   const expired = daysLeft === 0;
-  const endingSoon = !expired && daysLeft <= 30;
+  const endingSoon = !expired && daysLeft <= 15;
+
+  const primaryCards = Number(profile.primary_card_count ?? 1);
+  const totalCards = primaryCards + employeesCount;
+  const renewalCost = calculateRenewalCost(primaryCards, employeesCount);
 
   const tone = expired
     ? "border-red-500/30 bg-red-500/5"
@@ -113,7 +215,7 @@ function ValidityCard({ profile }: { profile: Profile }) {
     <div className={`rounded-2xl border p-4 ${tone}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--muted)] text-[var(--foreground)]">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--muted)] text-[var(--foreground)]">
             <CalendarClock size={20} strokeWidth={1.6} />
           </div>
           <div>
@@ -123,6 +225,12 @@ function ValidityCard({ profile }: { profile: Profile }) {
             <p className="font-mono text-[11px] text-[var(--muted-foreground)]">
               {expired ? `Expired on ${fmtDate(expires)}` : `Valid till ${fmtDate(expires)}`}
             </p>
+            <div className="mt-1 flex items-center gap-1.5 font-mono text-[11px] text-[var(--muted-foreground)]">
+              <Users size={12} className="text-[var(--primary)]" />
+              <span>
+                {totalCards} Total Cards ({primaryCards} Primary + {employeesCount} Team)
+              </span>
+            </div>
           </div>
         </div>
         <div className="text-right">
@@ -143,13 +251,42 @@ function ValidityCard({ profile }: { profile: Profile }) {
         <div className={`h-full rounded-full transition-all duration-500 ${barColor}`} style={{ width: `${pctLeft}%` }} />
       </div>
 
-      {(expired || endingSoon) && (
-        <Link
-          href="/dashboard/settings"
-          className="mt-3 inline-flex rounded-lg bg-[var(--primary)] px-3 py-1.5 font-mono text-[11px] font-medium text-[var(--primary-foreground)]"
-        >
-          {expired ? "Renew card" : "Renew now"}
-        </Link>
+      {(expired || endingSoon) ? (
+        <div className="mt-4 pt-3 border-t border-[var(--border)]/50 space-y-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <span className="font-semibold text-xs text-[var(--foreground)] block">
+                {expired ? "Subscription Expired" : "Organization Subscription Expiring Soon"}
+              </span>
+              <span className="text-[11px] text-[var(--muted-foreground)]">
+                Synchronized renewal for all {totalCards} cards ({primaryCards} Primary + {employeesCount} Team) at ₹{renewalCost.unitPrice}/card
+              </span>
+            </div>
+            <span className="font-headline font-bold text-sm text-[var(--foreground)]">
+              Total: ₹{renewalCost.totalAmount.toLocaleString("en-IN")}
+            </span>
+          </div>
+
+          <button
+            onClick={onOpenRenewal}
+            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition cursor-pointer"
+          >
+            <CreditCard size={14} />
+            <span>Renew All {totalCards} Cards (₹{renewalCost.totalAmount.toLocaleString("en-IN")})</span>
+          </button>
+        </div>
+      ) : (
+        <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-[var(--border)]/40 text-[11px]">
+          <span className="text-[var(--muted-foreground)]">
+            Organization Renewal: <strong className="text-[var(--foreground)]">₹{renewalCost.totalAmount.toLocaleString("en-IN")}</strong> / yr ({totalCards} card{totalCards === 1 ? "" : "s"} @ ₹{renewalCost.unitPrice}/card)
+          </span>
+          <button
+            onClick={onOpenRenewal}
+            className="text-[var(--primary)] hover:underline font-semibold cursor-pointer"
+          >
+            Renew Early
+          </button>
+        </div>
       )}
     </div>
   );
@@ -168,6 +305,8 @@ export default function HomePage() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [tapCount, setTapCount] = useState(0);
   const [reviewCount, setReviewCount] = useState(0);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [showRenewalModal, setShowRenewalModal] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -243,10 +382,15 @@ export default function HomePage() {
   if (!profile) return null;
 
   /* Derived data */
-  const completionItems = getCompletionItems(profile, card);
-  const completedCount = completionItems.filter((i) => i.done).length;
-  const completionPct = Math.round((completedCount / completionItems.length) * 100);
-  const pendingItems = completionItems.filter((i) => !i.done);
+  const completionData = calculateProfileCompletion(profile);
+  const completionItems = completionData.items;
+  const completedCount = completionData.completedCount;
+  const completionPct = completionData.percentage;
+  const pendingItems = completionData.missingItems;
+
+  const isFree =
+    profile.subscription_plan === "free" ||
+    (!profile.is_member && !profile.membership_expires_at);
 
   const avgRating =
     reviews.length > 0
@@ -271,18 +415,50 @@ export default function HomePage() {
         <StatCard icon={CreditCard} label="Card Taps" value={tapCount} />
         <StatCard icon={Star} label="Reviews" value={reviewCount} />
         <StatCard icon={Users} label="Team" value={employees.length} />
-        <StatCard icon={Eye} label="Connections" value={connections.length} />
+        <StatCard icon={UserPlus} label="Connections" value={connections.length} />
       </div>
 
-      {/* Card validity — 1 year from the day they joined */}
-      <ValidityCard profile={profile} />
+      {/* Card validity */}
+      <ValidityCard
+        profile={profile}
+        employeesCount={employees.length}
+        onOpenUpgrade={() => setShowUpgradeModal(true)}
+        onOpenRenewal={() => setShowRenewalModal(true)}
+      />
+
+      {/* 100% Profile Completion Pro Upgrade Banner */}
+      {completionPct === 100 && isFree && (
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-3 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles size={16} className="text-[var(--primary)]" />
+              <span className="font-semibold text-sm text-[var(--foreground)]">
+                Profile 100% Completed!
+              </span>
+            </div>
+            <span className="font-mono text-xs font-bold text-emerald-600 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+              Ready for Pro
+            </span>
+          </div>
+          <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
+            Your profile is ready! Upgrade to Pro to claim your personal public link and receive your custom-engraved physical NFC smart business card.
+          </p>
+          <button
+            onClick={() => setShowUpgradeModal(true)}
+            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
+          >
+            <CreditCard size={15} />
+            <span>Order Custom NFC Card & Upgrade</span>
+          </button>
+        </div>
+      )}
 
       {/* Profile completion */}
       {completionPct < 100 && (
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Zap size={16} className="text-[var(--primary)]" strokeWidth={1.6} />
+              <User size={16} className="text-[var(--primary)]" strokeWidth={1.8} />
               <span className="text-sm font-medium text-[var(--foreground)]">
                 Profile Completion
               </span>
@@ -317,13 +493,13 @@ export default function HomePage() {
       )}
 
       {/* Quick actions */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
         <Link
           href="/dashboard/profile"
-          className="flex flex-col items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 transition-colors hover:bg-[var(--accent)]"
+          className="flex flex-col items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3.5 sm:p-4 transition-colors hover:bg-[var(--accent)]"
         >
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--muted)]">
-            <UserPlus size={18} className="text-[var(--foreground)]" strokeWidth={1.6} />
+            <Edit3 size={18} className="text-[var(--foreground)]" strokeWidth={1.8} />
           </div>
           <span className="font-mono text-[10px] text-[var(--muted-foreground)]">
             Edit Profile
@@ -331,10 +507,10 @@ export default function HomePage() {
         </Link>
         <Link
           href="/dashboard/scanner"
-          className="flex flex-col items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 transition-colors hover:bg-[var(--accent)]"
+          className="flex flex-col items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3.5 sm:p-4 transition-colors hover:bg-[var(--accent)]"
         >
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--muted)]">
-            <BarChart3 size={18} className="text-[var(--foreground)]" strokeWidth={1.6} />
+            <Scan size={18} className="text-[var(--foreground)]" strokeWidth={1.8} />
           </div>
           <span className="font-mono text-[10px] text-[var(--muted-foreground)]">
             Scan Card
@@ -342,10 +518,10 @@ export default function HomePage() {
         </Link>
         <Link
           href="/dashboard/settings"
-          className="flex flex-col items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 transition-colors hover:bg-[var(--accent)]"
+          className="flex flex-col items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3.5 sm:p-4 transition-colors hover:bg-[var(--accent)]"
         >
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--muted)]">
-            <TrendingUp size={18} className="text-[var(--foreground)]" strokeWidth={1.6} />
+            <Settings size={18} className="text-[var(--foreground)]" strokeWidth={1.8} />
           </div>
           <span className="font-mono text-[10px] text-[var(--muted-foreground)]">
             Settings
@@ -456,7 +632,7 @@ export default function HomePage() {
       {connections.length > 0 && (
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
           <div className="mb-3 flex items-center gap-2">
-            <Activity size={16} className="text-[var(--primary)]" strokeWidth={1.6} />
+            <UserPlus size={16} className="text-[var(--primary)]" strokeWidth={1.8} />
             <span className="text-sm font-medium text-[var(--foreground)]">
               Recent Connections
             </span>
@@ -528,6 +704,27 @@ export default function HomePage() {
             )}
           </div>
         </div>
+      )}
+
+      {/* Upgrade to Pro & Order NFC Card Modal */}
+      <UpgradeToProModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        profile={profile}
+      />
+
+      {/* Annual Organization Renewal Modal */}
+      {profile && (
+        <RenewalModal
+          isOpen={showRenewalModal}
+          onClose={() => setShowRenewalModal(false)}
+          profile={profile}
+          employeesCount={employees.length}
+          onSuccess={() => {
+            setShowRenewalModal(false);
+            window.location.reload();
+          }}
+        />
       )}
     </div>
   );
