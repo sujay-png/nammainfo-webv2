@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { businessTypeLabel } from "@/lib/business-types";
+import BusinessTypePicker from "@/components/BusinessTypePicker";
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import type { Profile, Review } from "@/lib/supabase/types";
@@ -171,8 +173,16 @@ export default function ProfilePage() {
     setEditing(section);
   }
 
+  const [typeError, setTypeError] = useState(false);
+
   async function saveProfile() {
     if (!profile) return;
+    // Business type is required (once the column exists — see
+    // supabase/migrations/20261022_profiles_business_type.sql).
+    if (editing === "about" && "business_type" in profile && !editForm.business_type) {
+      setTypeError(true);
+      return;
+    }
     setSaving(true);
     const supabase = createClient();
 
@@ -203,6 +213,10 @@ export default function ProfilePage() {
     // so saving never breaks before that.
     if ("maps_url" in profile) {
       updates.maps_url = editForm.maps_url?.trim() || null;
+    }
+    // Same for business_type (supabase/migrations/20261022_profiles_business_type.sql).
+    if ("business_type" in profile) {
+      updates.business_type = editForm.business_type || null;
     }
 
     const { error } = await supabase
@@ -593,6 +607,19 @@ export default function ProfilePage() {
         icon={<Briefcase size={16} />}
         onEdit={() => startEdit("about")}
       >
+        {businessTypeLabel(profile.business_type) ? (
+          <span className="mb-2 inline-block rounded-full bg-ink-100 px-2.5 py-1 text-[11px] font-semibold text-ink-700">
+            {businessTypeLabel(profile.business_type)}
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => startEdit("about")}
+            className="mb-2 inline-flex items-center rounded-full border border-dashed border-ink-300 px-2.5 py-1 text-[11px] font-medium text-ink-500"
+          >
+            + Add business type (retailer, wholesaler, service…)
+          </button>
+        )}
         {profile.bio ? (
           <p className="text-sm leading-relaxed text-ink-600">{profile.bio}</p>
         ) : (
@@ -1052,6 +1079,14 @@ export default function ProfilePage() {
       {/* About Edit */}
       {editing === "about" && (
         <EditSheet title="Edit About" onClose={() => setEditing(null)}>
+          <BusinessTypePicker
+            value={editForm.business_type}
+            onChange={(v) => {
+              setEditForm({ ...editForm, business_type: v });
+              setTypeError(false);
+            }}
+            error={typeError}
+          />
           <TextareaField
             label="About your business"
             value={editForm.bio ?? ""}

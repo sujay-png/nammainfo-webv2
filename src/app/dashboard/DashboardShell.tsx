@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Home,
   User,
@@ -15,6 +15,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { useTheme } from "@/components/ThemeProvider";
 import InstallAppPrompt from "@/components/InstallAppPrompt";
+import RequireBusinessType from "@/components/RequireBusinessType";
 import { flushPendingSaves } from "@/lib/saved-cards";
 
 const tabs = [
@@ -31,7 +32,9 @@ export default function DashboardShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { colorTheme, setColorTheme } = useTheme();
+  const [needsTypeFor, setNeedsTypeFor] = useState<string | null>(null);
 
   // Sync color theme from Supabase on first dashboard load
   useEffect(() => {
@@ -49,13 +52,21 @@ export default function DashboardShell({
 
       const { data } = await supabase
         .from("profiles")
-        .select("theme")
+        .select("*")
         .eq("id", user.id)
         .single();
 
-      const saved = (data as { theme?: string } | null)?.theme;
+      const row = data as { theme?: string; business_name?: string | null; business_type?: string | null } | null;
+      const saved = row?.theme;
       if (saved && saved !== colorTheme) {
         setColorTheme(saved);
+      }
+
+      // Business type is required for owners who have set up a business.
+      // (Skipped for people who only signed up to save someone's card, and
+      // until the business_type column exists.)
+      if (row && "business_type" in row && !row.business_type && row.business_name?.trim()) {
+        setNeedsTypeFor(user.id);
       }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -74,7 +85,18 @@ export default function DashboardShell({
       <main className="flex-1 pb-20">{children}</main>
 
       {/* "Add to home screen" — owners only (dashboard), never on public profiles */}
-      <InstallAppPrompt />
+      {needsTypeFor ? (
+        <RequireBusinessType
+          userId={needsTypeFor}
+          onDone={() => {
+            setNeedsTypeFor(null);
+            // Let open pages (e.g. Profile) pick up the new value.
+            router.refresh();
+          }}
+        />
+      ) : (
+        <InstallAppPrompt />
+      )}
 
       {/* Bottom navigation — 5 tabs */}
       <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-[var(--border)] bg-[var(--background)]/90 backdrop-blur-xl pb-safe">

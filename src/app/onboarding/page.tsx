@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import BusinessTypePicker from "@/components/BusinessTypePicker";
 import {
   ArrowRight,
   Loader2,
@@ -34,6 +35,7 @@ export default function OnboardingPage() {
     address: "",
     username: "",
     bio: "",
+    business_type: "",
   });
 
   // Arrived from a sign-up confirmation email in the "save this card"
@@ -126,9 +128,7 @@ export default function OnboardingPage() {
       const username = form.username.toLowerCase().replace(/[^a-z0-9-]/g, "");
 
       // Update the profile (created by the signup trigger)
-      const { error } = await supabase
-        .from("profiles")
-        .update({
+      const profileUpdate: Record<string, unknown> = {
           owner_name: form.owner_name.trim(),
           business_name: form.business_name.trim() || null,
           job_title: form.job_title.trim() || null,
@@ -138,8 +138,14 @@ export default function OnboardingPage() {
           address: form.address.trim() || null,
           username: username || null,
           bio: form.bio.trim() || null,
-        })
-        .eq("id", userId);
+          business_type: form.business_type || null,
+        };
+      let { error } = await supabase.from("profiles").update(profileUpdate).eq("id", userId);
+      // If the business_type column hasn't been added yet, save the rest.
+      if (error && /business_type/.test(error.message)) {
+        delete profileUpdate.business_type;
+        ({ error } = await supabase.from("profiles").update(profileUpdate).eq("id", userId));
+      }
 
       if (error) {
         console.error("Onboarding error:", error);
@@ -212,14 +218,20 @@ export default function OnboardingPage() {
                 value={form.job_title}
                 onChange={(v) => updateField("job_title", v)}
               />
+              <div className="pt-2">
+                <BusinessTypePicker
+                  value={form.business_type}
+                  onChange={(v) => updateField("business_type", v)}
+                />
+              </div>
             </div>
 
             <button
               onClick={() => {
-                if (!form.owner_name.trim()) return;
+                if (!form.owner_name.trim() || !form.business_type) return;
                 setStep(2);
               }}
-              disabled={!form.owner_name.trim()}
+              disabled={!form.owner_name.trim() || !form.business_type}
               className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-ink-950 py-3.5 text-sm font-semibold text-white transition hover:bg-ink-800 disabled:opacity-40"
             >
               Continue

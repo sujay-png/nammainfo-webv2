@@ -170,6 +170,353 @@ function tidy(text: string): string {
     .trim();
 }
 
+type ReviewRole =
+  | "retailer"
+  | "manufacturer"
+  | "wholesaler"
+  | "distributor"
+  | "service"
+  | "agency"
+  | "freelancer"
+  | "product"; // product, business type unknown: neutral wording, never claims they made it
+
+/** Which angle to write from, based on the business type and the item. */
+function reviewRole(businessType: string | null | undefined, kind: ReviewItem["kind"]): ReviewRole {
+  if (kind === "service") {
+    if (businessType === "agency") return "agency";
+    if (businessType === "freelancer") return "freelancer";
+    return "service";
+  }
+  switch (businessType) {
+    case "retailer":
+    case "manufacturer":
+    case "wholesaler":
+    case "distributor":
+      return businessType;
+    default:
+      return "product";
+  }
+}
+
+type F = (b: string, s: string) => string;
+
+interface RolePack {
+  open: F[];
+  main: ((s: string) => string)[];
+  detail: string[];
+  rec: F[];
+  desc: (s: string, d: string) => string;
+  /** Overrides for roles where "the staff / the owner / the team" doesn't fit. */
+  mid?: string[];
+  closers?: string[];
+}
+
+function rolePacks(owner: string | null): Record<ReviewRole, RolePack> {
+  const cap = (d: string) => d[0].toUpperCase() + d.slice(1);
+  const productDesc = (s: string, d: string) =>
+    rand([`It was just as they describe it: ${d}.`, `${cap(d)}, exactly as promised.`, `As they mention, the ${s} is ${d}.`]);
+  const serviceDesc = (s: string, d: string) =>
+    rand([`Their ${s} covers ${d}, and they did all of it.`, `They told me upfront it would include ${d}, and that is what I got.`]);
+
+  return {
+    retailer: {
+      open: [
+        (b, s) => `I bought ${s} from ${b} last week and it was a pleasant experience.`,
+        (b, s) => `${b} is where I go for ${s} now.`,
+        (b, s) => `Went to ${b} looking for ${s} and found what I wanted.`,
+        (b, s) => `Been buying ${s} from ${b} for some time, so I thought I should finally write a review.`,
+        (b, s) => `A neighbour told me ${b} has a good range of ${s}, so I went there.`,
+        (b, s) => `I needed ${s} urgently and ${b} had it in stock.`,
+        (b, s) => `Visited ${b} for ${s} and I liked the way they dealt with me.`,
+        (b, s) => `Good shop for ${s}. I went to ${b} after checking a couple of other places.`,
+        (b, s) => `My family has been buying ${s} from ${b} for a while now.`,
+        (b, s) => `Picked up ${s} from ${b} recently.`,
+        (b, s) => `Shopping for ${s} at ${b} was easy and quick.`,
+        (b, s) => `I used to buy ${s} from wherever was closest, but this time I tried ${b} and I am glad I did.`,
+      ],
+      main: [
+        (s) => `They have a good variety of ${s}, so I could compare a few before choosing.`,
+        (s) => `The ${s} I got was genuine and in good condition.`,
+        (s) => `Prices for ${s} were reasonable, a little better than what I saw elsewhere.`,
+        (s) => `The staff explained the different ${s} options without pushing me towards the costliest one.`,
+        (s) => `They had the ${s} I wanted in stock, so there was no waiting.`,
+        (s) => `The ${s} was well packed and exactly what I asked for.`,
+        (s) => `I checked the ${s} once I got home and it was exactly as shown in the shop.`,
+        (s) => `Billing for the ${s} was quick and they gave a proper bill.`,
+      ],
+      detail: [
+        `The shop is clean and things are easy to find.`,
+        `They also told me about the current offers, which saved me a bit.`,
+        `Even when it was busy, someone came to help me quickly.`,
+        `They were fine with me taking my time to decide.`,
+        `They suggested a couple of options I had not tried before.`,
+        `Paying by UPI was smooth.`,
+        `I have gone back a few times since, and it has been the same good experience.`,
+      ],
+      rec: [
+        (b, s) => `For ${s}, I would suggest ${b} to anyone nearby.`,
+        (b, s) => `If you need ${s}, do check ${b} once.`,
+        (b, s) => `I will keep buying my ${s} from ${b}.`,
+        (b, s) => `Recommending ${b} for ${s} to friends and family.`,
+        (b, s) => `Good place for ${s}. ${b} has got a regular customer in me.`,
+        (b, s) => `Anyone looking for genuine ${s} at a fair price can go to ${b}.`,
+      ],
+      desc: productDesc,
+    },
+
+    manufacturer: {
+      open: [
+        (b, s) => `I ordered ${s} directly from ${b}, who make it themselves.`,
+        (b, s) => `${b} makes their own ${s}, and you can tell the difference.`,
+        (b, s) => `I have been using ${s} made by ${b} for a while now.`,
+        (b, s) => `Got ${s} from ${b} after a friend recommended their products.`,
+        (b, s) => `We placed an order for ${s} with ${b} for our office.`,
+        (b, s) => `Bought ${s} straight from the makers, ${b}.`,
+        (b, s) => `I wanted ${s} made to my requirement and ${b} did it.`,
+        (b, s) => `I visited ${b} to see their ${s} before ordering, and came back impressed.`,
+      ],
+      main: [
+        (s) => `The quality of the ${s} is very good. You can see the care that goes into making it.`,
+        (s) => `Their ${s} is well made and has held up well so far.`,
+        (s) => `The finishing on the ${s} is neat and it feels solid.`,
+        (s) => `They were happy to customise the ${s} a little for my needs.`,
+        (s) => `Since they make the ${s} themselves, the price was better than buying from a shop.`,
+        (s) => `Every batch of ${s} I have received has been the same quality.`,
+      ],
+      detail: [
+        `They explained the materials they use, which gave me confidence.`,
+        `Delivery was on the date they promised.`,
+        `Packing was strong and nothing was damaged.`,
+        `They also shared a few tips on how to take care of it.`,
+        `Bulk and small orders are both handled properly.`,
+      ],
+      rec: [
+        (b, s) => `If you want ${s} straight from the makers, go to ${b}.`,
+        (b, s) => `I would recommend ${b} for ${s} to anyone who values quality.`,
+        (b, s) => `Will order my ${s} from ${b} again.`,
+        (b, s) => `Good quality ${s} at a fair price. ${b} is a good choice.`,
+      ],
+      desc: productDesc,
+    },
+
+    wholesaler: {
+      open: [
+        (b, s) => `We run a small store and have been buying ${s} in bulk from ${b} for some months.`,
+        (b, s) => `${b} is our regular supplier for ${s}.`,
+        (b, s) => `I source ${s} for my shop from ${b}.`,
+        (b, s) => `We started taking ${s} from ${b} after our earlier supplier kept delaying.`,
+        (b, s) => `For bulk orders of ${s}, ${b} has been reliable for us.`,
+        (b, s) => `Our business buys ${s} wholesale from ${b}.`,
+        (b, s) => `I have been ordering ${s} from ${b} for our outlet.`,
+      ],
+      main: [
+        (s) => `Their rates for ${s} are competitive, so our margins are better.`,
+        (s) => `Stock of ${s} is usually available, and they tell us in advance if something is short.`,
+        (s) => `Every order of ${s} has come on time and in the right quantity.`,
+        (s) => `The quality of the ${s} stays the same from one order to the next.`,
+        (s) => `They are flexible with order quantities for ${s}, which helps a small business like ours.`,
+      ],
+      detail: [
+        `Billing and GST invoices are always proper.`,
+        `If a piece comes damaged, they replace it without any fuss.`,
+        `Payment terms are fair and clearly explained.`,
+        `Placing orders over WhatsApp is quick.`,
+        `Delivery to our shop is on time.`,
+      ],
+      rec: [
+        (b, s) => `Shop owners looking for a dependable ${s} supplier should talk to ${b}.`,
+        (b, s) => `For wholesale ${s}, I can recommend ${b}.`,
+        (b, s) => `We will continue taking our ${s} from ${b}.`,
+        (b, s) => `If you buy ${s} in bulk, ${b} is worth contacting.`,
+      ],
+      desc: productDesc,
+    },
+
+    distributor: {
+      open: [
+        (b, s) => `We get our ${s} through ${b}, who are dealers in this area.`,
+        (b, s) => `${b} is an authorised dealer for ${s}, so I bought from them.`,
+        (b, s) => `I purchased ${s} from ${b} because I wanted a genuine product with proper warranty.`,
+        (b, s) => `Our company has been getting ${s} supplied by ${b}.`,
+        (b, s) => `For ${s}, ${b} is the dealer I trust.`,
+        (b, s) => `I was told ${b} is the right place for original ${s}, and that turned out to be true.`,
+      ],
+      main: [
+        (s) => `The ${s} came with a proper bill and warranty.`,
+        (s) => `Supply of ${s} has been regular, without delays.`,
+        (s) => `They know the ${s} range well and suggested the right one for my need.`,
+        (s) => `Genuine ${s} at the right price, which is not always easy to find.`,
+        (s) => `When I had a warranty question about the ${s}, they took it up with the company for me.`,
+      ],
+      detail: [
+        `Delivery was on time.`,
+        `They helped with the installation details as well.`,
+        `After sales support has been good so far.`,
+        `Invoices and warranty papers were all in order.`,
+        `They picked up my call even after the sale was done.`,
+      ],
+      rec: [
+        (b, s) => `For genuine ${s} with proper support, I recommend ${b}.`,
+        (b, s) => `If you want ${s} from an authorised dealer, ${b} is a good option.`,
+        (b, s) => `Happy to recommend ${b} for ${s}.`,
+        (b, s) => `I will be getting my ${s} from ${b} again.`,
+      ],
+      desc: productDesc,
+    },
+
+    product: {
+      open: [
+        (b, s) => `I got ${s} from ${b} recently.`,
+        (b, s) => `Bought ${s} from ${b} and I am happy with it.`,
+        (b, s) => `${b} was suggested to me when I was looking for ${s}.`,
+        (b, s) => `I have been getting my ${s} from ${b} for some time.`,
+        (b, s) => `Needed ${s} and ${b} sorted it out quickly.`,
+        (b, s) => `Tried ${b} for ${s} for the first time this month.`,
+        (b, s) => `My experience buying ${s} from ${b} was good.`,
+      ],
+      main: [
+        (s) => `The ${s} was in good condition and exactly what I needed.`,
+        (s) => `The price of the ${s} was fair.`,
+        (s) => `They helped me pick the right ${s} for my requirement.`,
+        (s) => `The ${s} has been working well for me so far.`,
+        (s) => `They had the ${s} ready when they said they would.`,
+      ],
+      detail: [
+        `Billing was simple and quick.`,
+        `They packed everything properly.`,
+        `They answered all my questions before I paid.`,
+        `Delivery was on time.`,
+      ],
+      rec: [
+        (b, s) => `For ${s}, I would recommend ${b}.`,
+        (b, s) => `If you need ${s}, check with ${b}.`,
+        (b, s) => `I will go back to ${b} for ${s}.`,
+        (b, s) => `Good place to get ${s}. ${b} is reliable.`,
+      ],
+      desc: productDesc,
+    },
+
+    service: {
+      open: [
+        (b, s) => `I hired ${b} for ${s} and I am glad I did.`,
+        (b, s) => `Got ${s} done by ${b} recently.`,
+        (b, s) => `${b} took care of our ${s} last month.`,
+        (b, s) => `A friend gave me the number of ${b} when I needed ${s}.`,
+        (b, s) => `I had been putting off ${s} for a while until I called ${b}.`,
+        (b, s) => `We needed ${s} on a tight schedule, and ${b} managed it.`,
+        (b, s) => `Called ${b} for ${s} and they got back to me the same day.`,
+        (b, s) => `This is my second time using ${b} for ${s}.`,
+        (b, s) => `Our requirement for ${s} was a bit complicated, but ${b} handled it calmly.`,
+        (b, s) => `I compared a few quotes for ${s} and went with ${b}.`,
+      ],
+      main: [
+        (s) => `The ${s} was done neatly and on time.`,
+        (s) => `They explained what the ${s} would involve before starting, so there were no surprises.`,
+        (s) => `Whoever handled our ${s} clearly knew the work well.`,
+        (s) => `The result of the ${s} is good, and I have had no issues since.`,
+        (s) => `They finished the ${s} in the time they said they would.`,
+        (s) => `The cost of the ${s} was exactly what they quoted. Nothing extra at the end.`,
+      ],
+      detail: [
+        `They kept me updated at each step.`,
+        `Small changes I asked for were done without any argument.`,
+        `They followed up later to check everything was fine.`,
+        `Replies on WhatsApp were quick.`,
+        `They were polite and patient with all my questions.`,
+        `They came at the time they said they would.`,
+      ],
+      rec: [
+        (b, s) => `If you need ${s}, give ${b} a call.`,
+        (b, s) => `I would recommend ${b} for ${s}.`,
+        (b, s) => `Will use ${b} again for ${s}.`,
+        (b, s) => `For ${s}, ${b} is a safe choice.`,
+        (b, s) => `I have already passed on the number of ${b} to two friends who needed ${s}.`,
+      ],
+      desc: serviceDesc,
+    },
+
+    freelancer: {
+      open: [
+        (b, s) => `I hired ${b} for ${s} and it worked out really well.`,
+        (b, s) => `Found ${b} through a reference when I needed someone for ${s}.`,
+        (b, s) => `Worked with ${b} on ${s} recently.`,
+        (b, s) => `I wanted one person to handle ${s} from start to end, and ${b} did exactly that.`,
+        (b, s) => `This is the second time I have given ${b} work on ${s}.`,
+        (b, s) => `I was a little unsure about hiring a freelancer for ${s}, but ${b} changed my mind.`,
+        (b, s) => `${b} took up our ${s} at short notice.`,
+        (b, s) => `We needed help with ${s} without hiring a full agency, so we went with ${b}.`,
+        (b, s) => `Got in touch with ${b} for ${s} after seeing their earlier work.`,
+      ],
+      main: [
+        (s) => `They understood the ${s} brief quickly and asked the right questions.`,
+        (s) => `The ${s} was delivered before the deadline.`,
+        (s) => `Since I was talking directly to the person doing the ${s}, communication was easy.`,
+        (s) => `The quality of the ${s} was as good as bigger firms, at a much better price.`,
+        (s) => `They shared progress on the ${s} regularly and took feedback well.`,
+        (s) => `The ${s} came out just the way I had imagined it.`,
+      ],
+      detail: [
+        `Revisions were done quickly and without any fuss.`,
+        `They were available on WhatsApp whenever I had a doubt.`,
+        `Payment terms were simple and fair.`,
+        `They kept everything I shared confidential.`,
+        `They stuck to the timeline we agreed on.`,
+        `They even gave a few useful suggestions I had not thought of.`,
+      ],
+      rec: [
+        (b, s) => `If you need someone reliable for ${s}, I recommend ${b}.`,
+        (b, s) => `Will be working with ${b} again for ${s}.`,
+        (b, s) => `For ${s}, ${b} is a great person to hire.`,
+        (b, s) => `Anyone looking for a freelancer for ${s} should get in touch with ${b}.`,
+      ],
+      desc: serviceDesc,
+      mid: [
+        `Very professional and easy to work with.`,
+        `Honest about timelines right from the start.`,
+        `Patient with all my questions, even the silly ones.`,
+        `Quick to reply whenever I messaged.`,
+        `Clearly knows the work well.`,
+        `Down to earth and genuine.`,
+        `Took the time to understand exactly what I needed.`,
+        `Treated my small project as seriously as a big one.`,
+      ],
+      closers: [`Thank you!`, `Keep it up.`, `Five stars from me.`, `Good work.`, `Thanks again.`, `Wishing you more success.`],
+    },
+
+    agency: {
+      open: [
+        (b, s) => `We worked with ${b} on ${s} for our business.`,
+        (b, s) => `${b} handled our ${s} from planning to completion.`,
+        (b, s) => `We brought in ${b} for ${s} after a recommendation.`,
+        (b, s) => `I consulted ${b} for ${s} and it was money well spent.`,
+        (b, s) => `Our team has been working with ${b} on ${s} for a few months now.`,
+        (b, s) => `We were struggling with ${s} until we started working with ${b}.`,
+      ],
+      main: [
+        (s) => `They understood what we wanted from the ${s} quickly and laid out a clear plan.`,
+        (s) => `Regular updates on the ${s} meant we never had to chase them.`,
+        (s) => `Their advice on the ${s} was practical, not just theory.`,
+        (s) => `The ${s} they handled for us has shown good results.`,
+        (s) => `They coordinated everything for the ${s}, so we could focus on running our business.`,
+      ],
+      detail: [
+        `Meetings started on time and they came prepared.`,
+        `They were honest about what would and would not work.`,
+        `Reports were simple to understand.`,
+        `Anyone in their team could answer our questions.`,
+        `They stuck to the budget we agreed.`,
+      ],
+      rec: [
+        (b, s) => `For ${s}, I recommend talking to ${b}.`,
+        (b, s) => `Businesses looking for help with ${s} should consider ${b}.`,
+        (b, s) => `We will continue working with ${b} on ${s}.`,
+        (b, s) => `If ${s} is on your list, ${b} is a good team to have.`,
+      ],
+      desc: serviceDesc,
+    },
+  };
+}
+
 function generateReviewSuggestions(
   profile: Profile,
   count: number = 4,
@@ -181,202 +528,107 @@ function generateReviewSuggestions(
   const place = placeName(profile.coverage_area);
   const years = profile.years_in_business;
   const clients = profile.clients_served;
+  const businessType = profile.business_type ?? null;
   const usedOnThisPhone = typeof window !== "undefined" ? readUsedOpeners(profile.id) : new Set<string>();
 
   const services = ((profile.services as ReviewItem[]) ?? []).map((s) => ({ ...s, kind: "service" as const }));
   const products = ((profile.products as ReviewItem[]) ?? []).map((p) => ({ ...p, kind: "product" as const }));
   let items: ReviewItem[] = [...services, ...products].filter((it) => it?.name?.trim());
   if (category) items = items.filter((it) => it.category?.trim() === category);
-  if (items.length === 0) items = [{ name: category || "their service", kind: "service" }];
+  if (items.length === 0) {
+    const productish = ["retailer", "manufacturer", "wholesaler", "distributor"].includes(businessType ?? "");
+    items = [{ name: category || (productish ? "their products" : "their service"), kind: productish ? "product" : "service" }];
+  }
 
-  const Team = owner ? `${owner} and the team` : "The team";
-  const inPlace = place ? ` in ${place}` : "";
+  const packs = rolePacks(owner);
 
-  /* ---------- Paragraph 1: the company ---------- */
-  // (b = business name for this review, s = service/product name)
-  const p1Open: ((b: string, s: string) => string)[] = [
-    (b, s) => `I recently worked with ${b} for ${s}${inPlace} and I am really glad I did.`,
-    (b, s) => `A friend suggested ${b} when I was searching for ${s}, and it turned out to be a great suggestion.`,
-    (b, s) => `Finding a dependable place for ${s} is not easy, but ${b} made it simple.`,
-    (b, s) => `My experience with ${b} for ${s} was excellent from the very first call.`,
-    (b, s) => `I had been putting off ${s} for months until I finally contacted ${b}.`,
-    (b, s) => `This is my honest feedback about ${b} after getting ${s} done with them.`,
-    (b, s) => `Very happy with ${b}! I approached them for ${s} and the whole experience was smooth.`,
-    (b, s) => `After comparing a few options for ${s}${inPlace}, I chose ${b} and have no regrets.`,
-    (b, s) => `Writing this review because ${b} truly deserves it for the ${s} they handled for me.`,
-    (b, s) => `I came across ${b} while looking for help with ${s}, and they went beyond what I expected.`,
-    (b, s) => `Excellent people to deal with. I contacted ${b} for ${s} and was impressed right away.`,
-    (b, s) => `${b} handled my ${s} recently, and I wanted to share how good the experience was.`,
-    (b, s) => `If I could give more than five stars to ${b}, I would. I went to them for ${s}.`,
-    (b, s) => `It has been a real pleasure working with ${b} on ${s}.`,
-    (b, s) => `Our requirement for ${s} was a little complicated, yet ${b} took it on with confidence.`,
-    (b, s) => `I want to thank ${b} for the support they gave me with ${s}.`,
-    (b, s) => `Genuinely one of the better businesses I have dealt with. ${b} took care of my ${s}.`,
-    (b, s) => `Two words for ${b}: reliable and professional. I used them for ${s}.`,
-    (b, s) => `Before choosing ${b} for ${s}, I read their reviews. Now I understand why people like them.`,
-    (b, s) => `Last month I reached out to ${b} about ${s}, and they responded the same day.`,
-    (b, s) => `We needed ${s} on a tight schedule and ${b} delivered without any fuss.`,
-    (b, s) => `Happy customer here! ${b} took care of our ${s} from start to finish.`,
-    (b, s) => `I was a little unsure at first, but ${b} made me feel confident about the ${s}.`,
-    (b, s) => `So glad I found ${b}. They helped me with ${s} and I could not be happier.`,
-    (b, s) => `Our office was looking for someone to manage ${s}, and ${b} was the right call.`,
-    (b, s) => `Got ${s} done through ${b} and the experience was excellent.`,
-    (b, s) => `${b} came highly recommended for ${s}, and they lived up to every word.`,
-    (b, s) => `Thank you ${b}! The ${s} you did for us made a real difference.`,
-    (b, s) => `It is not often I write reviews, but ${b} earned this one with their ${s}.`,
-    (b, s) => `I reached ${b} through a colleague when I needed ${s}, and it was the best decision.`,
-    (b, s) => `Superb experience with ${b}. They took my ${s} requirement very seriously.`,
-    (b, s) => `When our earlier vendor let us down, ${b} stepped in for ${s} and sorted everything.`,
-    (b, s) => `Professional, friendly and on time. That sums up ${b} and their ${s}.`,
-    (b, s) => `I am a repeat customer of ${b}, and this time I used them for ${s}.`,
-    (b, s) => `Honest review for ${b}: their ${s} is worth it.`,
-    (b, s) => `From enquiry to delivery, ${b} made my ${s} completely hassle free.`,
-    (b, s) => `My family needed ${s} and someone pointed us to ${b}. We are very thankful.`,
-    (b, s) => `I spoke to a few places about ${s}, and ${b} was the most helpful by far.`,
-    (b, s) => `Impressed is an understatement. ${b} did a wonderful job with the ${s}.`,
-    (b, s) => `Quick update for anyone considering ${b} for ${s}: go for it.`,
+  // About the people. Shared by every role.
+  const mid: string[] = [
+    `The people there are polite and helpful.`,
+    `They answered all my questions patiently.`,
+    `Very genuine people to deal with.`,
+    `No pressure at all. They let me decide in my own time.`,
+    `They were honest about what would suit me.`,
+    `They reply quickly on phone and WhatsApp.`,
+    owner ? `${owner} personally looked after me.` : `The owner personally looked after me.`,
+    `Friendly staff, and they know their work.`,
+    `They are straightforward about pricing.`,
+    `You can tell they care about keeping customers happy.`,
+    `Everything was done in a simple way, with no fuss.`,
+    `They kept their word on everything they told me.`,
+    `They treat you with respect even if you are buying something small.`,
+    `It felt like dealing with people who actually care about their name.`,
   ];
-  const p1Mid: string[] = [
-    `${Team} listened carefully to what I needed and suggested the best approach.`,
-    `They were polite, patient and answered every question I had without making me feel rushed.`,
-    `From the start they were transparent about the cost and the timeline, which I really appreciated.`,
-    `Their communication was clear at every stage, so I always knew what was happening.`,
-    `You can tell they value their customers and are not just interested in closing a deal.`,
-    `They were quick to respond on calls and messages, even for small doubts.`,
-    `Everything was explained in simple terms, and there were no surprises later.`,
-    `The staff are friendly and knowledgeable, and they made the process very easy for me.`,
-    `They treated my requirement as seriously as if it were their own.`,
-    `I liked how organised they are. Every step was planned and followed properly.`,
-    `${Team} gave me honest advice instead of pushing anything I did not need.`,
-    `What I liked most was their calm and professional way of handling things.`,
-    `They took time to understand my situation before suggesting anything.`,
-    `Every promise they made was kept, right down to the delivery date.`,
-    `They were flexible with my timings, which made things much easier.`,
-    `The entire process was well coordinated and completely stress free.`,
-    `Their response time is excellent. I never had to wait long for an answer.`,
-    `They are humble, helpful and very good at what they do.`,
-    `I felt comfortable asking even basic questions, and they never lost patience.`,
-    `Right from the first meeting, they showed real interest in getting it right.`,
+  const facts: string[] = [
+    ...(years ? [`They have been at it for ${years}+ years and it shows.`, `${years} years in business is not a small thing, and you can see why they have lasted.`] : []),
+    ...(clients ? [`No surprise they have ${clients}+ happy customers.`] : []),
+    ...(place ? [`Good to have a business like this in ${place}.`] : []),
   ];
-  const p1Facts: string[] = [
-    ...(years ? [`With more than ${years} years of experience, they clearly know their work well.`, `Their ${years}+ years in the business really shows in the way they work.`] : []),
-    ...(clients ? [`Having served over ${clients} clients, they know exactly how to keep customers happy.`] : []),
-    ...(place ? [`It is good to have such a dependable business here in ${place}.`] : []),
-    `It felt like dealing with real professionals who care about their reputation.`,
-    `Their honesty and attitude made a very good first impression on me.`,
-    `It is clear they have built their name on trust and good work.`,
-  ];
-  // Optional short lead-in, so the very first words vary even more.
-  const leadIns = [
-    "Five stars!", "Excellent service.", "Highly recommended.", "Great experience.", "Very satisfied.",
-    "Top quality work.", "Wonderful team.", "Truly professional.", "Totally worth it.", "Brilliant job.",
+  const leadIns = ["Good experience.", "Very happy.", "Five stars.", "Satisfied customer.", "Genuine business.", "Recommended."];
+  const closers = [
+    `Thanks to the whole team.`,
+    `Keep it up.`,
+    `Five stars from me.`,
+    `Good work.`,
+    `Thanks again.`,
+    `Wishing them more success.`,
+    `Happy customer here.`,
   ];
 
-  /* ---------- Paragraph 2: the service / product ---------- */
-  const p2Open: ((s: string, k: ReviewItem["kind"]) => string)[] = [
-    (s, k) => `The ${s} ${k === "product" ? "I bought" : "they delivered"} was of excellent quality.`,
-    (s) => `Coming to the ${s} itself, I am very satisfied with the result.`,
-    (s) => `What stood out most was the quality of their ${s}.`,
-    (s) => `Their ${s} is easily among the best I have come across.`,
-    (s) => `I was particularly impressed with how they handled the ${s}.`,
-    (s) => `The ${s} turned out even better than I had imagined.`,
-    (s) => `When it comes to ${s}, they really know what they are doing.`,
-    (s, k) => `Their work on the ${s} was ${k === "product" ? "solid and well finished" : "neat, careful and thorough"}.`,
-    (s) => `I have tried ${s} elsewhere before, but this was a completely different level.`,
-    (s) => `The final result of the ${s} speaks for itself.`,
-    (s) => `As for the ${s}, the quality is clearly a cut above the rest.`,
-    (s) => `The ${s} was done exactly the way I wanted it.`,
-  ];
-  const p2Desc: ((s: string, d: string) => string)[] = [
-    (s, d) => `Their ${s} covers ${d}, and every part of it was done properly.`,
-    (s, d) => `As promised, the ${s} included ${d}, exactly as described.`,
-    (s, d) => `I liked that their ${s} offers ${d}. It is exactly what I was looking for.`,
-    (s, d) => `What they offer with the ${s} is ${d}, and they delivered on all of it.`,
-  ];
-  const p2Quality: ((k: ReviewItem["kind"]) => string)[] = [
-    (k) => (k === "product" ? `The product was in perfect condition and exactly as described.` : `Everything was completed on time without me having to follow up.`),
-    () => `The attention to detail was impressive, and nothing was left half done.`,
-    () => `The pricing was fair and there were no hidden charges at all.`,
-    () => `It was clear they used good materials and the right methods.`,
-    (k) => (k === "product" ? `The finish and build quality are excellent for the price.` : `The work was finished neatly and well within the promised time.`),
-    () => `Every small detail I asked for was taken care of properly.`,
-    () => `It was great value for money, and the quality is easy to see.`,
-    () => `They kept me updated throughout, which made the whole thing stress free.`,
-  ];
-  const p2Detail: ((s: string) => string)[] = [
-    (s) => `They even explained how to get the most out of the ${s} afterwards.`,
-    (s) => `After the ${s} was done, they checked back to make sure I was fully satisfied.`,
-    (s) => `Compared with other quotes I received for ${s}, theirs offered far better value.`,
-    (s) => `It is obvious they have done ${s} many times, because everything went smoothly.`,
-    (s) => `Small changes I requested during the ${s} were handled happily and quickly.`,
-    (s) => `I have already seen the benefit of the ${s} and I am very pleased.`,
-    (s) => `The ${s} was handled so well that I did not have to worry about anything.`,
-    (s) => `Honestly, the ${s} was worth every rupee I spent.`,
-  ];
-
-  /* ---------- Paragraph 3: recommendation ---------- */
-  const p3Rec: ((b: string, s: string) => string)[] = [
-    (b, s) => `I would happily recommend ${b} to anyone who needs ${s}.`,
-    (b, s) => `If you are looking for ${s}${inPlace}, ${b} is the place to go.`,
-    (b, s) => `For ${s}, ${b} will be my first choice from now on.`,
-    (b, s) => `Anyone planning ${s} should speak to ${b} before deciding.`,
-    (b, s) => `I have already told my friends about ${b} for their ${s} needs.`,
-    (b, s) => `Without any doubt, I recommend ${b} for ${s}.`,
-    (b, s) => `If ${s} is what you need, you can trust ${b} with it.`,
-    (b, s) => `Do consider ${b} for ${s}. You will not be disappointed.`,
-    (b, s) => `For quality ${s} at a fair price, I strongly suggest ${b}.`,
-    (b, s) => `I will definitely go back to ${b} for ${s} in the future.`,
-  ];
-  const p3Close: string[] = [
-    `Five stars from me without hesitation!`,
-    `Keep up the great work!`,
-    `Thank you for the wonderful service.`,
-    `Highly recommended to friends and family.`,
-    `They have earned a loyal customer in me.`,
-    `Great people, great work and great service.`,
-    `Wishing the whole team continued success.`,
-    `It is rare to find a business this dependable.`,
-    `Truly a business that cares about its customers.`,
-    `Thank you once again to the entire team.`,
-  ];
-
-  const usedOpen = new Set<number>();
+  const usedOpen = new Map<ReviewRole, Set<number>>();
+  const usedMain = new Map<ReviewRole, Set<number>>();
+  const usedRec = new Map<ReviewRole, Set<number>>();
+  const setFor = (m: Map<ReviewRole, Set<number>>, r: ReviewRole) => {
+    if (!m.has(r)) m.set(r, new Set());
+    return m.get(r)!;
+  };
   const usedMid = new Set<number>();
-  const used = Array.from({ length: 6 }, () => new Set<number>());
+  const usedDetail = new Set<string>();
+  const usedClose = new Set<number>();
   const order = [...items].sort(() => Math.random() - 0.5);
 
   return Array.from({ length: count }, (_, i) => {
     const item = order[i % order.length];
     const s = item.name.trim();
     const d = descSentence(item.description);
+    const role = reviewRole(businessType, item.kind);
+    const pack = packs[role];
 
-    // Opening + middle sentence = what Google shows first. Skip any
+    // Opening sentence + people sentence = what Google shows first. Skip any
     // combination this phone has already copied for this business.
-    const oi = pickFreshIdx(p1Open.length, usedOpen, (x) =>
-      Array.from(usedOnThisPhone).some((sig) => sig.startsWith(`o${x}m`))
+    const oi = pickFreshIdx(pack.open.length, setFor(usedOpen, role), (x) =>
+      Array.from(usedOnThisPhone).some((sig) => sig.startsWith(`${role}:o${x}m`))
     );
-    const mi = pickFreshIdx(p1Mid.length, usedMid, (x) => usedOnThisPhone.has(`o${oi}m${x}`));
+    const midPool = pack.mid ?? mid;
+    const closePool = pack.closers ?? closers;
+    const mi = pickFreshIdx(midPool.length, usedMid, (x) => usedOnThisPhone.has(`${role}:o${oi}m${x}`));
     const b1 = shortName !== fullName && Math.random() < 0.4 ? shortName : fullName;
     const b3 = shortName !== fullName && Math.random() < 0.5 ? shortName : fullName;
 
-    const opener = p1Open[oi](b1, s);
-    const middle = [p1Mid[mi], rand(p1Facts)];
-    if (Math.random() < 0.5) middle.reverse();
-    const lead = Math.random() < 0.3 ? `${rand(leadIns)} ` : "";
-    const para1 = `${lead}${opener} ${middle.join(" ")}`;
+    // Paragraph 1: the business and the people
+    const p1 = [pack.open[oi](b1, s), midPool[mi]];
+    if (facts.length && Math.random() < 0.6) p1.push(rand(facts));
+    else p1.push(midPool[pickFreshIdx(midPool.length, usedMid)]);
+    if (Math.random() < 0.5) [p1[1], p1[2]] = [p1[2], p1[1]];
+    const lead = Math.random() < 0.25 ? `${rand(leadIns)} ` : "";
 
-    const para2 = [
-      pickFresh(p2Open, used[0])(s, item.kind),
-      d ? rand(p2Desc)(s, d) : null,
-      pickFresh(p2Quality, used[1])(item.kind),
-      pickFresh(p2Detail, used[2])(s),
-    ]
-      .filter(Boolean)
-      .join(" ");
-    const para3 = [pickFresh(p3Rec, used[3])(b3, s), pickFresh(p3Close, used[4])].join(" ");
+    // Paragraph 2: the product / service itself, written for this role
+    const p2 = [pickFresh(pack.main, setFor(usedMain, role))(s)];
+    if (d) p2.push(pack.desc(s, d));
+    const extras = pack.detail.filter((x) => !usedDetail.has(x));
+    const nDetail = d ? (Math.random() < 0.5 ? 1 : 2) : 2;
+    for (let k = 0; k < nDetail && extras.length; k++) {
+      const x = extras.splice(Math.floor(Math.random() * extras.length), 1)[0];
+      usedDetail.add(x);
+      p2.push(x);
+    }
 
-    const text = [para1, para2, para3].map(tidy).join("\n\n");
-    reviewSignatures.set(text, `o${oi}m${mi}`);
+    // Paragraph 3: recommendation
+    const p3 = [pickFresh(pack.rec, setFor(usedRec, role))(b3, s)];
+    p3.push(closePool[pickFreshIdx(closePool.length, usedClose)]);
+
+    const text = [lead + p1.join(" "), p2.join(" "), p3.join(" ")].map(tidy).join("\n\n");
+    reviewSignatures.set(text, `${role}:o${oi}m${mi}`);
     return text;
   });
 }

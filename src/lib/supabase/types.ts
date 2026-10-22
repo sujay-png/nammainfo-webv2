@@ -66,6 +66,8 @@ export interface Profile {
   google_place_id: string | null;
   /** Google Maps link for "Get Directions" (separate from the reviews link). */
   maps_url?: string | null;
+  /** retailer | wholesaler | distributor | manufacturer | service_provider | agency */
+  business_type?: string | null;
   products: ServiceItem[];
   theme: string;
 }
