@@ -79,9 +79,9 @@ export default function SettingsPage() {
     return (
       <div className="mx-auto max-w-lg px-4 py-5">
         <div className="space-y-3">
-          <div className="skeleton h-20 rounded-2xl" />
-          <div className="skeleton h-14 rounded-2xl" />
-          <div className="skeleton h-14 rounded-2xl" />
+          <div className="skeleton h-20 rounded-[5px]" />
+          <div className="skeleton h-14 rounded-[5px]" />
+          <div className="skeleton h-14 rounded-[5px]" />
         </div>
       </div>
     );
@@ -95,7 +95,7 @@ export default function SettingsPage() {
 
       {/* Profile card */}
       {profile && (
-        <div className="mb-5 flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
+        <div className="mb-5 flex items-center gap-3 rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--accent)] font-headline text-sm font-semibold text-[var(--accent-foreground)]">
             {profile.owner_name?.[0]?.toUpperCase() ?? "N"}
           </div>
@@ -193,7 +193,7 @@ export default function SettingsPage() {
                 role="radio"
                 aria-checked={selected}
                 onClick={() => setPreference(opt.value)}
-                className="flex w-full items-center justify-between rounded-2xl px-4 py-3.5 transition hover:bg-[var(--accent)]"
+                className="flex w-full items-center justify-between rounded-[5px] px-4 py-3.5 transition hover:bg-[var(--accent)]"
               >
                 <div className="flex items-center gap-3">
                   <span className="text-[var(--muted-foreground)]">{opt.icon}</span>
@@ -214,30 +214,30 @@ export default function SettingsPage() {
         {/* Theme picker toggle */}
         <button
           onClick={() => setShowThemes(!showThemes)}
-          className="flex w-full items-center justify-between rounded-2xl px-4 py-3.5 transition hover:bg-[var(--accent)]"
+          className="flex w-full items-center justify-between rounded-[5px] px-4 py-3.5 transition hover:bg-[var(--accent)]"
         >
           <div className="flex items-center gap-3">
             <span className="text-[var(--muted-foreground)]">
               <Palette size={18} />
             </span>
-            <div>
-              <span className="text-sm font-medium">Theme</span>
-              <p className="text-xs text-[var(--muted-foreground)]">
-                {getTheme(colorTheme).name}
-              </p>
-            </div>
+            <span className="text-sm font-medium">Theme</span>
           </div>
-          <ChevronRight
-            size={14}
-            className={`text-[var(--muted-foreground)] transition-transform ${
-              showThemes ? "rotate-90" : ""
-            }`}
-          />
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-[var(--muted-foreground)]">
+              {getTheme(colorTheme).name}
+            </span>
+            <ChevronRight
+              size={14}
+              className={`text-[var(--muted-foreground)] transition-transform ${
+                showThemes ? "rotate-90" : ""
+              }`}
+            />
+          </div>
         </button>
 
         {/* Theme grid */}
         {showThemes && (
-          <div className="mt-1 grid grid-cols-2 gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3">
+          <div className="mt-1 grid grid-cols-2 gap-2 rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-3">
             {themes.map((t) => {
               const isActive = colorTheme === t.slug;
               return (
@@ -245,7 +245,7 @@ export default function SettingsPage() {
                   key={t.slug}
                   onClick={() => handleThemeSelect(t.slug)}
                   disabled={saving}
-                  className={`group relative flex items-center gap-2.5 rounded-xl border p-3 transition ${
+                  className={`group relative flex items-center gap-2.5 rounded-[5px] border p-3 transition ${
                     isActive
                       ? "border-[var(--primary)] bg-[var(--accent)]"
                       : "border-[var(--border)] hover:border-[var(--muted-foreground)] hover:bg-[var(--accent)]"
@@ -298,16 +298,12 @@ export default function SettingsPage() {
       <div className="mt-6 border-t border-[var(--border)] pt-4">
         <button
           onClick={handleSignOut}
-          className="flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-sm font-medium text-red-500 transition hover:bg-red-50 dark:hover:bg-red-950/20"
+          className="flex w-full items-center gap-3 rounded-[5px] px-4 py-3.5 text-sm font-medium text-red-500 transition hover:bg-red-50 dark:hover:bg-red-950/20"
         >
           <LogOut size={18} />
           Sign out
         </button>
       </div>
-
-      <p className="mt-6 text-center font-mono text-[11px] text-[var(--muted-foreground)]">
-        Namma Info v2.0 · Made with care
-      </p>
 
 
 
@@ -386,7 +382,7 @@ function SettingsItem({
     return (
       <a
         href={href}
-        className="flex w-full items-center rounded-2xl px-4 py-3 transition hover:bg-[var(--accent)] cursor-pointer"
+        className="flex w-full items-center rounded-[5px] px-4 py-3 transition hover:bg-[var(--accent)] cursor-pointer"
       >
         {content}
       </a>
@@ -396,7 +392,7 @@ function SettingsItem({
   return (
     <button
       onClick={onClick}
-      className="flex w-full items-center rounded-2xl px-4 py-3 transition hover:bg-[var(--accent)] text-left cursor-pointer"
+      className="flex w-full items-center rounded-[5px] px-4 py-3 transition hover:bg-[var(--accent)] text-left cursor-pointer"
     >
       {content}
     </button>

@@ -98,14 +98,14 @@ export default function SavedPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search saved cards..."
-          className="w-full rounded-xl border border-ink-200 bg-white py-2.5 pl-9 pr-3 text-sm outline-none transition"
+          className="w-full rounded-[5px] border border-ink-200 bg-white py-2.5 pl-9 pr-3 text-sm outline-none transition"
         />
       </div>
 
       {loading ? (
         <div className="space-y-3">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="skeleton h-20 rounded-2xl" />
+            <div key={i} className="skeleton h-20 rounded-[5px]" />
           ))}
         </div>
       ) : filtered.length === 0 ? (
@@ -131,17 +131,17 @@ export default function SavedPage() {
                 const slug = profile.username || profile.slug;
                 if (slug) router.push(`/${slug}`);
               }}
-              className="flex w-full items-center gap-3 rounded-2xl border border-ink-100 bg-white p-3.5 text-left transition hover:shadow-card"
+              className="flex w-full items-center gap-3 rounded-[5px] border border-ink-100 bg-white p-3.5 text-left transition hover:shadow-card"
             >
               {profile.logo_url || profile.avatar_url ? (
                 <img
                   src={(profile.logo_url || profile.avatar_url)!}
                   alt=""
                   loading="lazy"
-                  className="h-12 w-12 rounded-xl object-cover"
+                  className="h-12 w-12 rounded-[5px] object-cover"
                 />
               ) : (
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-ink-100 text-sm font-semibold text-ink-600">
+                <div className="flex h-12 w-12 items-center justify-center rounded-[5px] bg-ink-100 text-sm font-semibold text-ink-600">
                   {initials(profile.owner_name || profile.business_name)}
                 </div>
               )}

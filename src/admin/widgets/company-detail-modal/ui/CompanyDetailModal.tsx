@@ -62,6 +62,9 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
   // Save Feedback State
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
 
+  // State for updating an individual employee plan
+  const [updatingEmpId, setUpdatingEmpId] = useState<string | null>(null);
+
   useEffect(() => {
     if (company && isOpen) {
       setLoading(true);
@@ -186,8 +189,6 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
     }
   };
 
-  // State for updating an individual employee plan
-  const [updatingEmpId, setUpdatingEmpId] = useState<string | null>(null);
 
   // Individual employee plan toggle (Free Plan vs Pro Plan)
   const handleEmployeePlanChange = async (employeeId: string, newPlan: "pro" | "free") => {

@@ -42,7 +42,7 @@ function StatCard({
   value: string | number;
 }) {
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
+    <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4">
       <div className="mb-2 flex items-center gap-2 text-[var(--muted-foreground)]">
         <Icon size={16} strokeWidth={1.6} />
         <span className="font-mono text-[11px] uppercase tracking-wider">{label}</span>
@@ -94,11 +94,11 @@ function ValidityCard({
 
   if (isFree) {
     return (
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-4 shadow-sm">
+      <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-4 shadow-sm">
         {/* Top Header: Identity on left, Free Tier right-aligned */}
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)] border border-[var(--border)] text-[var(--foreground)]">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[5px] bg-[var(--accent)] border border-[var(--border)] text-[var(--foreground)]">
               <CreditCard size={18} strokeWidth={1.7} />
             </div>
             <div>
@@ -118,16 +118,15 @@ function ValidityCard({
 
         <button
           onClick={onOpenUpgrade}
-          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
+          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
         >
-          <Sparkles size={14} />
           <span>Upgrade to Pro</span>
           <ArrowRight size={14} />
         </button>
 
         {/* Structured specs row - no wrapping glitches, crisp scannability */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-[var(--border)]">
-          <div className="p-2.5 rounded-xl bg-[var(--accent)]/40 border border-[var(--border)]">
+          <div className="p-2.5 rounded-[5px] bg-[var(--accent)]/40 border border-[var(--border)]">
             <span className="block font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
               Subscription
             </span>
@@ -136,7 +135,7 @@ function ValidityCard({
             </span>
           </div>
 
-          <div className="p-2.5 rounded-xl bg-[var(--accent)]/40 border border-[var(--border)]">
+          <div className="p-2.5 rounded-[5px] bg-[var(--accent)]/40 border border-[var(--border)]">
             <span className="block font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
               Validity
             </span>
@@ -145,7 +144,7 @@ function ValidityCard({
             </span>
           </div>
 
-          <div className="col-span-2 sm:col-span-1 p-2.5 rounded-xl bg-[var(--accent)]/40 border border-[var(--border)]">
+          <div className="col-span-2 sm:col-span-1 p-2.5 rounded-[5px] bg-[var(--accent)]/40 border border-[var(--border)]">
             <span className="block font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
               Physical Card
             </span>
@@ -156,7 +155,7 @@ function ValidityCard({
         </div>
 
         {/* Pro features callout */}
-        <div className="p-3 rounded-xl bg-[var(--accent)]/30 border border-[var(--border)] text-xs text-[var(--muted-foreground)] leading-relaxed">
+        <div className="p-3 rounded-[5px] bg-[var(--accent)]/30 border border-[var(--border)] text-xs text-[var(--muted-foreground)] leading-relaxed">
           Upgrade to unlock your custom public URL (<code className="font-mono text-[11px] text-[var(--foreground)]">namma.info/{profile.username || "your-name"}</code>) and receive your personalized physical NFC smart business card with express doorstep delivery.
         </div>
       </div>
@@ -166,10 +165,10 @@ function ValidityCard({
   if (isLifetime) {
     const totalCards = 1 + employeesCount;
     return (
-      <div className="rounded-2xl border border-purple-500/30 bg-purple-500/5 p-4">
+      <div className="rounded-[5px] border border-purple-500/30 bg-purple-500/5 p-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-500/10 text-purple-600">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[5px] bg-purple-500/10 text-purple-600">
               <CalendarClock size={20} strokeWidth={1.6} />
             </div>
             <div>
@@ -212,10 +211,10 @@ function ValidityCard({
   const barColor = expired ? "bg-red-500" : endingSoon ? "bg-amber-500" : "bg-[var(--primary)]";
 
   return (
-    <div className={`rounded-2xl border p-4 ${tone}`}>
+    <div className={`rounded-[5px] border p-4 ${tone}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--muted)] text-[var(--foreground)]">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[5px] bg-[var(--muted)] text-[var(--foreground)]">
             <CalendarClock size={20} strokeWidth={1.6} />
           </div>
           <div>
@@ -367,14 +366,14 @@ export default function HomePage() {
   if (loading) {
     return (
       <div className="mx-auto max-w-lg px-5 py-6">
-        <div className="mb-6 h-8 w-48 skeleton rounded-lg" />
+        <div className="mb-6 h-8 w-48 skeleton rounded-[5px]" />
         <div className="grid grid-cols-2 gap-3 mb-6">
           {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-24 skeleton rounded-2xl" />
+            <div key={i} className="h-24 skeleton rounded-[5px]" />
           ))}
         </div>
-        <div className="h-32 skeleton rounded-2xl mb-4" />
-        <div className="h-48 skeleton rounded-2xl" />
+        <div className="h-32 skeleton rounded-[5px] mb-4" />
+        <div className="h-48 skeleton rounded-[5px]" />
       </div>
     );
   }
@@ -428,7 +427,7 @@ export default function HomePage() {
 
       {/* 100% Profile Completion Pro Upgrade Banner */}
       {completionPct === 100 && isFree && (
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-3 shadow-sm">
+        <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-3 shadow-sm">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Sparkles size={16} className="text-[var(--primary)]" />
@@ -445,7 +444,7 @@ export default function HomePage() {
           </p>
           <button
             onClick={() => setShowUpgradeModal(true)}
-            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
           >
             <CreditCard size={15} />
             <span>Order Custom NFC Card & Upgrade</span>
@@ -455,7 +454,7 @@ export default function HomePage() {
 
       {/* Profile completion */}
       {completionPct < 100 && (
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
+        <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4">
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <User size={16} className="text-[var(--primary)]" strokeWidth={1.8} />
@@ -482,7 +481,7 @@ export default function HomePage() {
               <Link
                 key={item.label}
                 href={item.href}
-                className="flex items-center justify-between rounded-xl bg-[var(--muted)] px-3 py-2.5 transition-colors hover:bg-[var(--accent)]"
+                className="flex items-center justify-between rounded-[5px] bg-[var(--muted)] px-3 py-2.5 transition-colors hover:bg-[var(--accent)]"
               >
                 <span className="text-xs text-[var(--foreground)]">{item.label}</span>
                 <ChevronRight size={14} className="text-[var(--muted-foreground)]" />
@@ -496,9 +495,9 @@ export default function HomePage() {
       <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
         <Link
           href="/dashboard/profile"
-          className="flex flex-col items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3.5 sm:p-4 transition-colors hover:bg-[var(--accent)]"
+          className="flex flex-col items-center gap-2 rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-3.5 sm:p-4 transition-colors hover:bg-[var(--accent)]"
         >
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--muted)]">
+          <div className="flex h-10 w-10 items-center justify-center rounded-[5px] bg-[var(--muted)]">
             <Edit3 size={18} className="text-[var(--foreground)]" strokeWidth={1.8} />
           </div>
           <span className="font-mono text-[10px] text-[var(--muted-foreground)]">
@@ -507,9 +506,9 @@ export default function HomePage() {
         </Link>
         <Link
           href="/dashboard/scanner"
-          className="flex flex-col items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3.5 sm:p-4 transition-colors hover:bg-[var(--accent)]"
+          className="flex flex-col items-center gap-2 rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-3.5 sm:p-4 transition-colors hover:bg-[var(--accent)]"
         >
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--muted)]">
+          <div className="flex h-10 w-10 items-center justify-center rounded-[5px] bg-[var(--muted)]">
             <Scan size={18} className="text-[var(--foreground)]" strokeWidth={1.8} />
           </div>
           <span className="font-mono text-[10px] text-[var(--muted-foreground)]">
@@ -518,9 +517,9 @@ export default function HomePage() {
         </Link>
         <Link
           href="/dashboard/settings"
-          className="flex flex-col items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3.5 sm:p-4 transition-colors hover:bg-[var(--accent)]"
+          className="flex flex-col items-center gap-2 rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-3.5 sm:p-4 transition-colors hover:bg-[var(--accent)]"
         >
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--muted)]">
+          <div className="flex h-10 w-10 items-center justify-center rounded-[5px] bg-[var(--muted)]">
             <Settings size={18} className="text-[var(--foreground)]" strokeWidth={1.8} />
           </div>
           <span className="font-mono text-[10px] text-[var(--muted-foreground)]">
@@ -531,7 +530,7 @@ export default function HomePage() {
 
       {/* Recent reviews */}
       {reviews.length > 0 && (
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
+        <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4">
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Star size={16} className="text-[var(--primary)]" strokeWidth={1.6} />
@@ -548,7 +547,7 @@ export default function HomePage() {
             {reviews.slice(0, 3).map((review) => (
               <div
                 key={review.id}
-                className="rounded-xl bg-[var(--muted)] px-3 py-3"
+                className="rounded-[5px] bg-[var(--muted)] px-3 py-3"
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs font-medium text-[var(--foreground)]">
@@ -579,7 +578,7 @@ export default function HomePage() {
 
       {/* Team overview */}
       {employees.length > 0 && (
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
+        <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4">
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Users size={16} className="text-[var(--primary)]" strokeWidth={1.6} />
@@ -596,7 +595,7 @@ export default function HomePage() {
             {employees.slice(0, 4).map((emp) => (
               <div
                 key={emp.id}
-                className="flex items-center gap-3 rounded-xl bg-[var(--muted)] px-3 py-2.5"
+                className="flex items-center gap-3 rounded-[5px] bg-[var(--muted)] px-3 py-2.5"
               >
                 {emp.avatar_url ? (
                   <img
@@ -630,7 +629,7 @@ export default function HomePage() {
 
       {/* Activity timeline */}
       {connections.length > 0 && (
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
+        <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4">
           <div className="mb-3 flex items-center gap-2">
             <UserPlus size={16} className="text-[var(--primary)]" strokeWidth={1.8} />
             <span className="text-sm font-medium text-[var(--foreground)]">
@@ -641,7 +640,7 @@ export default function HomePage() {
             {connections.slice(0, 5).map((conn) => (
               <div
                 key={conn.id}
-                className="flex items-center justify-between rounded-xl bg-[var(--muted)] px-3 py-2.5"
+                className="flex items-center justify-between rounded-[5px] bg-[var(--muted)] px-3 py-2.5"
               >
                 <div className="flex items-center gap-2">
                   <CheckCircle2
@@ -664,7 +663,7 @@ export default function HomePage() {
 
       {/* Business stats */}
       {(profile.years_in_business || profile.clients_served || profile.coverage_area) && (
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
+        <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4">
           <div className="mb-3 flex items-center gap-2">
             <BarChart3 size={16} className="text-[var(--primary)]" strokeWidth={1.6} />
             <span className="text-sm font-medium text-[var(--foreground)]">
