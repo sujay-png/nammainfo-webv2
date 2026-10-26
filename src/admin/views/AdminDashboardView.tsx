@@ -161,7 +161,7 @@ export const AdminDashboardView: React.FC = () => {
       }
 
       const validity = getDaysRemaining(c.membershipExpiresAt, c.subscriptionPlan);
-      const isExp = c.status === "expired" || (!validity.isLifetime && validity.isExpired);
+      const isExp = c.subscriptionPlan === "pro" && !validity.isLifetime && (validity.isExpired || (c.status === "expired" && !c.membershipExpiresAt));
 
       if (filters.tab === "pro") {
         if (c.subscriptionPlan !== "pro") return false;

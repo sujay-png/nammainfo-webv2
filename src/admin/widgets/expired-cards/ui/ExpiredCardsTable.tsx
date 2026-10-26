@@ -19,11 +19,10 @@ export const ExpiredCardsTable: React.FC<ExpiredCardsTableProps> = ({
   // Filter companies whose card/subscription has expired
   const expiredList = companies.filter((c) => {
     if (c.subscriptionPlan === "free") return false;
-    if (c.status === "expired") return true;
     if (c.membershipExpiresAt) {
-      return new Date(c.membershipExpiresAt).getTime() < Date.now();
+      return new Date(c.membershipExpiresAt).getTime() <= Date.now();
     }
-    return false;
+    return c.status === "expired";
   });
 
   const handleOpenUserUrl = (company: Company, e: React.MouseEvent) => {

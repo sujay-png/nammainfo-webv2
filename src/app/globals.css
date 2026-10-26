@@ -188,3 +188,19 @@ select {
 [data-card]:not(.rounded-full) {
   border-radius: 5px !important;
 }
+
+/* Skeleton Loading utility */
+.skeleton {
+  background-color: var(--muted);
+  animation: skeleton-pulse 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+

@@ -246,9 +246,8 @@ export default function TeamPage() {
   );
   const primaryCards = Number(profile?.primary_card_count ?? (isMember ? 1 : 0));
 
-  // Employee quota is strictly the slots purchased for team members (excluding the owner's primary card)
-  const rawPurchased = Number(profile?.purchased_id_count || 0);
-  const quota = isMember ? Math.max(0, rawPurchased - 1) : 0;
+  // Employee quota is strictly the slots purchased for team members
+  const quota = isMember ? Number(profile?.purchased_id_count || 0) : 0;
   const availableSlots = Math.max(0, quota - employees.length);
   const totalCards = primaryCards + employees.length;
   const renewalCost = calculateRenewalCost(primaryCards, employees.length);

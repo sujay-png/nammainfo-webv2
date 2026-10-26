@@ -60,6 +60,8 @@ export interface Profile {
   bank_accounts: BankAccount[];
   brochure_url: string | null;
   address: string | null;
+  city?: string | null;
+  pincode?: string | null;
   gst_number: string | null;
   cover_url: string | null;
   // Added for web — will be migrated

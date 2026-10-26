@@ -6,7 +6,6 @@ import {
   Star,
   Users,
   TrendingUp,
-  CheckCircle2,
   ChevronRight,
   User,
   BarChart3,
@@ -16,7 +15,6 @@ import {
   Edit3,
   Scan,
   Settings,
-  Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -24,6 +22,46 @@ import { getCurrentUser } from "@/lib/supabase/current-user";
 import { formatDistanceToNow, initials } from "@/lib/utils";
 import type { Profile, Card, Review, Employee, Connection } from "@/lib/supabase/types";
 import UpgradeToProModal from "@/components/UpgradeToProModal";
+
+interface EnrichedConnection extends Connection {
+  connected_profile?: {
+    id: string;
+    owner_name: string | null;
+    business_name: string | null;
+    job_title: string | null;
+    avatar_url: string | null;
+    logo_url: string | null;
+    username: string | null;
+    slug: string | null;
+  } | null;
+}
+
+function ConnectionAvatar({
+  name,
+  photo,
+}: {
+  name: string;
+  photo?: string | null;
+}) {
+  const [imgError, setImgError] = useState(false);
+
+  if (photo && !imgError) {
+    return (
+      <img
+        src={photo}
+        alt={name}
+        onError={() => setImgError(true)}
+        className="h-8 w-8 rounded-full object-cover shrink-0 border border-[var(--border)]"
+      />
+    );
+  }
+
+  return (
+    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--card)] border border-[var(--border)] text-[10px] font-semibold text-[var(--foreground)]">
+      {initials(name)}
+    </div>
+  );
+}
 import RenewalModal from "@/components/RenewalModal";
 import { calculateRenewalCost } from "@/lib/pricing";
 import { calculateProfileCompletion } from "@/lib/profile-completion";
@@ -72,11 +110,13 @@ function fmtDate(d: Date) {
 function ValidityCard({
   profile,
   employeesCount,
+  completionPct,
   onOpenUpgrade,
   onOpenRenewal,
 }: {
   profile: Profile;
   employeesCount: number;
+  completionPct: number;
   onOpenUpgrade: () => void;
   onOpenRenewal: () => void;
 }) {
@@ -93,6 +133,8 @@ function ValidityCard({
       : false);
 
   if (isFree) {
+    const isProfileComplete = completionPct === 100;
+
     return (
       <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-4 shadow-sm">
         {/* Top Header: Identity on left, Free Tier right-aligned */}
@@ -111,16 +153,23 @@ function ValidityCard({
             </div>
           </div>
 
-          <span className="font-mono text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] text-right">
-            Free Tier
-          </span>
+          <div className="text-right">
+            <span className="font-mono text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] block">
+              Free Tier
+            </span>
+            {isProfileComplete && (
+              <span className="font-mono text-[10px] text-[var(--muted-foreground)] block mt-0.5">
+                Profile 100% • Ready for Pro
+              </span>
+            )}
+          </div>
         </div>
 
         <button
           onClick={onOpenUpgrade}
           className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
         >
-          <span>Upgrade to Pro</span>
+          <span>{isProfileComplete ? "Order Custom NFC Card & Upgrade" : "Upgrade to Pro"}</span>
           <ArrowRight size={14} />
         </button>
 
@@ -156,7 +205,15 @@ function ValidityCard({
 
         {/* Pro features callout */}
         <div className="p-3 rounded-[5px] bg-[var(--accent)]/30 border border-[var(--border)] text-xs text-[var(--muted-foreground)] leading-relaxed">
-          Upgrade to unlock your custom public URL (<code className="font-mono text-[11px] text-[var(--foreground)]">namma.info/{profile.username || "your-name"}</code>) and receive your personalized physical NFC smart business card with express doorstep delivery.
+          {isProfileComplete ? (
+            <>
+              Your profile is 100% complete and ready for Pro. Upgrade to unlock your custom public URL (<code className="font-mono text-[11px] text-[var(--foreground)]">namma.info/{profile.username || "your-name"}</code>) and receive your personalized physical NFC smart business card with express doorstep delivery.
+            </>
+          ) : (
+            <>
+              Upgrade to unlock your custom public URL (<code className="font-mono text-[11px] text-[var(--foreground)]">namma.info/{profile.username || "your-name"}</code>) and receive your personalized physical NFC smart business card with express doorstep delivery.
+            </>
+          )}
         </div>
       </div>
     );
@@ -204,38 +261,52 @@ function ValidityCard({
   const renewalCost = calculateRenewalCost(primaryCards, employeesCount);
 
   const tone = expired
-    ? "border-red-500/30 bg-red-500/5"
+    ? "border-rose-500/30 bg-rose-500/5"
     : endingSoon
       ? "border-amber-500/30 bg-amber-500/5"
       : "border-[var(--border)] bg-[var(--card)]";
-  const barColor = expired ? "bg-red-500" : endingSoon ? "bg-amber-500" : "bg-[var(--primary)]";
+  const barColor = expired ? "bg-rose-500" : endingSoon ? "bg-amber-500" : "bg-[var(--foreground)]";
 
   return (
-    <div className={`rounded-[5px] border p-4 ${tone}`}>
+    <div className={`rounded-[5px] border p-4 space-y-3.5 ${tone}`}>
+      {/* Top Header Row */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[5px] bg-[var(--muted)] text-[var(--foreground)]">
-            <CalendarClock size={20} strokeWidth={1.6} />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[5px] bg-[var(--accent)] text-[var(--foreground)]">
+            <CalendarClock size={19} strokeWidth={1.75} />
           </div>
           <div>
-            <p className="text-sm font-medium text-[var(--foreground)]">
-              Member since {fmtDate(joined)}
-            </p>
-            <p className="font-mono text-[11px] text-[var(--muted-foreground)]">
-              {expired ? `Expired on ${fmtDate(expires)}` : `Valid till ${fmtDate(expires)}`}
-            </p>
-            <div className="mt-1 flex items-center gap-1.5 font-mono text-[11px] text-[var(--muted-foreground)]">
-              <Users size={12} className="text-[var(--primary)]" />
-              <span>
-                {totalCards} Total Cards ({primaryCards} Primary + {employeesCount} Team)
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-sm text-[var(--foreground)]">
+                Pro Membership
+              </span>
+              <span
+                className={`inline-flex items-center px-1.5 py-0.5 rounded-[4px] font-mono text-[10px] font-medium border ${
+                  expired
+                    ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
+                    : endingSoon
+                      ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                      : "bg-[var(--accent)] text-[var(--muted-foreground)] border-[var(--border)]"
+                }`}
+              >
+                {expired ? "Expired" : endingSoon ? "Expiring Soon" : "Active"}
               </span>
             </div>
+            <p className="mt-0.5 font-mono text-[11px] text-[var(--muted-foreground)]">
+              Member since {fmtDate(joined)}
+            </p>
           </div>
         </div>
-        <div className="text-right">
+
+        {/* Days Left Metric */}
+        <div className="text-right shrink-0">
           <p
-            className={`font-headline text-2xl font-semibold leading-none ${
-              expired ? "text-red-500" : endingSoon ? "text-amber-600 dark:text-amber-400" : "text-[var(--foreground)]"
+            className={`font-headline text-2xl font-bold leading-none ${
+              expired
+                ? "text-rose-600 dark:text-rose-400"
+                : endingSoon
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-[var(--foreground)]"
             }`}
           >
             {daysLeft}
@@ -246,44 +317,62 @@ function ValidityCard({
         </div>
       </div>
 
-      <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[var(--muted)]">
-        <div className={`h-full rounded-full transition-all duration-500 ${barColor}`} style={{ width: `${pctLeft}%` }} />
+      {/* Sleek Progress Bar */}
+      <div className="h-1 w-full overflow-hidden rounded-full bg-[var(--muted)]">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+          style={{ width: `${pctLeft}%` }}
+        />
       </div>
 
-      {(expired || endingSoon) ? (
-        <div className="mt-4 pt-3 border-t border-[var(--border)]/50 space-y-2.5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <span className="font-semibold text-xs text-[var(--foreground)] block">
-                {expired ? "Subscription Expired" : "Organization Subscription Expiring Soon"}
-              </span>
-              <span className="text-[11px] text-[var(--muted-foreground)]">
-                Synchronized renewal for all {totalCards} cards ({primaryCards} Primary + {employeesCount} Team) at ₹{renewalCost.unitPrice}/card
-              </span>
-            </div>
-            <span className="font-headline font-bold text-sm text-[var(--foreground)]">
-              Total: ₹{renewalCost.totalAmount.toLocaleString("en-IN")}
+      {/* Structured Specs Row */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+        <div className="p-2.5 rounded-[5px] bg-[var(--accent)]/40 border border-[var(--border)]">
+          <span className="block font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
+            Valid Till
+          </span>
+          <span className="block font-mono text-xs font-semibold text-[var(--foreground)] mt-0.5">
+            {fmtDate(expires)}
+          </span>
+        </div>
+
+        <div className="p-2.5 rounded-[5px] bg-[var(--accent)]/40 border border-[var(--border)]">
+          <span className="block font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
+            Issued Cards
+          </span>
+          <span className="block font-mono text-xs font-semibold text-[var(--foreground)] mt-0.5">
+            {totalCards} Total ({primaryCards} Primary{employeesCount > 0 ? ` + ${employeesCount} Team` : ""})
+          </span>
+        </div>
+
+        <div className="col-span-2 sm:col-span-1 p-2.5 rounded-[5px] bg-[var(--accent)]/40 border border-[var(--border)]">
+          <span className="block font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
+            Annual Renewal
+          </span>
+          <span className="block font-mono text-xs font-semibold text-[var(--foreground)] mt-0.5">
+            ₹{renewalCost.totalAmount.toLocaleString("en-IN")}/yr
+          </span>
+        </div>
+      </div>
+
+      {/* Action only visible when Expired or Ending Soon */}
+      {(expired || endingSoon) && (
+        <div className="pt-2 border-t border-[var(--border)] space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-[var(--muted-foreground)]">
+              {expired ? "Plan expired. Renew to maintain vanity URL & NFC cards." : "Renew now to avoid service interruption."}
+            </span>
+            <span className="font-mono font-bold text-[var(--foreground)]">
+              ₹{renewalCost.totalAmount.toLocaleString("en-IN")}
             </span>
           </div>
 
           <button
             onClick={onOpenRenewal}
-            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
           >
             <CreditCard size={14} />
-            <span>Renew All {totalCards} Cards (₹{renewalCost.totalAmount.toLocaleString("en-IN")})</span>
-          </button>
-        </div>
-      ) : (
-        <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-[var(--border)]/40 text-[11px]">
-          <span className="text-[var(--muted-foreground)]">
-            Organization Renewal: <strong className="text-[var(--foreground)]">₹{renewalCost.totalAmount.toLocaleString("en-IN")}</strong> / yr ({totalCards} card{totalCards === 1 ? "" : "s"} @ ₹{renewalCost.unitPrice}/card)
-          </span>
-          <button
-            onClick={onOpenRenewal}
-            className="text-[var(--primary)] hover:underline font-semibold cursor-pointer"
-          >
-            Renew Early
+            <span>Renew Plan ({totalCards} {totalCards === 1 ? "Card" : "Cards"})</span>
           </button>
         </div>
       )}
@@ -301,7 +390,7 @@ export default function HomePage() {
   const [card, setCard] = useState<Card | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [connections, setConnections] = useState<Connection[]>([]);
+  const [connections, setConnections] = useState<EnrichedConnection[]>([]);
   const [tapCount, setTapCount] = useState(0);
   const [reviewCount, setReviewCount] = useState(0);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -356,7 +445,27 @@ export default function HomePage() {
       if (reviewRes.data) setReviews(reviewRes.data as unknown as Review[]);
       setReviewCount(reviewCountRes.count || 0);
       if (employeeRes.data) setEmployees(employeeRes.data as unknown as Employee[]);
-      if (connectionRes.data) setConnections(connectionRes.data as unknown as Connection[]);
+
+      if (connectionRes.data) {
+        const rawConns = connectionRes.data as Connection[];
+        const targetIds = Array.from(
+          new Set(rawConns.map((c) => c.connected_user_id).filter(Boolean))
+        );
+        let enrichedConns: EnrichedConnection[] = rawConns;
+        if (targetIds.length > 0) {
+          const { data: profs } = await supabase
+            .from("profiles")
+            .select("id, owner_name, business_name, job_title, avatar_url, logo_url, username, slug")
+            .in("id", targetIds);
+
+          const profMap = new Map((profs || []).map((p) => [p.id, p]));
+          enrichedConns = rawConns.map((c) => ({
+            ...c,
+            connected_profile: profMap.get(c.connected_user_id) || null,
+          }));
+        }
+        setConnections(enrichedConns);
+      }
 
       setLoading(false);
     })();
@@ -417,40 +526,14 @@ export default function HomePage() {
         <StatCard icon={UserPlus} label="Connections" value={connections.length} />
       </div>
 
-      {/* Card validity */}
+      {/* Card validity & Account Status */}
       <ValidityCard
         profile={profile}
         employeesCount={employees.length}
+        completionPct={completionPct}
         onOpenUpgrade={() => setShowUpgradeModal(true)}
         onOpenRenewal={() => setShowRenewalModal(true)}
       />
-
-      {/* 100% Profile Completion Pro Upgrade Banner */}
-      {completionPct === 100 && isFree && (
-        <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-3 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Sparkles size={16} className="text-[var(--primary)]" />
-              <span className="font-semibold text-sm text-[var(--foreground)]">
-                Profile 100% Completed!
-              </span>
-            </div>
-            <span className="font-mono text-xs font-bold text-emerald-600 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
-              Ready for Pro
-            </span>
-          </div>
-          <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
-            Your profile is ready! Upgrade to Pro to claim your personal public link and receive your custom-engraved physical NFC smart business card.
-          </p>
-          <button
-            onClick={() => setShowUpgradeModal(true)}
-            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
-          >
-            <CreditCard size={15} />
-            <span>Order Custom NFC Card & Upgrade</span>
-          </button>
-        </div>
-      )}
 
       {/* Profile completion */}
       {completionPct < 100 && (
@@ -630,33 +713,62 @@ export default function HomePage() {
       {/* Activity timeline */}
       {connections.length > 0 && (
         <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <UserPlus size={16} className="text-[var(--primary)]" strokeWidth={1.8} />
-            <span className="text-sm font-medium text-[var(--foreground)]">
-              Recent Connections
-            </span>
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Users size={16} className="text-[var(--primary)]" strokeWidth={1.8} />
+              <span className="text-sm font-medium text-[var(--foreground)]">
+                Recent Connections
+              </span>
+            </div>
+            {connections.length > 5 && (
+              <Link
+                href="/dashboard/saved"
+                className="font-mono text-[11px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+              >
+                View all ({connections.length})
+              </Link>
+            )}
           </div>
           <div className="space-y-2">
-            {connections.slice(0, 5).map((conn) => (
-              <div
-                key={conn.id}
-                className="flex items-center justify-between rounded-[5px] bg-[var(--muted)] px-3 py-2.5"
-              >
-                <div className="flex items-center gap-2">
-                  <CheckCircle2
-                    size={14}
-                    className="text-green-500"
-                    strokeWidth={1.6}
-                  />
-                  <span className="text-xs text-[var(--foreground)]">
-                    New connection
+            {connections.slice(0, 5).map((conn) => {
+              const prof = conn.connected_profile;
+              const name = prof?.owner_name || prof?.business_name || "New Connection";
+              const subtitle =
+                prof?.owner_name && prof?.business_name
+                  ? prof.business_name
+                  : prof?.job_title || null;
+              const photo = prof?.avatar_url || prof?.logo_url;
+              const targetUrl = prof?.username
+                ? `/${prof.username}`
+                : prof?.slug
+                  ? `/${prof.slug}`
+                  : `/dashboard/saved`;
+
+              return (
+                <Link
+                  key={conn.id}
+                  href={targetUrl}
+                  className="flex items-center justify-between rounded-[5px] bg-[var(--muted)] px-3 py-2.5 transition-colors hover:bg-[var(--accent)] group"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <ConnectionAvatar name={name} photo={photo} />
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-semibold text-[var(--foreground)] group-hover:text-[var(--primary)] transition-colors">
+                        {name}
+                      </p>
+                      {subtitle && (
+                        <p className="truncate text-[10px] text-[var(--muted-foreground)]">
+                          {subtitle}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <span className="font-mono text-[10px] text-[var(--muted-foreground)] shrink-0 ml-3">
+                    {formatDistanceToNow(conn.created_at)}
                   </span>
-                </div>
-                <span className="font-mono text-[10px] text-[var(--muted-foreground)]">
-                  {formatDistanceToNow(conn.created_at)}
-                </span>
-              </div>
-            ))}
+                </Link>
+              );
+            })}
           </div>
         </div>
       )}

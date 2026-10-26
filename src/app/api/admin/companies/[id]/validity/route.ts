@@ -50,11 +50,30 @@ export async function POST(
       }
     }
 
+    const supabase = auth.adminSupabase;
+
+    // Check current status so we never override manual admin suspensions
+    const { data: currentProfile } = await supabase
+      .from("profiles")
+      .select("status")
+      .eq("id", id)
+      .single();
+
+    if (currentProfile && currentProfile.status !== "suspended") {
+      if (parsed.data.subscriptionPlan === "free") {
+        updates.status = "active";
+      } else if (parsed.data.membershipExpiresAt !== undefined) {
+        if (parsed.data.membershipExpiresAt) {
+          const isFuture = new Date(parsed.data.membershipExpiresAt).getTime() > Date.now();
+          updates.status = isFuture ? "active" : "expired";
+        }
+      }
+    }
+
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ message: "No fields to update" });
     }
 
-    const supabase = auth.adminSupabase;
     const { error: updateError } = await supabase
       .from("profiles")
       .update(updates)
@@ -77,12 +96,17 @@ export async function POST(
           is_premium: false,
           subscription_expires_at: null,
           subscription_started_at: null,
+          status: "active",
         })
         .eq("owner_id", id);
     } else if (parsed.data.membershipExpiresAt !== undefined) {
-      // If company validity is renewed/updated, sync expiry only for employees on Pro plan
+      // If company validity is renewed/updated, sync expiry and status only for employees on Pro plan
+      const isFuture = parsed.data.membershipExpiresAt
+        ? new Date(parsed.data.membershipExpiresAt).getTime() > Date.now()
+        : true;
       const empUpdates: Record<string, any> = {
         subscription_expires_at: parsed.data.membershipExpiresAt,
+        status: isFuture ? "active" : "expired",
       };
       if (parsed.data.subscriptionStartedAt !== undefined) {
         empUpdates.subscription_started_at = parsed.data.subscriptionStartedAt;

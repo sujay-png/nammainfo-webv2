@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   Phone,
   MapPin,
-  Sparkles,
   ShieldCheck,
   ArrowRight,
   ArrowLeft,
@@ -87,6 +86,8 @@ export default function UpgradeToProModal({
         fullName: profile.owner_name || profile.business_name || prev.fullName,
         phone: profile.phone || prev.phone,
         street: profile.address || prev.street,
+        city: profile.city || prev.city,
+        pincode: profile.pincode || prev.pincode,
       }));
     }
   }, [isOpen, profile]);
@@ -389,8 +390,8 @@ export default function UpgradeToProModal({
         <div className="flex-1 overflow-y-auto p-5 sm:p-7 space-y-5">
           {/* Modal Header */}
         <div className="space-y-1.5">
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--accent)] border border-[var(--border)] font-mono text-[10px] font-semibold uppercase tracking-wider text-[var(--foreground)]">
-            <Sparkles size={11} className="text-[var(--primary)]" />
+          <div className="flex items-center gap-1.5 font-mono text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+            <CreditCard size={13} className="text-[var(--foreground)]" />
             <span>Pro Membership & NFC Card</span>
           </div>
           <h2 className="font-headline text-xl sm:text-2xl font-bold text-[var(--foreground)]">
@@ -562,14 +563,14 @@ export default function UpgradeToProModal({
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3">
                     <div className="h-10 w-10 rounded-xl bg-[var(--accent)] border border-[var(--border)] flex items-center justify-center text-[var(--foreground)] shrink-0 mt-0.5">
-                      <Sparkles size={18} className="text-[var(--primary)]" />
+                      <Palette size={18} className="text-[var(--primary)]" />
                     </div>
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <p className="text-xs font-semibold text-[var(--foreground)]">
                           Complimentary Design Concierge
                         </p>
-                        <span className="font-mono text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                        <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-[4px] bg-[var(--accent)] text-[var(--foreground)] border border-[var(--border)]">
                           FREE
                         </span>
                       </div>
@@ -622,6 +623,8 @@ export default function UpgradeToProModal({
                       fullName: profile.owner_name || profile.business_name || prev.fullName,
                       phone: profile.phone || prev.phone,
                       street: profile.address || prev.street,
+                      city: profile.city || prev.city,
+                      pincode: profile.pincode || prev.pincode,
                     }));
                   }
                 }}
@@ -633,7 +636,7 @@ export default function UpgradeToProModal({
                 </span>
                 <span className="text-[11px] text-[var(--muted-foreground)] block mt-0.5 truncate">
                   {profile.address
-                    ? `${profile.address}${profile.phone ? ` • ${profile.phone}` : ""}`
+                    ? `${profile.address}${profile.city ? `, ${profile.city}` : ""}${profile.pincode ? ` - ${profile.pincode}` : ""}${profile.phone ? ` • ${profile.phone}` : ""}`
                     : "Auto-fill courier contact and address from your business profile"}
                 </span>
               </div>

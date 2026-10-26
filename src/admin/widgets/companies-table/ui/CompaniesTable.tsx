@@ -68,7 +68,7 @@ export const CompaniesTable: React.FC<CompaniesTableProps> = ({
           <tbody className="divide-y divide-[var(--border)]">
             {companies.map((company) => {
               const validity = getDaysRemaining(company.membershipExpiresAt, company.subscriptionPlan);
-              const isExpired = !validity.isLifetime && (validity.isExpired || company.status === "expired");
+              const isExpired = company.subscriptionPlan === "pro" && !validity.isLifetime && (validity.isExpired || (company.status === "expired" && !company.membershipExpiresAt));
 
               return (
                 <tr
@@ -204,7 +204,7 @@ export const CompaniesTable: React.FC<CompaniesTableProps> = ({
       <div className="divide-y divide-[var(--border)] lg:hidden">
         {companies.map((company) => {
           const validity = getDaysRemaining(company.membershipExpiresAt, company.subscriptionPlan);
-          const isExpired = !validity.isLifetime && (validity.isExpired || company.status === "expired");
+          const isExpired = company.subscriptionPlan === "pro" && !validity.isLifetime && (validity.isExpired || (company.status === "expired" && !company.membershipExpiresAt));
 
           return (
             <div

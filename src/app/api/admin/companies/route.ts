@@ -153,7 +153,7 @@ export async function GET(request: Request) {
         }
       }
 
-      // Status mapping
+      // Status mapping: determine active/expired dynamically based on valid subscription dates
       let status: AccountStatus = (p.status as AccountStatus) || "active";
       if (expiresAt && plan === "pro") {
         const expiryDate = new Date(expiresAt);
@@ -165,8 +165,17 @@ export async function GET(request: Request) {
             status = "expired";
           }
           expiredCardsCount++;
-        } else if (diff <= fifteenDaysMs) {
-          upcomingRenewalsCount++;
+        } else {
+          if (status !== "suspended") {
+            status = "active";
+          }
+          if (diff <= fifteenDaysMs) {
+            upcomingRenewalsCount++;
+          }
+        }
+      } else if (plan === "free") {
+        if (status !== "suspended") {
+          status = "active";
         }
       } else if (status === "expired") {
         expiredCardsCount++;

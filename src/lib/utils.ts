@@ -52,14 +52,18 @@ export function slugify(text: string): string {
 export function directionsUrl(p: {
   maps_url?: string | null;
   address?: string | null;
+  city?: string | null;
+  pincode?: string | null;
   google_place_id?: string | null;
 }): string | null {
   const maps = p.maps_url?.trim();
   if (maps) return /^https?:\/\//i.test(maps) ? maps : `https://${maps}`;
 
-  const address = p.address?.trim();
-  if (address) {
-    return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
+  const destination = [p.address?.trim(), p.city?.trim(), p.pincode?.trim()]
+    .filter(Boolean)
+    .join(", ");
+  if (destination) {
+    return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`;
   }
 
   const pid = p.google_place_id?.trim();

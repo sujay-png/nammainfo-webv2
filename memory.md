@@ -175,4 +175,8 @@
   - Team page tracks slot quota (`purchased_id_count` vs. assigned members).
   - Synchronized organization renewal alert displays during last 15 days of company validity.
   - Pruning/deleting team members dynamically recalculates renewal cost.
+- [x] **Phase 6: Dashboard UX Streamlining & Anti-AI-Slop Rules**
+  - Removed duplicate stacked upgrade banner below Account Status.
+  - Merged 100% profile completion status directly into `ValidityCard` with clean mono indicator (`Profile 100% • Ready for Pro`) and updated button label.
+  - Enforced project design rule in `AGENTS.md` and `.agents/rules/ui-styling.md`: No sparkles (`Sparkles` icon / emojis), no neon glows, and no transparent neon pill badges.
 - [x] **TypeScript Validation:** Verified across all routes with `npx tsc --noEmit` (Exit code 0).

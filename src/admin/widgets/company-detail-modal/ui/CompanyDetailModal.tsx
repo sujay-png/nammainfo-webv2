@@ -66,7 +66,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
   const [updatingEmpId, setUpdatingEmpId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (company && isOpen) {
+    if (company?.id && isOpen) {
       setLoading(true);
       fetchCompanyDetails(company.id)
         .then((data) => {
@@ -80,10 +80,10 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
           console.error("Failed to load company details:", err);
         })
         .finally(() => setLoading(false));
-    } else {
+    } else if (!isOpen) {
       setDetails(null);
     }
-  }, [company, isOpen]);
+  }, [company?.id, isOpen]);
 
   if (!company) return null;
 
@@ -93,7 +93,9 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
   };
 
   const validity = getDaysRemaining(current.membershipExpiresAt, current.subscriptionPlan);
-  const isExpired = current.status === "expired" || (!validity.isLifetime && validity.isExpired);
+  const isExpired =
+    current.subscriptionPlan === "pro" &&
+    (!validity.isLifetime && (validity.isExpired || (current.status === "expired" && !current.membershipExpiresAt)));
   const teamCount = current.employees?.length || 0;
 
   // Helper: exactly 1 year later (e.g. 2026-10-21 -> 2027-10-21)
@@ -119,7 +121,9 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
       const today = new Date().toISOString().split("T")[0];
       const start = editStartDate || today;
       setEditStartDate(start);
-      setEditExpiryDate(calculateOneYearLater(start));
+      if (!editExpiryDate) {
+        setEditExpiryDate(calculateOneYearLater(start));
+      }
     } else if (newPlan === "free") {
       setEditStartDate("");
       setEditExpiryDate("");
@@ -145,7 +149,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
     const finalStart = editPlan === "free"
       ? null
       : editStartDate
-      ? new Date(editStartDate).toISOString()
+      ? new Date(`${editStartDate}T00:00:00.000Z`).toISOString()
       : null;
 
     setActionLoading(true);
@@ -156,6 +160,9 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
         membershipExpiresAt: finalExpiry,
         primaryCardCount: editPlan === "free" ? 0 : 1,
       });
+
+      const isFuture = finalExpiry ? new Date(finalExpiry).getTime() > Date.now() : true;
+      const newStatus = current.status === "suspended" ? "suspended" : (editPlan === "free" || isFuture ? "active" : "expired");
 
       setDetails((prev) => {
         if (!prev) return null;
@@ -170,6 +177,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
         const primaryCount = editPlan === "free" ? 0 : 1;
         return {
           ...prev,
+          status: newStatus,
           subscriptionPlan: editPlan,
           subscriptionStartedAt: finalStart,
           membershipExpiresAt: finalExpiry,
@@ -178,6 +186,9 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
           employees: updatedEmployees,
         };
       });
+
+      setEditStartDate(finalStart ? formatDateInput(finalStart) : "");
+      setEditExpiryDate(finalExpiry ? formatDateInput(finalExpiry) : "");
 
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 2500);

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import type { Profile } from "@/lib/supabase/types";
+import { initials } from "@/lib/utils";
 import { useTheme } from "@/components/ThemeProvider";
 import { themes, getTheme } from "@/lib/themes";
 import {
@@ -96,12 +97,20 @@ export default function SettingsPage() {
       {/* Profile card */}
       {profile && (
         <div className="mb-5 flex items-center gap-3 rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--accent)] font-headline text-sm font-semibold text-[var(--accent-foreground)]">
-            {profile.owner_name?.[0]?.toUpperCase() ?? "N"}
+          <div className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--accent)] font-headline text-sm font-semibold text-[var(--accent-foreground)]">
+            {profile.logo_url || profile.avatar_url ? (
+              <img
+                src={profile.logo_url || profile.avatar_url!}
+                alt={profile.business_name || profile.owner_name || "Logo"}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              initials(profile.business_name || profile.owner_name)
+            )}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold">
-              {profile.owner_name || "Your Name"}
+            <p className="truncate text-sm font-semibold text-[var(--foreground)]">
+              {profile.business_name || profile.owner_name || "Your Business"}
             </p>
             <p className="truncate text-xs text-[var(--muted-foreground)]">
               {profile.email}
@@ -109,7 +118,7 @@ export default function SettingsPage() {
           </div>
           <button
             onClick={() => router.push("/dashboard/profile")}
-            className="rounded-lg p-1.5 text-[var(--muted-foreground)] transition hover:bg-[var(--accent)]"
+            className="rounded-lg p-1.5 text-[var(--muted-foreground)] transition hover:bg-[var(--accent)] cursor-pointer"
           >
             <ChevronRight size={16} />
           </button>

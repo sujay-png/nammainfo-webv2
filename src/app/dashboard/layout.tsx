@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Home,
   User,
@@ -51,12 +51,34 @@ export default function DashboardLayout({
     };
   }, []);
 
-  // Sync color theme from Supabase on first dashboard load
+  const router = useRouter();
+
+  // Sync color theme and bounce admin accounts out of user dashboard
   useEffect(() => {
     (async () => {
       const supabase = createClient();
       const user = await getCurrentUser();
       if (!user) return;
+
+      const isAdminClaim =
+        user.app_metadata?.is_admin === true ||
+        user.app_metadata?.role === "admin";
+
+      if (isAdminClaim) {
+        router.replace("/admin");
+        return;
+      }
+
+      const { data } = await supabase
+        .from("profiles")
+        .select("theme, is_admin")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (data?.is_admin) {
+        router.replace("/admin");
+        return;
+      }
 
       // Remember this phone has an account, and save any cards that were
       // tapped while signed out.
@@ -65,19 +87,13 @@ export default function DashboardLayout({
       } catch {}
       flushPendingSaves();
 
-      const { data } = await supabase
-        .from("profiles")
-        .select("theme")
-        .eq("id", user.id)
-        .single();
-
-      const saved = (data as { theme?: string } | null)?.theme;
+      const saved = data?.theme;
       if (saved && saved !== colorTheme) {
         setColorTheme(saved);
       }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [router]);
 
   return (
     <div className="flex min-h-dvh flex-col bg-[var(--background)]">

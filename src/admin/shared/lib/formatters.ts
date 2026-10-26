@@ -23,6 +23,7 @@ export function formatDate(dateString: string | null | undefined): string {
 
 export function formatDateInput(dateString: string | null | undefined): string {
   if (!dateString) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return dateString;
   try {
     const d = new Date(dateString);
     if (isNaN(d.getTime())) return "";
