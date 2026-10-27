@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createPublicClient } from "@/lib/supabase/server";
-import { buildVCard, fetchVCardPhoto, vcardFileName, vcardResponse } from "@/lib/vcard";
-import type { Profile } from "@/lib/supabase/types";
+import { createPublicClient } from "@/supabase/server";
+import { buildVCard, fetchVCardPhoto, vcardFileName, vcardResponse } from "@/features/save-contact/lib/vcard";
+import type { Profile } from "@/supabase/database-types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

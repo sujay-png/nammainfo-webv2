@@ -1,9 +1,9 @@
 import { cache } from "react";
 import { notFound } from "next/navigation";
-import { createCachedPublicClient } from "@/lib/supabase/server";
-import PublicProfileView from "@/components/PublicProfileView";
+import { createCachedPublicClient } from "@/supabase/server";
+import PublicProfileView from "@/features/public-profile/components/public-profile-view";
 import type { Metadata } from "next";
-import type { Profile, Card, Review, Employee } from "@/lib/supabase/types";
+import type { Profile, Card, Review, Employee } from "@/supabase/database-types";
 
 // ISR: revalidate every 30 seconds so edits appear quickly
 // while repeat visitors get a cached page instantly

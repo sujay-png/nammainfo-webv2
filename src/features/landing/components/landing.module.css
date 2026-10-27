@@ -1,0 +1,334 @@
+/* ------------------------------------------------------------------
+   Landing page (nammainfo.in). Its own palette, so it looks the same
+   whatever colour theme a signed-in user picked for their dashboard.
+   Only light / dark mode carries over.
+   ------------------------------------------------------------------ */
+.root {
+  --lp-bg: #edeff1;
+  --lp-surface: #ffffff;
+  --lp-raised: #f6f7f8;
+  --lp-ink: #14171c;
+  --lp-soft: #5a616d;
+  --lp-line: #d3d8de;
+  --lp-accent: #0b6e69;
+  --lp-accent-soft: #d5ebe8;
+  --lp-accent-ink: #ffffff;
+  --lp-zari: #c8a24a;
+  --lp-phone: #14171c;
+  --lp-kannada: #d9dde2;
+
+  background: var(--lp-bg);
+  color: var(--lp-ink);
+  font-family: Geist, ui-sans-serif, system-ui, sans-serif;
+  overflow-x: clip;
+  transition: background-color 0.3s ease;
+}
+:global(.dark) .root {
+  --lp-bg: #000000;
+  --lp-surface: #101215;
+  --lp-raised: #16191d;
+  --lp-ink: #eceef0;
+  --lp-soft: #8f96a2;
+  --lp-line: #262a31;
+  --lp-accent: #3cb4aa;
+  --lp-accent-soft: #0d2a28;
+  --lp-accent-ink: #021f1c;
+  --lp-zari: #d9b55e;
+  --lp-phone: #2b2f36;
+  --lp-kannada: #15181c;
+}
+
+.root ::selection {
+  background: var(--lp-accent);
+  color: var(--lp-accent-ink);
+}
+.root :focus-visible {
+  outline: 2px solid var(--lp-accent);
+  outline-offset: 3px;
+}
+
+/* Film grain, very faint, so flat colour doesn't look plastic. */
+.root::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  pointer-events: none;
+  opacity: 0.045;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+:global(.dark) .root::before {
+  opacity: 0.07;
+}
+
+.display {
+  font-family: "Bricolage Grotesque", Geist, ui-sans-serif, sans-serif;
+  font-optical-sizing: auto;
+  letter-spacing: -0.045em;
+}
+.hand {
+  font-family: Caveat, "Bradley Hand", "Segoe Print", cursive;
+}
+.kannada {
+  font-family: "Noto Sans Kannada", "Tunga", "Kedage", sans-serif;
+  font-weight: 800;
+  font-size: clamp(14rem, 44vw, 46rem);
+  color: transparent;
+  -webkit-text-stroke: 1.5px var(--lp-line);
+  letter-spacing: -0.02em;
+}
+
+/* ---- Hero load sequence (pure CSS, runs on first paint) ---------- */
+.line {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.08em;
+  margin-bottom: -0.08em;
+}
+.line > span {
+  display: block;
+  transform: translate3d(0, 108%, 0) rotate(4deg);
+  transform-origin: left top;
+  animation: lineUp 1.1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: calc(var(--i, 0) * 95ms + 120ms);
+}
+@keyframes lineUp {
+  to {
+    transform: none;
+  }
+}
+.fadeIn {
+  opacity: 0;
+  animation: fadeIn 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: var(--d, 0ms);
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.cardDrop {
+  animation: cardDrop 1.5s cubic-bezier(0.16, 1, 0.3, 1) 0.25s both;
+  transform-style: preserve-3d;
+}
+@keyframes cardDrop {
+  from {
+    opacity: 0;
+    transform: translate3d(8vw, -42vh, 0) rotateX(62deg) rotateZ(-34deg) scale(0.75);
+  }
+  45% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.float {
+  transform-style: preserve-3d;
+  animation: float 7s ease-in-out 1.8s infinite;
+}
+@media (hover: hover) and (pointer: fine) {
+  .float {
+    animation: none;
+  }
+}
+@keyframes float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotateX(9deg) rotateY(-13deg) rotateZ(2deg);
+  }
+  50% {
+    transform: translate3d(0, -12px, 0) rotateX(4deg) rotateY(-5deg) rotateZ(1deg);
+  }
+}
+
+.flipInner {
+  transform-style: preserve-3d;
+  transition: transform 0.95s cubic-bezier(0.2, 0.85, 0.2, 1);
+}
+.flipped {
+  transform: rotateY(180deg);
+}
+.face {
+  position: absolute;
+  inset: 0;
+  display: block;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.faceBack {
+  transform: rotateY(180deg);
+}
+
+/* Light catching the foil as the card tilts (--mx/--my set from JS). */
+.sheen {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at var(--mx, 28%) var(--my, 18%), rgba(255, 255, 255, 0.22), transparent 42%),
+    linear-gradient(
+      112deg,
+      transparent 32%,
+      rgba(120, 255, 228, 0.13) calc(var(--mx, 40%) - 6%),
+      rgba(255, 214, 128, 0.16) var(--mx, 40%),
+      transparent 68%
+    );
+  mix-blend-mode: screen;
+}
+
+.cardShadow {
+  height: 26px;
+  margin: 34px auto 0;
+  width: 78%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.28), transparent);
+  filter: blur(6px);
+  animation: fadeIn 1s ease 1.2s both;
+}
+:global(.dark) .cardShadow {
+  background: radial-gradient(closest-side, rgba(60, 180, 170, 0.22), transparent);
+}
+
+/* NFC waves coming off the card */
+.wave {
+  opacity: 0;
+  transform-origin: 0% 50%;
+  animation: wave 2.6s cubic-bezier(0.2, 0.7, 0.3, 1) infinite;
+  animation-delay: calc(var(--i, 0) * 260ms + 1.9s);
+}
+@keyframes wave {
+  0% {
+    opacity: 0;
+    transform: translateX(-6px) scale(0.7);
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(10px) scale(1.15);
+  }
+}
+
+/* Tap ripple in the scroll story */
+.ripple {
+  position: absolute;
+  border-radius: 9999px;
+  border: 2px solid var(--lp-accent);
+  opacity: 0;
+}
+.rippleOn {
+  animation: ripple 1.6s cubic-bezier(0.2, 0.7, 0.3, 1) infinite;
+  animation-delay: calc(var(--i, 0) * 0.35s);
+}
+@keyframes ripple {
+  from {
+    opacity: 0.9;
+    transform: scale(0.2);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+
+.caret::after {
+  content: "";
+  display: inline-block;
+  width: 1.5px;
+  height: 1em;
+  margin-left: 1px;
+  vertical-align: -0.12em;
+  background: currentColor;
+  animation: blink 1s steps(1) infinite;
+}
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Feature preview swap */
+.swap {
+  animation: swap 0.55s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes swap {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 18px, 0) scale(0.97);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+.outlineText {
+  color: transparent;
+  -webkit-text-stroke: 1.5px var(--lp-ink);
+}
+
+/* Paper texture for the old-style card */
+.paper {
+  background-color: #f3eee3;
+  background-image:
+    radial-gradient(rgba(120, 100, 60, 0.07) 1px, transparent 1px),
+    radial-gradient(rgba(120, 100, 60, 0.05) 1px, transparent 1px);
+  background-size: 7px 7px, 11px 11px;
+  background-position: 0 0, 3px 5px;
+}
+
+/* Theme switch icon: sun in light mode, moon in dark mode */
+.sunMoon .moonCut {
+  transform: translate(10px, -8px);
+  transition: transform 0.5s cubic-bezier(0.2, 0.85, 0.2, 1);
+}
+.sunMoon .core {
+  transition: r 0.5s cubic-bezier(0.2, 0.85, 0.2, 1);
+}
+.sunMoon .rays {
+  transform-origin: 12px 12px;
+  transition: transform 0.5s cubic-bezier(0.2, 0.85, 0.2, 1), opacity 0.3s ease;
+}
+:global(.dark) .sunMoon .moonCut {
+  transform: translate(0, 0);
+}
+:global(.dark) .sunMoon .core {
+  r: 8.5px;
+}
+:global(.dark) .sunMoon .rays {
+  transform: rotate(-90deg) scale(0.4);
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .line > span,
+  .fadeIn,
+  .cardDrop,
+  .cardShadow,
+  .swap {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .float,
+  .wave,
+  .rippleOn,
+  .caret::after {
+    animation: none;
+  }
+  .wave {
+    opacity: 0.6;
+  }
+}

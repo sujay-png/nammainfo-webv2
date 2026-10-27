@@ -150,3 +150,11 @@ select {
 @media (prefers-reduced-motion: reduce) {
   .auth-card-float { animation: none; transform: rotateX(12deg) rotateY(-14deg) rotateZ(3deg); }
 }
+
+/* Light/dark switch on the home page: the new theme grows out of the
+   button in a circle (View Transitions). Only used during that switch. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}

@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
-import { getCardAndProfile } from "@/lib/card-lookup";
-import { buildCardMetadata } from "@/lib/card-metadata";
-import CardPageView from "@/components/CardPageView";
+import { getCardAndProfile } from "@/features/public-profile/lib/card-lookup";
+import { buildCardMetadata } from "@/features/public-profile/lib/card-page-metadata";
+import CardPageView from "@/features/public-profile/components/card-page-view";
 import type { Metadata } from "next";
 
 /**
