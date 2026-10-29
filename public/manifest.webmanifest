@@ -1,0 +1,17 @@
+{
+  "name": "Namma Info",
+  "short_name": "Namma Info",
+  "description": "Manage your digital business card, see who tapped it and your saved cards.",
+  "id": "/dashboard/home",
+  "start_url": "/dashboard/home",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FFFFFF",
+  "theme_color": "#0A0A0A",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -1,0 +1,228 @@
+"use client";
+
+import VisitorDetailsGate from "@/features/contacts/components/visitor-details-popup";
+import { useState, useMemo, useEffect } from "react";
+import { saveContactFromUrl } from "@/features/save-contact/lib/save-contact";
+import Image from "next/image";
+import type { Profile, Card, Review, Employee } from "@/supabase/database-types";
+import { initials } from "@/lib/utils";
+import { getTheme } from "@/lib/themes";
+import PublicProfileView from "@/features/public-profile/components/public-profile-view";
+import {
+  UserPlus,
+  Phone,
+  Mail,
+  Share2,
+  Globe,
+} from "lucide-react";
+
+/**
+ * Ensure a URL string has a protocol prefix.
+ */
+function ensureProtocol(url: string): string {
+  if (!url) return url;
+  if (/^https?:\/\//i.test(url)) return url;
+  return `https://${url}`;
+}
+
+export default function EmployeeProfileView({
+  employee,
+  owner,
+  card,
+  reviews,
+  employees,
+}: {
+  employee: Employee;
+  owner: Profile;
+  card: Card | null;
+  reviews: Review[];
+  employees: Employee[];
+}) {
+  const ownerTheme = getTheme(owner.theme);
+  const [themeMode, setThemeMode] = useState<"light" | "dark">("light");
+
+  useEffect(() => {
+    const isDark =
+      document.documentElement.classList.contains("dark");
+    setThemeMode(isDark ? "dark" : "light");
+  }, []);
+
+  const themeVars = useMemo(() => {
+    const vars = ownerTheme.colors[themeMode];
+    return vars as Record<string, string>;
+  }, [ownerTheme, themeMode]);
+
+  const [profileUrl, setProfileUrl] = useState("");
+
+  useEffect(() => {
+    setProfileUrl(
+      `${window.location.origin}/${owner.username}/${employee.slug}`
+    );
+  }, [owner.username, employee.slug]);
+
+  function saveContact() {
+    saveContactFromUrl(
+      `/api/vcard/employee/${employee.id}`,
+      `${employee.name.replace(/[^a-z0-9 ]/gi, "").trim() || "contact"}.vcf`
+    );
+  }
+
+  async function shareProfile() {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `${employee.name} · ${owner.business_name ?? "Namma Info"}`,
+          text: `${employee.name} — ${employee.designation} at ${owner.business_name ?? "Namma Info"}`,
+          url: profileUrl,
+        });
+      } catch {
+        /* cancelled */
+      }
+    } else {
+      await navigator.clipboard.writeText(profileUrl);
+    }
+  }
+
+  return (
+    <main
+      className="mx-auto max-w-lg min-h-dvh bg-[var(--background)]"
+      style={themeVars as React.CSSProperties}
+    >
+      <VisitorDetailsGate
+        ownerId={owner.id}
+        employeeId={employee.id}
+        personName={employee.name}
+        businessName={owner.business_name || owner.owner_name || "this business"}
+        avatarUrl={employee.avatar_url}
+      />
+      {/* ===== Hero — Cover + Avatar (exact same layout as company profile) ===== */}
+      <div className="relative">
+        <div className="relative h-44 w-full overflow-hidden bg-[var(--foreground)]">
+          {employee.cover_url ? (
+            <Image
+              src={employee.cover_url}
+              alt=""
+              fill
+              sizes="(max-width: 512px) 100vw, 512px"
+              className="object-cover"
+              priority
+            />
+          ) : owner.cover_url ? (
+            <Image
+              src={owner.cover_url}
+              alt=""
+              fill
+              sizes="(max-width: 512px) 100vw, 512px"
+              className="object-cover"
+              priority
+            />
+          ) : (
+            <div className="h-full w-full bg-[var(--foreground)]" />
+          )}
+        </div>
+        <div className="absolute -bottom-12 left-5">
+          <div className="relative h-24 w-24 overflow-hidden rounded-2xl border-4 border-[var(--card)] bg-[var(--accent)] shadow-card">
+            {employee.avatar_url ? (
+              <Image
+                src={employee.avatar_url}
+                alt=""
+                fill
+                sizes="96px"
+                className="object-cover"
+                priority
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center bg-[var(--foreground)] font-headline text-2xl font-bold text-[var(--background)]">
+                {initials(employee.name)}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ===== Name + info ===== */}
+      <div className="mt-14 px-5">
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="font-headline text-xl font-bold text-[var(--foreground)]">
+              {employee.name}
+            </h1>
+            <p className="text-sm text-[var(--muted-foreground)]">
+              {[employee.designation, owner.business_name]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* ===== Action CTAs ===== */}
+      <div className="mt-5 flex gap-2 px-5">
+        <button
+          onClick={saveContact}
+          className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[var(--foreground)] py-3.5 text-xs font-semibold text-[var(--background)] shadow-card-lg transition hover:opacity-90"
+        >
+          <UserPlus size={15} />
+          Add to Contacts
+        </button>
+        {owner.website && (
+          <a
+            href={ensureProtocol(owner.website)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] py-3.5 text-xs font-semibold text-[var(--foreground)] shadow-card transition hover:shadow-card-hover"
+          >
+            <Globe size={15} />
+            Visit Website
+          </a>
+        )}
+      </div>
+
+      {/* ===== Quick contact ===== */}
+      <div className="mt-4 grid grid-cols-3 gap-2 px-5">
+        {employee.phone && (
+          <a
+            href={`tel:${employee.phone}`}
+            className="flex flex-col items-center gap-1 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 transition hover:shadow-card"
+          >
+            <Phone size={18} className="text-[var(--foreground)]" />
+            <span className="text-[10px] font-medium text-[var(--muted-foreground)]">Call</span>
+          </a>
+        )}
+        {employee.email && (
+          <a
+            href={`mailto:${employee.email}`}
+            className="flex flex-col items-center gap-1 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 transition hover:shadow-card"
+          >
+            <Mail size={18} className="text-[var(--foreground)]" />
+            <span className="text-[10px] font-medium text-[var(--muted-foreground)]">Email</span>
+          </a>
+        )}
+        <button
+          onClick={shareProfile}
+          className="flex flex-col items-center gap-1 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 transition hover:shadow-card"
+        >
+          <Share2 size={18} className="text-[var(--foreground)]" />
+          <span className="text-[10px] font-medium text-[var(--muted-foreground)]">Share</span>
+        </button>
+      </div>
+
+      {/* ===== COMPANY PROFILE label ===== */}
+      <div className="mt-6 px-5">
+        <p className="text-center font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
+          Company Profile
+        </p>
+      </div>
+
+      {/* ===== Company sections (services, gallery, reviews, etc.) — no hero ===== */}
+      <PublicProfileView
+        profile={owner}
+        card={card}
+        reviews={reviews}
+        employees={employees}
+        isEmployeeView
+        hideHero
+      />
+    </main>
+  );
+}

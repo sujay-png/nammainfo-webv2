@@ -2,8 +2,8 @@
 
 import React from "react";
 import Link from "next/link";
-import { Lock, AlertCircle, ShieldAlert, Sparkles, ArrowRight, ExternalLink } from "lucide-react";
-import type { Profile } from "@/lib/supabase/types";
+import { Lock, AlertCircle, ShieldAlert, CreditCard, ArrowRight, ExternalLink } from "lucide-react";
+import type { Profile } from "@/supabase/database-types";
 
 interface GatedProfileViewProps {
   profile: Profile;
@@ -112,7 +112,7 @@ export default function GatedProfileView({ profile, reason }: GatedProfileViewPr
             href="/"
             className="inline-flex items-center gap-1.5 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
           >
-            <Sparkles size={13} className="text-blue-500" />
+            <CreditCard size={13} className="text-[var(--primary)]" />
             <span>Get your own smart NFC business card at <strong>Namma Info</strong></span>
           </Link>
         </div>

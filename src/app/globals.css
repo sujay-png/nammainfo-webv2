@@ -179,16 +179,6 @@ select {
   }
 }
 
-/* Keep all the border radius of cards to 5px max */
-.card,
-[class*="bg-[var(--card)]"]:not(.rounded-full):not([class*="rounded-full"]),
-[class*="bg-card"]:not(.rounded-full):not([class*="rounded-full"]),
-.shadow-card:not(.rounded-full):not([class*="rounded-full"]),
-.card-foil,
-[data-card]:not(.rounded-full) {
-  border-radius: 5px !important;
-}
-
 /* Skeleton Loading utility */
 .skeleton {
   background-color: var(--muted);
@@ -204,3 +194,10 @@ select {
   }
 }
 
+/* Light/dark switch on the home page: the new theme grows out of the
+   button in a circle (View Transitions). Only used during that switch. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
