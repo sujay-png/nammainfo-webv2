@@ -63,15 +63,15 @@ export async function middleware(request: NextRequest) {
 
     const isLogin = pathname === "/login";
 
-    // Unauthenticated or non-admin attempting to access admin console
-    if (!isLogin && (!user || !isAdmin)) {
+    // Unauthenticated user attempting to access admin console
+    if (!isLogin && !user) {
       const url = request.nextUrl.clone();
       url.pathname = "/login";
       return NextResponse.redirect(url);
     }
 
-    // Signed-in admin visiting /login -> redirect to home /
-    if (isLogin && user && isAdmin) {
+    // Signed-in user visiting /login -> redirect to home /
+    if (isLogin && user) {
       const url = request.nextUrl.clone();
       url.pathname = "/";
       return NextResponse.redirect(url);
@@ -103,15 +103,15 @@ export async function middleware(request: NextRequest) {
   const isLoginPage = pathname.startsWith("/admin/login");
 
   if (isAdminRoute && !isLoginPage) {
-    if (!user || !isAdmin) {
+    if (!user) {
       const url = request.nextUrl.clone();
       url.pathname = "/admin/login";
       return NextResponse.redirect(url);
     }
   }
 
-  // Redirect signed-in admin from /admin/login to /admin
-  if (isLoginPage && user && isAdmin) {
+  // Redirect signed-in user from /admin/login to /admin
+  if (isLoginPage && user) {
     const url = request.nextUrl.clone();
     url.pathname = "/admin";
     return NextResponse.redirect(url);
