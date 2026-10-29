@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdminAuth } from "@/admin/shared/lib/admin-auth";
 import type { Company, AdminStats, AccountStatus, SubscriptionPlanType } from "@/admin/entities/company/model/types";
+import { calculateProfileCompletion } from "@/lib/profile-completion";
 
 export const dynamic = "force-dynamic";
 
@@ -82,7 +83,8 @@ export async function GET(request: Request) {
     }
 
     const now = Date.now();
-    const fifteenDaysMs = 15 * 24 * 60 * 60 * 1000;
+    // 30 days renewal threshold as requested
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
 
     let premiumCompaniesCount = 0;
     let totalCardsIssuedAll = 0;
@@ -93,6 +95,8 @@ export async function GET(request: Request) {
     let upcomingRenewalsCount = 0;
     let expiredCardsCount = 0;
     let suspendedCount = 0;
+    let pendingTrialsCount = 0;
+    let activeTrialsCount = 0;
 
     // Strictly filter out platform administrator & internal agency accounts so they are not treated as customer companies
     const customerProfiles = (profiles || []).filter(
@@ -108,8 +112,12 @@ export async function GET(request: Request) {
       const latestEmpExpiry = employeeExpiryMap.get(p.id);
       const hasValidEmpExpiry = Boolean(latestEmpExpiry && new Date(latestEmpExpiry).getTime() > now);
 
-      // Determine if company has an active Pro subscription:
-      // Either by profile subscription tier or an active membership expiry or valid employee subscription
+      // Free Trial & Pro Determination
+      const isTrial = p.subscription_plan === "trial";
+      if (p.trial_status === "pending_approval") {
+        pendingTrialsCount++;
+      }
+
       const hasCompanyProPlan = Boolean(
         p.subscription_plan === "pro" ||
         p.subscription_plan === "starter" ||
@@ -120,14 +128,17 @@ export async function GET(request: Request) {
         hasValidEmpExpiry
       );
 
-      const plan: SubscriptionPlanType = hasCompanyProPlan ? "pro" : "free";
+      const plan: SubscriptionPlanType = isTrial
+        ? "trial"
+        : hasCompanyProPlan
+        ? "pro"
+        : "free";
 
-      // 1. Primary Card: "logic is simple if someone has pro plan then they will have 1 primary card"
-      const primaryCardCount = plan === "pro" ? 1 : 0;
+      // 1. Primary Card: Pro and Free Trial plans both grant 1 primary card
+      const primaryCardCount = plan === "pro" || plan === "trial" ? 1 : 0;
 
-      // 2. Team Cards: "and the teams card will be the team within them"
-      // Only active premium team members within an active Pro company count as team cards
-      const employeeCardsIssued = plan === "pro" ? premEmpCount : 0;
+      // 2. Team Cards: Only active premium team members count as team cards
+      const employeeCardsIssued = plan === "pro" || plan === "trial" ? premEmpCount : 0;
 
       // 3. Purchased ID Count
       const purchasedCount = (p.purchased_id_count && p.purchased_id_count > employeeCardsIssued) 
@@ -141,7 +152,10 @@ export async function GET(request: Request) {
       let expiresAt: string | null = null;
       let startedAt: string | null = null;
 
-      if (plan === "pro") {
+      if (plan === "trial") {
+        startedAt = p.subscription_started_at || p.trial_approved_at || p.created_at;
+        expiresAt = p.membership_expires_at;
+      } else if (plan === "pro") {
         startedAt = p.subscription_started_at || employeeStartMap.get(p.id) || p.created_at;
         if (p.membership_expires_at) {
           expiresAt = p.membership_expires_at;
@@ -155,7 +169,7 @@ export async function GET(request: Request) {
 
       // Status mapping: determine active/expired dynamically based on valid subscription dates
       let status: AccountStatus = (p.status as AccountStatus) || "active";
-      if (expiresAt && plan === "pro") {
+      if (expiresAt && (plan === "pro" || plan === "trial")) {
         const expiryDate = new Date(expiresAt);
         const expiryTime = expiryDate.getTime();
         const diff = expiryTime - now;
@@ -169,7 +183,7 @@ export async function GET(request: Request) {
           if (status !== "suspended") {
             status = "active";
           }
-          if (diff <= fifteenDaysMs) {
+          if (diff <= thirtyDaysMs) {
             upcomingRenewalsCount++;
           }
         }
@@ -188,6 +202,9 @@ export async function GET(request: Request) {
       const isPremium = plan !== "free";
       if (isPremium) {
         premiumCompaniesCount++;
+        if (plan === "trial" && status === "active") {
+          activeTrialsCount++;
+        }
       }
 
       // Cards in use: count active cards for non-suspended, non-expired companies
@@ -199,6 +216,8 @@ export async function GET(request: Request) {
 
       totalCardsIssuedAll += totalCardsIssued;
       totalAssignedIdsAll += assignedCount;
+
+      const completion = calculateProfileCompletion(p);
 
       return {
         id: p.id,
@@ -222,6 +241,17 @@ export async function GET(request: Request) {
         logoUrl: p.logo_url,
         followUpStatus: (p.follow_up_status as "unattended" | "attended") || "unattended",
         followUpNotes: p.follow_up_notes || "",
+
+        // 100-Day Free Trial details
+        trialStatus: p.trial_status || "none",
+        trialCouponCode: p.trial_coupon_code || null,
+        trialRequestedAt: p.trial_requested_at || null,
+        trialApprovedAt: p.trial_approved_at || null,
+        trialExtensionDays: p.trial_extension_days || 0,
+        trialFollowUpMilestone: p.trial_follow_up_milestone || 0,
+        trialFollowUpStatus: (p.trial_follow_up_status as "unattended" | "attended") || "unattended",
+        trialFollowUpNotes: p.trial_follow_up_notes || "",
+        profileCompletionPercentage: completion.percentage,
       };
     });
 
@@ -239,6 +269,8 @@ export async function GET(request: Request) {
       totalAssignedIds: totalAssignedIdsAll,
       expiringSoonCount: upcomingRenewalsCount,
       suspendedCount,
+      pendingTrialsCount,
+      activeTrialsCount,
     };
 
     return NextResponse.json({

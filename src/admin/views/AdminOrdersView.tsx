@@ -176,7 +176,7 @@ export const AdminOrdersView: React.FC<AdminOrdersViewProps> = ({
       </div>
 
       {/* Main Content Area */}
-      <main className="flex-1 space-y-6 p-6 max-w-7xl w-full mx-auto pb-16">
+      <main className="flex-1 space-y-6 p-6 w-full pb-16">
         {/* Top KPI Metrics Cards */}
         <OrdersKpiGrid
           stats={stats}

@@ -11,6 +11,7 @@ import {
   Search,
   Loader2,
   Check,
+  Gift,
 } from "lucide-react";
 import { Modal } from "@/admin/shared/ui/Modal";
 import { Badge } from "@/admin/shared/ui/Badge";
@@ -36,7 +37,7 @@ interface CompanyDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   onRefresh: () => void;
-  onDeleteRequest: (company: Company) => void;
+  onDeleteRequest?: (company: Company) => void;
 }
 
 export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
@@ -71,10 +72,15 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
       fetchCompanyDetails(company.id)
         .then((data) => {
           setDetails(data);
-          const activePlan = data.subscriptionPlan === "pro" ? "pro" : "free";
+          const activePlan: SubscriptionPlanType =
+            data.subscriptionPlan === "trial"
+              ? "trial"
+              : data.subscriptionPlan === "pro"
+              ? "pro"
+              : "free";
           setEditPlan(activePlan);
-          setEditStartDate(activePlan === "pro" ? formatDateInput(data.subscriptionStartedAt) : "");
-          setEditExpiryDate(activePlan === "pro" ? formatDateInput(data.membershipExpiresAt) : "");
+          setEditStartDate(activePlan !== "free" ? formatDateInput(data.subscriptionStartedAt) : "");
+          setEditExpiryDate(activePlan !== "free" ? formatDateInput(data.membershipExpiresAt) : "");
         })
         .catch((err) => {
           console.error("Failed to load company details:", err);
@@ -94,7 +100,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
 
   const validity = getDaysRemaining(current.membershipExpiresAt, current.subscriptionPlan);
   const isExpired =
-    current.subscriptionPlan === "pro" &&
+    (current.subscriptionPlan === "pro" || current.subscriptionPlan === "trial") &&
     (!validity.isLifetime && (validity.isExpired || (current.status === "expired" && !current.membershipExpiresAt)));
   const teamCount = current.employees?.length || 0;
 
@@ -117,13 +123,18 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
   // Plan Selection handler
   const handlePlanSelect = (newPlan: SubscriptionPlanType) => {
     setEditPlan(newPlan);
+    const today = new Date().toISOString().split("T")[0];
+    const start = editStartDate || today;
     if (newPlan === "pro") {
-      const today = new Date().toISOString().split("T")[0];
-      const start = editStartDate || today;
       setEditStartDate(start);
       if (!editExpiryDate) {
         setEditExpiryDate(calculateOneYearLater(start));
       }
+    } else if (newPlan === "trial") {
+      setEditStartDate(start);
+      const oneHundredDaysMs = 100 * 24 * 60 * 60 * 1000;
+      const exp = new Date(new Date(start).getTime() + oneHundredDaysMs).toISOString().split("T")[0];
+      setEditExpiryDate(exp);
     } else if (newPlan === "free") {
       setEditStartDate("");
       setEditExpiryDate("");
@@ -134,7 +145,13 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
   const handleStartDateChange = (val: string) => {
     setEditStartDate(val);
     if (val) {
-      setEditExpiryDate(calculateOneYearLater(val));
+      if (editPlan === "trial") {
+        const oneHundredDaysMs = 100 * 24 * 60 * 60 * 1000;
+        const exp = new Date(new Date(val).getTime() + oneHundredDaysMs).toISOString().split("T")[0];
+        setEditExpiryDate(exp);
+      } else {
+        setEditExpiryDate(calculateOneYearLater(val));
+      }
     }
   };
 
@@ -168,7 +185,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
         if (!prev) return null;
         const updatedEmployees = (prev.employees || []).map((e) => ({
           ...e,
-          // If company is set to free, team becomes free; if pro, keep existing team allocation
+          // If company is set to free, team becomes free; if pro/trial, keep existing team allocation
           isPremium: editPlan === "free" ? false : e.isPremium,
           subscriptionStartedAt: editPlan === "free" ? null : (e.isPremium ? finalStart : e.subscriptionStartedAt),
           subscriptionExpiresAt: editPlan === "free" ? null : (e.isPremium ? finalExpiry : e.subscriptionExpiresAt),
@@ -200,11 +217,10 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
     }
   };
 
-
   // Individual employee plan toggle (Free Plan vs Pro Plan)
   const handleEmployeePlanChange = async (employeeId: string, newPlan: "pro" | "free") => {
     if (newPlan === "pro" && current.subscriptionPlan === "free") {
-      alert("This company is currently on the Free Plan. Please upgrade the company to Pro Plan first in the 'Subscription & Plan' tab before assigning Pro cards to team members.");
+      alert("This company is currently on the Free Plan. Please upgrade the company to Pro Plan or Free Trial first in the 'Subscription & Plan' tab before assigning Pro cards to team members.");
       return;
     }
 
@@ -233,7 +249,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
             : e
         );
         const premiumCount = updatedEmployees.filter((e) => e.isPremium).length;
-        const primaryCount = prev.subscriptionPlan === "pro" ? 1 : 0;
+        const primaryCount = prev.subscriptionPlan !== "free" ? 1 : 0;
         return {
           ...prev,
           employees: updatedEmployees,
@@ -248,7 +264,6 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
       setUpdatingEmpId(null);
     }
   };
-
 
   return (
     <>
@@ -293,8 +308,20 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
             </div>
 
             <div className="shrink-0">
-              <Badge variant={current.subscriptionPlan === "pro" ? "pro" : "free"}>
-                {current.subscriptionPlan === "pro" ? "Pro" : "Free"}
+              <Badge
+                variant={
+                  current.subscriptionPlan === "pro"
+                    ? "pro"
+                    : current.subscriptionPlan === "trial"
+                    ? "renew"
+                    : "free"
+                }
+              >
+                {current.subscriptionPlan === "pro"
+                  ? "Pro Plan"
+                  : current.subscriptionPlan === "trial"
+                  ? "Free Trial"
+                  : "Free Plan"}
               </Badge>
             </div>
           </div>
@@ -323,94 +350,125 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
             </button>
             <button
               onClick={() => setActiveTab("employees")}
-              className={`border-b-2 px-3.5 py-2 text-xs font-semibold uppercase tracking-wider transition-all whitespace-nowrap flex items-center gap-1.5 ${
+              className={`border-b-2 px-3.5 py-2 text-xs font-semibold uppercase tracking-wider transition-all whitespace-nowrap ${
                 activeTab === "employees"
                   ? "border-[var(--foreground)] text-[var(--foreground)]"
                   : "border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
               }`}
             >
-              <span>Team Members</span>
-              <span className="font-mono text-[10px] text-[var(--muted-foreground)]">
-                ({teamCount})
-              </span>
+              Team Members ({teamCount})
             </button>
           </div>
 
-          {/* Tab 1: Overview */}
+          {/* Tab 1: Overview & Metadata */}
           {activeTab === "overview" && (
             <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="rounded-[5px] border border-[var(--border)] bg-[var(--accent)]/30 p-3.5 space-y-1">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-                    Contact Phone
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div className="rounded-[5px] border border-[var(--border)] bg-[var(--accent)]/30 p-3">
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)] block">
+                    Account Status
                   </span>
-                  <p className="font-medium text-sm text-[var(--foreground)]">
-                    {current.phone || "Not provided"}
-                  </p>
+                  <div className="mt-1 flex items-center gap-1.5">
+                    <span
+                      className={`inline-block h-2 w-2 rounded-full ${
+                        current.status === "active"
+                          ? "bg-emerald-500"
+                          : current.status === "suspended"
+                          ? "bg-amber-500"
+                          : "bg-rose-500"
+                      }`}
+                    />
+                    <span className="font-mono text-xs font-bold uppercase text-[var(--foreground)]">
+                      {current.status}
+                    </span>
+                  </div>
                 </div>
-                <div className="rounded-[5px] border border-[var(--border)] bg-[var(--accent)]/30 p-3.5 space-y-1">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-                    Registered On
+
+                <div className="rounded-[5px] border border-[var(--border)] bg-[var(--accent)]/30 p-3">
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)] block">
+                    Total Cards
                   </span>
-                  <p className="font-medium text-sm text-[var(--foreground)]">
-                    {formatDate(current.createdAt)}
-                  </p>
+                  <span className="font-headline text-base font-bold text-[var(--foreground)] mt-0.5 block">
+                    {current.totalCardsIssued} Issued
+                  </span>
                 </div>
-                <div className="rounded-[5px] border border-[var(--border)] bg-[var(--accent)]/30 p-3.5 space-y-1">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+
+                <div className="rounded-[5px] border border-[var(--border)] bg-[var(--accent)]/30 p-3">
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)] block">
+                    Primary Card
+                  </span>
+                  <span className="font-headline text-base font-bold text-[var(--foreground)] mt-0.5 block">
+                    {current.primaryCardCount} Assigned
+                  </span>
+                </div>
+
+                <div className="rounded-[5px] border border-[var(--border)] bg-[var(--accent)]/30 p-3">
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)] block">
                     Team Members
                   </span>
-                  <p className="font-medium text-sm text-[var(--foreground)]">
-                    {teamCount > 0 ? `${teamCount} Team Member${teamCount === 1 ? "" : "s"}` : "0 Team Members"}
-                  </p>
-                </div>
-                <div className="rounded-[5px] border border-[var(--border)] bg-[var(--accent)]/30 p-3.5 space-y-1">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-                    Subscription Validity
+                  <span className="font-headline text-base font-bold text-[var(--foreground)] mt-0.5 block">
+                    {teamCount} Profile{teamCount === 1 ? "" : "s"}
                   </span>
-                  <p className="font-medium text-sm text-[var(--foreground)]">
-                    {current.subscriptionPlan === "free"
-                      ? "N/A"
-                      : `${validity.label} (until ${formatDate(current.membershipExpiresAt)})`}
-                  </p>
                 </div>
               </div>
 
-              {/* Danger Zone: Delete Company (Fully Responsive) */}
-              <div className="pt-2">
-                <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="space-y-0.5">
-                    <h5 className="text-xs font-semibold text-[var(--foreground)]">
-                      Delete Company Record
-                    </h5>
-                    <p className="text-[11px] text-[var(--muted-foreground)]">
-                      Permanently remove this company, profile, and all associated team members.
-                    </p>
+              {/* Contact & Registration Information */}
+              <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4 space-y-3">
+                <h4 className="font-headline text-xs font-bold uppercase tracking-wider text-[var(--foreground)]">
+                  Contact & Organization Info
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="text-[var(--muted-foreground)] block">Phone Number</span>
+                    <span className="font-mono font-medium text-[var(--foreground)]">
+                      {current.phoneNumber || current.phone || "—"}
+                    </span>
                   </div>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={() => onDeleteRequest(company)}
-                    leftIcon={<Trash2 size={14} className="shrink-0" />}
-                    className="w-full sm:w-auto shrink-0 whitespace-nowrap"
-                  >
-                    Delete Company
-                  </Button>
+                  <div>
+                    <span className="text-[var(--muted-foreground)] block">Email Address</span>
+                    <span className="font-mono font-medium text-[var(--foreground)]">
+                      {current.email || "—"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[var(--muted-foreground)] block">Member Since</span>
+                    <span className="font-mono font-medium text-[var(--foreground)]">
+                      {formatDate(current.createdAt)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[var(--muted-foreground)] block">Current Validity</span>
+                    <span
+                      className={`font-mono font-bold ${
+                        isExpired
+                          ? "text-rose-500"
+                          : validity.isEndingSoon
+                          ? "text-amber-500"
+                          : "text-[var(--foreground)]"
+                      }`}
+                    >
+                      {current.subscriptionPlan === "free"
+                        ? "N/A (Free Tier)"
+                        : isExpired
+                        ? "Subscription Expired"
+                        : validity.label}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Tab 2: Subscription Plan & Validity */}
+          {/* Tab 2: Subscription & Validity Settings */}
           {activeTab === "subscription" && (
             <div className="space-y-4">
-              <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-4">
+              <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4 space-y-4">
                 <div>
-                  <h4 className="font-headline text-sm sm:text-base font-bold text-[var(--foreground)]">
+                  <h4 className="font-headline text-xs font-bold uppercase tracking-wider text-[var(--foreground)]">
                     Subscription Plan & Validity Settings
                   </h4>
-                  <p className="text-xs text-[var(--muted-foreground)]">
-                    Select active tier (Free or Pro Plan). Upgrading to Pro or extending validity applies automatically to the business owner and all team members.
+                  <p className="text-[11px] text-[var(--muted-foreground)] mt-0.5">
+                    Select active tier (Free, Free Trial, or Pro Plan). Adjusting validity applies automatically to the business owner and synchronized team members.
                   </p>
                 </div>
 
@@ -425,6 +483,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                     className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs font-medium outline-none focus:border-[var(--foreground)]"
                   >
                     <option value="free">Free Plan</option>
+                    <option value="trial">Free Trial (100 Days)</option>
                     <option value="pro">Pro Plan</option>
                   </select>
                 </div>
@@ -440,12 +499,12 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                         Free Tier Active
                       </p>
                       <p className="text-[11px] text-[var(--muted-foreground)]">
-                        Account has standard profile access. Card subscription validity is N/A until upgraded to Pro.
+                        Account has standard profile access. Card subscription validity is N/A until upgraded to Pro or granted a Free Trial.
                       </p>
                     </div>
                   </div>
                 ) : (
-                  /* Dates Form for Pro */
+                  /* Dates Form for Pro / Free Trial */
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                     {/* Start Date */}
                     <div className="space-y-1.5">
@@ -468,6 +527,11 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                           <Clock size={13} />
                           Subscription Expiry Date:
                         </span>
+                        {editPlan === "trial" && (
+                          <span className="text-[10px] font-mono text-emerald-500 font-semibold">
+                            (100 Days Standard)
+                          </span>
+                        )}
                       </label>
                       <input
                         type="date"
@@ -511,7 +575,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                   Team Members & Card Allocation
                 </span>
                 <p className="mt-1 text-[11px] text-[var(--muted-foreground)] leading-relaxed">
-                  Assign individual card plans for team members. If a manual order was placed without purchasing extra team cards, set members to <span className="font-semibold text-[var(--foreground)]">Free Plan</span>. Set to <span className="font-semibold text-emerald-400">Pro Plan</span> for members with purchased card slots.
+                  Assign individual card plans for team members. If a manual order was placed without purchasing extra team cards, set members to <span className="font-semibold text-[var(--foreground)]">Free Plan</span>. Set to <span className="font-semibold text-emerald-400">Pro Plan</span> for members with active card slots.
                 </p>
               </div>
 
@@ -532,41 +596,36 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                 </div>
               )}
 
-              {/* Employee Roster */}
-              {loading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 size={24} className="animate-spin text-[var(--muted-foreground)]" />
-                </div>
-              ) : current.employees && current.employees.length > 0 ? (
-                <div className="divide-y divide-[var(--border)] rounded-[5px] border border-[var(--border)] bg-[var(--card)] overflow-hidden">
+              {/* Employees List */}
+              {teamCount > 0 ? (
+                <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
                   {(() => {
-                    const roster = (current.employees || []).filter((emp) => {
+                    const filtered = (current.employees || []).filter((e) => {
                       if (!empSearch.trim()) return true;
                       const q = empSearch.toLowerCase();
                       return (
-                        emp.name?.toLowerCase().includes(q) ||
-                        emp.designation?.toLowerCase().includes(q) ||
-                        emp.email?.toLowerCase().includes(q) ||
-                        emp.slug?.toLowerCase().includes(q)
+                        e.name.toLowerCase().includes(q) ||
+                        (e.designation && e.designation.toLowerCase().includes(q)) ||
+                        (e.email && e.email.toLowerCase().includes(q))
                       );
                     });
 
-                    if (roster.length === 0) {
+                    if (filtered.length === 0) {
                       return (
-                        <div className="p-8 text-center text-xs text-[var(--muted-foreground)]">
-                          No team members match &quot;{empSearch}&quot;.
+                        <div className="p-6 text-center text-xs text-[var(--muted-foreground)]">
+                          No team members matched &quot;{empSearch}&quot;
                         </div>
                       );
                     }
 
-                    return roster.map((emp) => {
+                    return filtered.map((emp) => {
                       return (
                         <div
                           key={emp.id}
-                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 hover:bg-[var(--accent)]/30 transition-colors"
+                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-[5px] border border-[var(--border)] bg-[var(--card)] hover:border-[var(--foreground)]/40 transition-colors"
                         >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[5px] bg-[var(--accent)] font-headline text-xs font-bold border border-[var(--border)]">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] bg-[var(--accent)] font-headline text-xs font-bold text-[var(--foreground)] border border-[var(--border)]">
                               {emp.avatarUrl ? (
                                 <img
                                   src={emp.avatarUrl}
@@ -578,19 +637,19 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                               )}
                             </div>
                             <div className="min-w-0">
-                              <div className="flex items-center gap-2">
-                                <p className="font-semibold text-xs text-[var(--foreground)] truncate">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-semibold text-xs text-[var(--foreground)] truncate">
                                   {emp.name}
-                                </p>
-                                {current.username && (
+                                </span>
+                                {emp.slug && (
                                   <a
-                                    href={`/${current.username}/${emp.slug}`}
+                                    href={`/${emp.slug}`}
                                     target="_blank"
                                     rel="noreferrer"
-                                    title="View employee public card"
-                                    className="text-[var(--muted-foreground)] hover:text-[var(--foreground)] shrink-0"
+                                    className="text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                                    title="Open team member card"
                                   >
-                                    <ExternalLink size={12} />
+                                    <ExternalLink size={10} />
                                   </a>
                                 )}
                               </div>
@@ -603,11 +662,11 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                           <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-[var(--border)] shrink-0">
                             <div className="flex items-center gap-2">
                               <select
-                                value={emp.isPremium && current.subscriptionPlan === "pro" ? "pro" : "free"}
+                                value={emp.isPremium && current.subscriptionPlan !== "free" ? "pro" : "free"}
                                 onChange={(e) => handleEmployeePlanChange(emp.id, e.target.value as "pro" | "free")}
                                 disabled={updatingEmpId === emp.id}
                                 className={`rounded-[5px] border px-2.5 py-1 text-xs font-semibold outline-none cursor-pointer transition-all ${
-                                  emp.isPremium && current.subscriptionPlan === "pro"
+                                  emp.isPremium && current.subscriptionPlan !== "free"
                                     ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400 focus:border-emerald-500"
                                     : "border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] focus:border-[var(--foreground)]"
                                 }`}

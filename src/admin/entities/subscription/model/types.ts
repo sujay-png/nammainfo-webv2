@@ -26,6 +26,14 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlanType, PlanConfig> = {
     physicalCardPrice: 699,
     description: "Premium plan with custom cards and team member IDs.",
   },
+  trial: {
+    id: "trial",
+    name: "Free Trial",
+    basePrice: 0,
+    pricePerId: 0,
+    physicalCardPrice: 699,
+    description: "100-day full Pro trial with primary card access.",
+  },
 };
 
 export interface ChargeBreakdown {

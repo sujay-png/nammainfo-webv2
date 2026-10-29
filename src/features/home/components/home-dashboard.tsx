@@ -18,6 +18,9 @@ import {
   Edit3,
   Scan,
   Settings,
+  Gift,
+  Clock,
+  CheckCircle2,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/supabase/client";
@@ -25,6 +28,7 @@ import { getCurrentUser } from "@/supabase/current-user";
 import { formatDistanceToNow, initials } from "@/lib/utils";
 import type { Profile, Card, Review, Employee, Connection } from "@/supabase/database-types";
 import UpgradeToProModal from "@/components/UpgradeToProModal";
+import ApplyFreeTrialModal from "@/components/ApplyFreeTrialModal";
 
 interface EnrichedConnection extends Connection {
   connected_profile?: {
@@ -116,27 +120,34 @@ function ValidityCard({
   completionPct,
   onOpenUpgrade,
   onOpenRenewal,
+  onOpenTrial,
 }: {
   profile: Profile;
   employeesCount: number;
   completionPct: number;
   onOpenUpgrade: () => void;
   onOpenRenewal: () => void;
+  onOpenTrial: () => void;
 }) {
   const joined = startOfDay(new Date(profile.created_at));
 
+  const isTrial = profile.subscription_plan === "trial";
+
   const isFree =
-    profile.subscription_plan === "free" ||
-    (!profile.is_member && !profile.membership_expires_at);
+    !isTrial &&
+    (profile.subscription_plan === "free" ||
+      (!profile.is_member && !profile.membership_expires_at));
 
   const isLifetime =
-    profile.subscription_plan === "lifetime" ||
-    (profile.membership_expires_at
-      ? new Date(profile.membership_expires_at).getFullYear() >= 2090
-      : false);
+    !isTrial &&
+    (profile.subscription_plan === "lifetime" ||
+      (profile.membership_expires_at
+        ? new Date(profile.membership_expires_at).getFullYear() >= 2090
+        : false));
 
   if (isFree) {
     const isProfileComplete = completionPct === 100;
+    const isPendingApproval = profile.trial_status === "pending_approval";
 
     return (
       <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-4 shadow-sm">
@@ -168,13 +179,42 @@ function ValidityCard({
           </div>
         </div>
 
-        <button
-          onClick={onOpenUpgrade}
-          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
-        >
-          <span>{isProfileComplete ? "Order Custom NFC Card & Upgrade" : "Upgrade to Pro"}</span>
-          <ArrowRight size={14} />
-        </button>
+        {/* Pending Approval Notice */}
+        {isPendingApproval && (
+          <div className="flex items-center gap-2.5 p-3 rounded-[5px] bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs">
+            <Clock size={16} className="shrink-0" />
+            <span>Your 100-Day Free Trial application is awaiting confirmation from our team.</span>
+          </div>
+        )}
+
+        {/* Dual Actions: Upgrade to Pro & Apply / Waiting for Approval */}
+        <div className="flex flex-col sm:flex-row gap-2">
+          <button
+            onClick={onOpenUpgrade}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
+          >
+            <span>{isProfileComplete ? "Order Custom NFC Card & Upgrade" : "Upgrade to Pro"}</span>
+            <ArrowRight size={14} />
+          </button>
+
+          {isPendingApproval ? (
+            <button
+              disabled
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-[5px] border border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)] text-xs font-semibold cursor-not-allowed opacity-80"
+            >
+              <Clock size={14} />
+              <span>Waiting for Approval</span>
+            </button>
+          ) : (
+            <button
+              onClick={onOpenTrial}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-[5px] border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-semibold shadow-sm hover:bg-amber-500/20 active:scale-[0.98] transition-all cursor-pointer"
+            >
+              <Gift size={14} />
+              <span>Apply for Free Trial</span>
+            </button>
+          )}
+        </div>
 
         {/* Structured specs row - no wrapping glitches, crisp scannability */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-[var(--border)]">
@@ -281,22 +321,26 @@ function ValidityCard({
           <div>
             <div className="flex items-center gap-2">
               <span className="font-semibold text-sm text-[var(--foreground)]">
-                Pro Membership
+                {isTrial ? "100-Day Free Trial" : "Pro Membership"}
               </span>
               <span
                 className={`inline-flex items-center px-1.5 py-0.5 rounded-[4px] font-mono text-[10px] font-medium border ${
                   expired
                     ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
-                    : endingSoon
+                    : isTrial
                       ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
-                      : "bg-[var(--accent)] text-[var(--muted-foreground)] border-[var(--border)]"
+                      : endingSoon
+                        ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                        : "bg-[var(--accent)] text-[var(--muted-foreground)] border-[var(--border)]"
                 }`}
               >
-                {expired ? "Expired" : endingSoon ? "Expiring Soon" : "Active"}
+                {expired ? "Expired" : isTrial ? "Free Trial" : endingSoon ? "Expiring Soon" : "Active"}
               </span>
             </div>
             <p className="mt-0.5 font-mono text-[11px] text-[var(--muted-foreground)]">
-              Member since {fmtDate(joined)}
+              {isTrial && profile.trial_approved_at
+                ? `Started on ${fmtDate(new Date(profile.trial_approved_at))}`
+                : `Member since ${fmtDate(joined)}`}
             </p>
           </div>
         </div>
@@ -307,7 +351,7 @@ function ValidityCard({
             className={`font-headline text-2xl font-bold leading-none ${
               expired
                 ? "text-rose-600 dark:text-rose-400"
-                : endingSoon
+                : endingSoon || isTrial
                   ? "text-amber-600 dark:text-amber-400"
                   : "text-[var(--foreground)]"
             }`}
@@ -328,6 +372,22 @@ function ValidityCard({
         />
       </div>
 
+      {/* Trial Extension Banner */}
+      {isTrial && Number(profile.trial_extension_days ?? 0) > 0 && (
+        <div className="p-3 rounded-[5px] bg-[var(--accent)] border border-[var(--border)] text-xs text-[var(--foreground)] space-y-1">
+          <div className="flex items-center gap-2 font-medium">
+            <CheckCircle2 size={15} className="text-emerald-500 shrink-0" />
+            <span>
+              Your free trial plan has been extended for {profile.trial_extension_days}{" "}
+              {profile.trial_extension_days === 1 ? "day" : "days"}!
+            </span>
+          </div>
+          <p className="text-[11px] text-[var(--muted-foreground)] pl-5">
+            Let us know how&apos;s your experience and ready to upgrade to Pro?
+          </p>
+        </div>
+      )}
+
       {/* Structured Specs Row */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
         <div className="p-2.5 rounded-[5px] bg-[var(--accent)]/40 border border-[var(--border)]">
@@ -341,43 +401,60 @@ function ValidityCard({
 
         <div className="p-2.5 rounded-[5px] bg-[var(--accent)]/40 border border-[var(--border)]">
           <span className="block font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
-            Issued Cards
+            {isTrial ? "Trial Card" : "Issued Cards"}
           </span>
           <span className="block font-mono text-xs font-semibold text-[var(--foreground)] mt-0.5">
-            {totalCards} Total ({primaryCards} Primary{employeesCount > 0 ? ` + ${employeesCount} Team` : ""})
+            {isTrial
+              ? "1 Active Primary"
+              : `${totalCards} Total (${primaryCards} Primary${employeesCount > 0 ? ` + ${employeesCount} Team` : ""})`}
           </span>
         </div>
 
         <div className="col-span-2 sm:col-span-1 p-2.5 rounded-[5px] bg-[var(--accent)]/40 border border-[var(--border)]">
           <span className="block font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
-            Annual Renewal
+            {isTrial ? "Plan Type" : "Annual Renewal"}
           </span>
           <span className="block font-mono text-xs font-semibold text-[var(--foreground)] mt-0.5">
-            ₹{renewalCost.totalAmount.toLocaleString("en-IN")}/yr
+            {isTrial ? "100-Day Free Trial" : `₹${renewalCost.totalAmount.toLocaleString("en-IN")}/yr`}
           </span>
         </div>
       </div>
 
-      {/* Action only visible when Expired or Ending Soon */}
-      {(expired || endingSoon) && (
-        <div className="pt-2 border-t border-[var(--border)] space-y-2">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-[var(--muted-foreground)]">
-              {expired ? "Plan expired. Renew to maintain vanity URL & NFC cards." : "Renew now to avoid service interruption."}
-            </span>
-            <span className="font-mono font-bold text-[var(--foreground)]">
-              ₹{renewalCost.totalAmount.toLocaleString("en-IN")}
-            </span>
-          </div>
-
+      {/* Trial Action: Upgrade to Pro */}
+      {isTrial ? (
+        <div className="pt-2 border-t border-[var(--border)]">
           <button
-            onClick={onOpenRenewal}
+            onClick={onOpenUpgrade}
             className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
           >
-            <CreditCard size={14} />
-            <span>Renew Plan ({totalCards} {totalCards === 1 ? "Card" : "Cards"})</span>
+            <span>Upgrade to Pro Plan</span>
+            <ArrowRight size={14} />
           </button>
         </div>
+      ) : (
+        /* Standard Pro Action only visible when Expired or Ending Soon */
+        (expired || endingSoon) && (
+          <div className="pt-2 border-t border-[var(--border)] space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-[var(--muted-foreground)]">
+                {expired
+                  ? "Plan expired. Renew to maintain vanity URL & NFC cards."
+                  : "Renew now to avoid service interruption."}
+              </span>
+              <span className="font-mono font-bold text-[var(--foreground)]">
+                ₹{renewalCost.totalAmount.toLocaleString("en-IN")}
+              </span>
+            </div>
+
+            <button
+              onClick={onOpenRenewal}
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
+            >
+              <CreditCard size={14} />
+              <span>Renew Plan ({totalCards} {totalCards === 1 ? "Card" : "Cards"})</span>
+            </button>
+          </div>
+        )
       )}
     </div>
   );
@@ -398,6 +475,7 @@ function OwnerHomePage() {
   const [reviewCount, setReviewCount] = useState(0);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [showRenewalModal, setShowRenewalModal] = useState(false);
+  const [showTrialModal, setShowTrialModal] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -536,6 +614,7 @@ function OwnerHomePage() {
         completionPct={completionPct}
         onOpenUpgrade={() => setShowUpgradeModal(true)}
         onOpenRenewal={() => setShowRenewalModal(true)}
+        onOpenTrial={() => setShowTrialModal(true)}
       />
 
       {/* Profile completion */}
@@ -825,6 +904,18 @@ function OwnerHomePage() {
         isOpen={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}
         profile={profile}
+      />
+
+      {/* 100-Day Free Trial Application Modal */}
+      <ApplyFreeTrialModal
+        isOpen={showTrialModal}
+        onClose={() => setShowTrialModal(false)}
+        profile={profile}
+        completionPct={completionPct}
+        onSuccess={() => {
+          setShowTrialModal(false);
+          window.location.reload();
+        }}
       />
 
       {/* Annual Organization Renewal Modal */}

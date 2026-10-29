@@ -18,6 +18,9 @@ import {
   Palette,
   Truck,
   Image as ImageIcon,
+  Building2,
+  User,
+  MessageSquare,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Profile } from "@/lib/supabase/types";
@@ -34,7 +37,7 @@ interface UpgradeToProModalProps {
   onSuccess?: () => void;
 }
 
-type DesignOption = "upload" | "concierge";
+type DesignOption = "upload_card" | "custom_details";
 
 export default function UpgradeToProModal({
   isOpen,
@@ -54,8 +57,21 @@ export default function UpgradeToProModal({
 
   // Step 1: Design State (Explicit choice required before continuing)
   const [designOption, setDesignOption] = useState<DesignOption | null>(null);
-  const [designFile, setDesignFile] = useState<File | null>(null);
-  const [designPreview, setDesignPreview] = useState<string | null>(null);
+
+  // Option 1: Existing visiting card file
+  const [visitingCardFile, setVisitingCardFile] = useState<File | null>(null);
+  const [visitingCardPreview, setVisitingCardPreview] = useState<string | null>(null);
+
+  // Option 2: Custom details
+  const [cardDetails, setCardDetails] = useState({
+    companyName: profile.business_name || "",
+    ownerName: profile.owner_name || "",
+    contactNumber: profile.phone || "",
+    companyAddress: profile.address || "",
+    designNotes: "",
+  });
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(profile.logo_url || null);
   const [uploadingDesign, setUploadingDesign] = useState<boolean>(false);
 
   // Step 2: Shipping Address State (default: same as profile)
@@ -78,8 +94,17 @@ export default function UpgradeToProModal({
       setStep(1);
       setErrorMsg(null);
       setDesignOption(null);
-      setDesignFile(null);
-      setDesignPreview(null);
+      setVisitingCardFile(null);
+      setVisitingCardPreview(null);
+      setCardDetails({
+        companyName: profile.business_name || "",
+        ownerName: profile.owner_name || "",
+        contactNumber: profile.phone || "",
+        companyAddress: profile.address || "",
+        designNotes: "",
+      });
+      setLogoFile(null);
+      setLogoPreview(profile.logo_url || null);
       setIdempotencyKey(`pro_${profile.id}_${Date.now()}`);
       setShippingData((prev) => ({
         ...prev,
@@ -188,29 +213,37 @@ export default function UpgradeToProModal({
     );
   }
 
-  // Handle file selection
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle existing visiting card file selection
+  const handleVisitingCardChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      setDesignFile(file);
-      setDesignOption("upload");
+      setVisitingCardFile(file);
+      setDesignOption("upload_card");
       setErrorMsg(null);
-      setDesignPreview(URL.createObjectURL(file));
+      setVisitingCardPreview(URL.createObjectURL(file));
     }
   };
 
-  // Upload card design to Supabase Storage
-  const uploadDesignFile = async (): Promise<string | null> => {
-    if (!designFile) return null;
-    setUploadingDesign(true);
+  // Handle logo file selection for custom details
+  const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setLogoFile(file);
+      setErrorMsg(null);
+      setLogoPreview(URL.createObjectURL(file));
+    }
+  };
+
+  // Upload card design / logo to Supabase Storage
+  const uploadFileToStorage = async (file: File, folder: string): Promise<string | null> => {
     try {
       const supabase = createClient();
-      const ext = designFile.name.split(".").pop();
-      const path = `card-designs/${profile.id}/${Date.now()}.${ext}`;
+      const ext = file.name.split(".").pop();
+      const path = `card-designs/${profile.id}/${folder}_${Date.now()}.${ext}`;
 
       const { error: uploadError } = await supabase.storage
         .from("profile-media")
-        .upload(path, designFile);
+        .upload(path, file);
 
       if (uploadError) {
         console.warn("Storage upload error:", uploadError);
@@ -220,22 +253,38 @@ export default function UpgradeToProModal({
       const { data } = supabase.storage.from("profile-media").getPublicUrl(path);
       return data?.publicUrl || null;
     } catch (err) {
-      console.error("Design upload failed:", err);
+      console.error("Storage upload failed:", err);
       return null;
-    } finally {
-      setUploadingDesign(false);
     }
   };
 
   // Step 1 -> Step 2 validation: Must make an explicit choice
   const goToStep2 = () => {
     if (!designOption) {
-      setErrorMsg("Please choose an option to continue: upload your artwork or choose complimentary design concierge.");
+      setErrorMsg("Please choose how you want your card designed: upload your existing visiting card or enter your business details.");
       return;
     }
-    if (designOption === "upload" && !designFile) {
-      setErrorMsg("Please upload your card artwork file (PNG, JPG, or PDF) to continue with custom artwork.");
+    if (designOption === "upload_card" && !visitingCardFile) {
+      setErrorMsg("Please upload your existing visiting card or artwork file (PNG, JPG, or PDF) to continue.");
       return;
+    }
+    if (designOption === "custom_details") {
+      if (!cardDetails.companyName.trim()) {
+        setErrorMsg("Please enter your Company / Business Name for the card.");
+        return;
+      }
+      if (!cardDetails.ownerName.trim()) {
+        setErrorMsg("Please enter Owner / Professional Name for the card.");
+        return;
+      }
+      if (!cardDetails.contactNumber.trim()) {
+        setErrorMsg("Please enter Contact Number for the card.");
+        return;
+      }
+      if (!cardDetails.companyAddress.trim()) {
+        setErrorMsg("Please enter Company Address for the card.");
+        return;
+      }
     }
     setErrorMsg(null);
     setStep(2);
@@ -256,10 +305,40 @@ export default function UpgradeToProModal({
     setErrorMsg(null);
 
     try {
-      let uploadedUrl: string | null = null;
-      if (designOption === "upload" && designFile) {
-        uploadedUrl = await uploadDesignFile();
+      setUploadingDesign(true);
+      let finalDesignUrl: string | null = null;
+      let cardDetailsPayload: any = null;
+
+      if (designOption === "upload_card") {
+        if (visitingCardFile) {
+          finalDesignUrl = await uploadFileToStorage(visitingCardFile, "visiting_card");
+        }
+        cardDetailsPayload = {
+          mode: "uploaded_card",
+          fileName: visitingCardFile?.name || "Visiting Card",
+          fileUrl: finalDesignUrl,
+        };
+      } else {
+        let logoUrl = profile.logo_url || null;
+        if (logoFile) {
+          logoUrl = await uploadFileToStorage(logoFile, "logo");
+        }
+        finalDesignUrl = logoUrl;
+        cardDetailsPayload = {
+          mode: "custom_details",
+          companyName: cardDetails.companyName.trim(),
+          ownerName: cardDetails.ownerName.trim(),
+          contactNumber: cardDetails.contactNumber.trim(),
+          companyAddress: cardDetails.companyAddress.trim(),
+          logoUrl,
+          designNotes: cardDetails.designNotes.trim(),
+        };
       }
+
+      const shippingPayload = {
+        ...shippingData,
+        cardDetails: cardDetailsPayload,
+      };
 
       // Step 1: Call create-order backend API
       const res = await fetch("/api/payments/razorpay/create-order", {
@@ -268,9 +347,9 @@ export default function UpgradeToProModal({
         body: JSON.stringify({
           orderType: "pro_initial",
           cardQuantity: 1,
-          designUrl: uploadedUrl,
-          designMode: designOption === "concierge" ? "team_assist" : "uploaded",
-          shippingAddress: shippingData,
+          designUrl: finalDesignUrl,
+          designMode: designOption === "upload_card" ? "uploaded" : "team_assist",
+          shippingAddress: shippingPayload,
           idempotencyKey,
         }),
       });
@@ -328,9 +407,9 @@ export default function UpgradeToProModal({
             cardQuantity: cardQuantity || 1,
             unitPrice: unitPrice || 1999,
             totalAmount: totalAmount || 1999,
-            designUrl: uploadedUrl,
-            designMode: designOption === "concierge" ? "team_assist" : "uploaded",
-            shippingAddress: shippingData,
+            designUrl: finalDesignUrl,
+            designMode: designOption === "upload_card" ? "uploaded" : "team_assist",
+            shippingAddress: shippingPayload,
             idempotencyKey,
           });
         },
@@ -347,6 +426,8 @@ export default function UpgradeToProModal({
       console.error("Payment flow error:", err);
       setErrorMsg(err.message || "Payment initialization failed. Please try again.");
       setLoading(false);
+    } finally {
+      setUploadingDesign(false);
     }
   };
 
@@ -446,43 +527,43 @@ export default function UpgradeToProModal({
           <div className="space-y-4">
             <div className="space-y-3">
               <span className="block text-xs font-semibold text-[var(--foreground)]">
-                Choose one option before proceeding to shipping:
+                Choose how you want your card designed:
               </span>
 
-              {/* Option A: Upload Own Artwork */}
+              {/* Option 1: Upload Existing Visiting Card or Artwork */}
               <div
                 onClick={() => {
-                  setDesignOption("upload");
+                  setDesignOption("upload_card");
                   setErrorMsg(null);
-                  if (!designPreview) {
-                    document.getElementById("card-design-input")?.click();
+                  if (!visitingCardPreview) {
+                    document.getElementById("visiting-card-input")?.click();
                   }
                 }}
-                className={`p-4 rounded-2xl border transition-all cursor-pointer ${
-                  designOption === "upload"
+                className={`p-4 rounded-[5px] border transition-all cursor-pointer ${
+                  designOption === "upload_card"
                     ? "border-[var(--primary)] bg-[var(--accent)]/50 ring-1 ring-[var(--primary)]/30 shadow-xs"
                     : "border-[var(--border)] bg-[var(--card)] hover:border-[var(--primary)]/60 hover:bg-[var(--accent)]/30"
                 }`}
               >
                 <input
-                  id="card-design-input"
+                  id="visiting-card-input"
                   type="file"
                   accept="image/*,.pdf"
                   className="hidden"
-                  onChange={handleFileChange}
+                  onChange={handleVisitingCardChange}
                 />
                 
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-[var(--accent)] border border-[var(--border)] flex items-center justify-center text-[var(--foreground)] shrink-0 mt-0.5">
+                    <div className="h-10 w-10 rounded-[5px] bg-[var(--accent)] border border-[var(--border)] flex items-center justify-center text-[var(--foreground)] shrink-0 mt-0.5">
                       <Upload size={18} />
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs font-semibold text-[var(--foreground)]">
-                        Upload Your Own Artwork or Logo
+                        Upload Existing Visiting Card / Artwork
                       </p>
                       <p className="text-[11px] text-[var(--muted-foreground)]">
-                        High-resolution PNG, JPG, or PDF print file (up to 10MB)
+                        Upload a photo of your existing visiting card (front/back) or your ready print file (PNG, JPG, PDF up to 10MB)
                       </p>
                     </div>
                   </div>
@@ -490,32 +571,32 @@ export default function UpgradeToProModal({
                   {/* Radio selector circle */}
                   <div
                     className={`h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all mt-0.5 ${
-                      designOption === "upload"
+                      designOption === "upload_card"
                         ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)]"
                         : "border-[var(--border)]"
                     }`}
                   >
-                    {designOption === "upload" && <Check size={11} strokeWidth={3} />}
+                    {designOption === "upload_card" && <Check size={11} strokeWidth={3} />}
                   </div>
                 </div>
 
-                {/* Uploaded File Details / Dropzone Trigger */}
-                {designOption === "upload" && (
+                {/* Uploaded Visiting Card Details / Dropzone Trigger */}
+                {designOption === "upload_card" && (
                   <div className="mt-3 pt-3 border-t border-[var(--border)]">
-                    {designPreview ? (
+                    {visitingCardPreview ? (
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3">
                           <img
-                            src={designPreview}
-                            alt="Card Preview"
-                            className="h-12 w-16 object-cover rounded-lg border border-[var(--border)] shadow-xs shrink-0"
+                            src={visitingCardPreview}
+                            alt="Visiting Card Preview"
+                            className="h-12 w-16 object-cover rounded-[4px] border border-[var(--border)] shadow-xs shrink-0"
                           />
                           <div>
                             <p className="text-xs font-semibold text-[var(--foreground)] truncate max-w-[200px]">
-                              {designFile?.name || "Uploaded File"}
+                              {visitingCardFile?.name || "Uploaded Visiting Card"}
                             </p>
                             <p className="font-mono text-[10px] text-emerald-600 font-medium">
-                              Ready for production ({(designFile ? (designFile.size / 1024).toFixed(0) : "0")} KB)
+                              Ready for production ({(visitingCardFile ? (visitingCardFile.size / 1024).toFixed(0) : "0")} KB)
                             </p>
                           </div>
                         </div>
@@ -523,7 +604,7 @@ export default function UpgradeToProModal({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            document.getElementById("card-design-input")?.click();
+                            document.getElementById("visiting-card-input")?.click();
                           }}
                           className="text-[11px] font-semibold text-[var(--primary)] hover:underline cursor-pointer"
                         >
@@ -535,47 +616,40 @@ export default function UpgradeToProModal({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          document.getElementById("card-design-input")?.click();
+                          document.getElementById("visiting-card-input")?.click();
                         }}
-                        className="w-full py-2.5 px-3 rounded-xl border border-dashed border-[var(--border)] hover:border-[var(--primary)] text-center text-xs font-medium text-[var(--foreground)] bg-[var(--background)] cursor-pointer"
+                        className="w-full py-2.5 px-3 rounded-[5px] border border-dashed border-[var(--border)] hover:border-[var(--primary)] text-center text-xs font-medium text-[var(--foreground)] bg-[var(--background)] cursor-pointer"
                       >
-                        Click to select image or PDF from your computer
+                        Click to select visiting card photo or PDF from your device
                       </button>
                     )}
                   </div>
                 )}
               </div>
 
-              {/* Option B: Complimentary Team Assistance */}
+              {/* Option 2: Enter Details for Card Design */}
               <div
                 onClick={() => {
-                  setDesignOption("concierge");
-                  setDesignFile(null);
-                  setDesignPreview(null);
+                  setDesignOption("custom_details");
                   setErrorMsg(null);
                 }}
-                className={`p-4 rounded-2xl border transition-all cursor-pointer ${
-                  designOption === "concierge"
+                className={`p-4 rounded-[5px] border transition-all cursor-pointer ${
+                  designOption === "custom_details"
                     ? "border-[var(--primary)] bg-[var(--accent)]/50 ring-1 ring-[var(--primary)]/30 shadow-xs"
                     : "border-[var(--border)] bg-[var(--card)] hover:border-[var(--primary)]/60 hover:bg-[var(--accent)]/30"
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-[var(--accent)] border border-[var(--border)] flex items-center justify-center text-[var(--foreground)] shrink-0 mt-0.5">
-                      <Palette size={18} className="text-[var(--primary)]" />
+                    <div className="h-10 w-10 rounded-[5px] bg-[var(--accent)] border border-[var(--border)] flex items-center justify-center text-[var(--foreground)] shrink-0 mt-0.5">
+                      <Building2 size={18} className="text-[var(--primary)]" />
                     </div>
                     <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <p className="text-xs font-semibold text-[var(--foreground)]">
-                          Complimentary Design Concierge
-                        </p>
-                        <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-[4px] bg-[var(--accent)] text-[var(--foreground)] border border-[var(--border)]">
-                          FREE
-                        </span>
-                      </div>
+                      <p className="text-xs font-semibold text-[var(--foreground)]">
+                        Enter Details for Card Design
+                      </p>
                       <p className="text-[11px] text-[var(--muted-foreground)] leading-relaxed">
-                        Don&apos;t have a design ready? Choose this option — our graphic design team will call you to build a custom-branded card layout before manufacturing.
+                        Fill in your company & contact details and upload your logo. Our design team will format your card.
                       </p>
                     </div>
                   </div>
@@ -583,14 +657,151 @@ export default function UpgradeToProModal({
                   {/* Radio selector circle */}
                   <div
                     className={`h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all mt-0.5 ${
-                      designOption === "concierge"
+                      designOption === "custom_details"
                         ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)]"
                         : "border-[var(--border)]"
                     }`}
                   >
-                    {designOption === "concierge" && <Check size={11} strokeWidth={3} />}
+                    {designOption === "custom_details" && <Check size={11} strokeWidth={3} />}
                   </div>
                 </div>
+
+                {/* Inline Details Form */}
+                {designOption === "custom_details" && (
+                  <div
+                    className="mt-3 pt-3 border-t border-[var(--border)] space-y-3 cursor-default"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-mono font-medium text-[var(--muted-foreground)] uppercase">
+                          Company Name *
+                        </label>
+                        <input
+                          type="text"
+                          value={cardDetails.companyName}
+                          onChange={(e) =>
+                            setCardDetails((prev) => ({ ...prev, companyName: e.target.value }))
+                          }
+                          placeholder="e.g. Acme Studio"
+                          className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-xs text-[var(--foreground)] outline-none focus:border-[var(--primary)]"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-mono font-medium text-[var(--muted-foreground)] uppercase">
+                          Owner / Contact Name *
+                        </label>
+                        <input
+                          type="text"
+                          value={cardDetails.ownerName}
+                          onChange={(e) =>
+                            setCardDetails((prev) => ({ ...prev, ownerName: e.target.value }))
+                          }
+                          placeholder="e.g. Rohan Verma"
+                          className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-xs text-[var(--foreground)] outline-none focus:border-[var(--primary)]"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-mono font-medium text-[var(--muted-foreground)] uppercase">
+                          Contact Number *
+                        </label>
+                        <input
+                          type="tel"
+                          value={cardDetails.contactNumber}
+                          onChange={(e) =>
+                            setCardDetails((prev) => ({ ...prev, contactNumber: e.target.value }))
+                          }
+                          placeholder="e.g. +91 98765 43210"
+                          className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-xs text-[var(--foreground)] outline-none focus:border-[var(--primary)]"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-mono font-medium text-[var(--muted-foreground)] uppercase">
+                          Company Address *
+                        </label>
+                        <input
+                          type="text"
+                          value={cardDetails.companyAddress}
+                          onChange={(e) =>
+                            setCardDetails((prev) => ({ ...prev, companyAddress: e.target.value }))
+                          }
+                          placeholder="e.g. #42, MG Road, Bengaluru"
+                          className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-xs text-[var(--foreground)] outline-none focus:border-[var(--primary)]"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Logo Upload Option */}
+                    <div className="space-y-1 pt-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[11px] font-mono font-medium text-[var(--muted-foreground)] uppercase">
+                          Company Logo (Optional)
+                        </label>
+                        {logoPreview && (
+                          <span className="text-[10px] text-emerald-600 font-medium">Logo selected</span>
+                        )}
+                      </div>
+                      <input
+                        id="card-logo-input"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleLogoFileChange}
+                      />
+
+                      {logoPreview ? (
+                        <div className="flex items-center justify-between p-2 rounded-[5px] border border-[var(--border)] bg-[var(--background)]">
+                          <div className="flex items-center gap-2.5">
+                            <img
+                              src={logoPreview}
+                              alt="Logo"
+                              className="h-8 w-8 object-contain rounded-[4px] border border-[var(--border)] bg-black/5"
+                            />
+                            <span className="text-xs text-[var(--foreground)] truncate max-w-[200px]">
+                              {logoFile ? logoFile.name : "Using existing profile logo"}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => document.getElementById("card-logo-input")?.click()}
+                            className="text-[11px] font-semibold text-[var(--primary)] hover:underline cursor-pointer"
+                          >
+                            Change Logo
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => document.getElementById("card-logo-input")?.click()}
+                          className="w-full py-2 px-3 rounded-[5px] border border-dashed border-[var(--border)] hover:border-[var(--primary)] text-center text-xs font-medium text-[var(--foreground)] bg-[var(--background)] cursor-pointer"
+                        >
+                          Click to upload company logo (PNG, JPG, SVG)
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Describe anything if you want to suggest us */}
+                    <div className="space-y-1 pt-1">
+                      <label className="text-[11px] font-mono font-medium text-[var(--muted-foreground)] uppercase">
+                        Describe anything if you want to suggest us (Optional)
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={cardDetails.designNotes}
+                        onChange={(e) =>
+                          setCardDetails((prev) => ({ ...prev, designNotes: e.target.value }))
+                        }
+                        placeholder="e.g. Card color preference, tag line, placement of logo, specific font, or additional details..."
+                        className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs text-[var(--foreground)] outline-none focus:border-[var(--primary)] resize-none"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -598,7 +809,7 @@ export default function UpgradeToProModal({
               <button
                 type="button"
                 onClick={goToStep2}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] font-semibold text-xs shadow-sm hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] font-semibold text-xs shadow-sm hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
               >
                 <span>Continue to Shipping</span>
                 <ArrowRight size={14} />
@@ -753,11 +964,11 @@ export default function UpgradeToProModal({
               </div>
 
               <div className="flex items-center justify-between border-b border-[var(--border)] pb-2 text-xs">
-                <span className="text-[var(--muted-foreground)]">Design Mode</span>
-                <span className="font-medium text-[var(--foreground)]">
-                  {designOption === "concierge"
-                    ? "Complimentary Design Concierge (Design team will call you)"
-                    : `Artwork Uploaded (${designFile?.name || "Custom File"})`}
+                <span className="text-[var(--muted-foreground)]">Card Design</span>
+                <span className="font-medium text-[var(--foreground)] text-right max-w-[240px] truncate">
+                  {designOption === "upload_card"
+                    ? `Existing Card (${visitingCardFile?.name || "Uploaded File"})`
+                    : `Custom Details (${cardDetails.companyName}${logoPreview ? " • Logo attached" : ""})`}
                 </span>
               </div>
 

@@ -2,7 +2,7 @@ import type { Profile } from "@/lib/supabase/types";
 import type { AdminEmployee } from "../../employee/model/types";
 
 export type AccountStatus = "active" | "suspended" | "expired" | "pending";
-export type SubscriptionPlanType = "free" | "pro";
+export type SubscriptionPlanType = "free" | "pro" | "trial";
 
 export interface Company {
   id: string;
@@ -26,13 +26,24 @@ export interface Company {
   logoUrl: string | null;
   followUpStatus?: "unattended" | "attended" | null;
   followUpNotes?: string | null;
+
+  // 100-Day Free Trial & Milestone Follow-ups
+  trialStatus?: "none" | "pending_approval" | "approved" | "rejected" | null;
+  trialCouponCode?: string | null;
+  trialRequestedAt?: string | null;
+  trialApprovedAt?: string | null;
+  trialExtensionDays?: number;
+  trialFollowUpMilestone?: number;
+  trialFollowUpStatus?: "unattended" | "attended" | null;
+  trialFollowUpNotes?: string | null;
+  profileCompletionPercentage?: number;
 }
 
 export interface CompanyWithEmployees extends Company {
   employees: AdminEmployee[];
 }
 
-export type CompanyFilterTab = "all" | "pro" | "expired";
+export type CompanyFilterTab = "all" | "trial" | "pro" | "expired";
 
 export interface CompanyFilters {
   search: string;
@@ -53,4 +64,6 @@ export interface AdminStats {
   totalAssignedIds: number;
   expiringSoonCount: number;
   suspendedCount: number;
+  pendingTrialsCount: number;
+  activeTrialsCount: number;
 }

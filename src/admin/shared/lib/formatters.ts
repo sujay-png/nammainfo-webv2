@@ -73,7 +73,8 @@ export function getDaysRemaining(
   const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
   const isExpired = days <= 0;
-  const isEndingSoon = !isExpired && days <= 15;
+  // 30 days renewal threshold as requested
+  const isEndingSoon = !isExpired && days <= 30;
 
   let label = `${days} days left`;
   if (isExpired) {

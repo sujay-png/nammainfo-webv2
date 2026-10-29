@@ -23,6 +23,7 @@ export const CompanyFiltersBar: React.FC<CompanyFiltersBarProps> = ({
 
   const tabs: { id: CompanyFilterTab; label: string }[] = [
     { id: "all", label: "All" },
+    { id: "trial", label: "Free Trial" },
     { id: "pro", label: "Pro" },
     { id: "expired", label: "Expired" },
   ];
@@ -52,7 +53,7 @@ export const CompanyFiltersBar: React.FC<CompanyFiltersBarProps> = ({
         )}
       </div>
 
-      {/* Filter Tabs: All, Pro, Expired & Count */}
+      {/* Filter Tabs: All, Free Trial, Pro, Expired & Count */}
       <div className="flex flex-wrap items-center justify-between border-t border-[var(--border)]/60 pt-3 gap-2">
         <div className="flex items-center gap-1.5">
           <span className="mr-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
@@ -64,7 +65,7 @@ export const CompanyFiltersBar: React.FC<CompanyFiltersBarProps> = ({
               <button
                 key={tab.id}
                 onClick={() => handleTabChange(tab.id)}
-                className={`rounded-[5px] px-3 py-1 text-xs font-medium transition-all ${
+                className={`rounded-[5px] px-3 py-1 text-xs font-semibold transition-all ${
                   isSelected
                     ? "bg-[var(--foreground)] text-[var(--background)]"
                     : "text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"

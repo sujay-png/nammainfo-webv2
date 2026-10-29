@@ -7,7 +7,7 @@ const validityUpdateSchema = z.object({
   membershipExpiresAt: z.string().nullable().optional(),
   primaryCardCount: z.number().int().min(0).optional(),
   purchasedIdCount: z.number().int().min(0).optional(),
-  subscriptionPlan: z.enum(["free", "pro"]).optional(),
+  subscriptionPlan: z.enum(["free", "pro", "trial", "lifetime"]).optional(),
 });
 
 export async function POST(

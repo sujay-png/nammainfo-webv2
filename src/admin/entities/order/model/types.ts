@@ -2,6 +2,18 @@ export type OrderStatus = "under_review" | "on_work" | "delivered";
 export type OrderType = "pro_initial" | "team_addon" | "renewal";
 export type DesignMode = "uploaded" | "team_assist";
 
+export interface CustomCardDetails {
+  mode?: "uploaded_card" | "custom_details";
+  fileName?: string;
+  fileUrl?: string | null;
+  companyName?: string;
+  ownerName?: string;
+  contactNumber?: string;
+  companyAddress?: string;
+  logoUrl?: string | null;
+  designNotes?: string;
+}
+
 export interface ShippingAddress {
   fullName?: string;
   phone?: string;
@@ -10,6 +22,7 @@ export interface ShippingAddress {
   state?: string;
   pincode?: string;
   notes?: string;
+  cardDetails?: CustomCardDetails;
 }
 
 export interface AdminOrder {
@@ -28,6 +41,7 @@ export interface AdminOrder {
   designUrl: string | null;
   designMode: DesignMode;
   shippingAddress: ShippingAddress;
+  cardDetails?: CustomCardDetails;
   razorpayOrderId: string | null;
   razorpayPaymentId: string | null;
   createdAt: string;

@@ -8,7 +8,8 @@ import {
   MapPin,
   Phone,
   MessageCircle,
-  Sparkles,
+  FileText,
+  CreditCard,
   ChevronRight,
   Eye,
 } from "lucide-react";
@@ -165,12 +166,12 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
                     </div>
                   </td>
 
-                  {/* Artwork File */}
+                  {/* Artwork / Card Details File */}
                   <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
-                    {order.designMode === "team_assist" ? (
-                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20 font-mono text-[10px] font-medium">
-                        <Sparkles size={11} />
-                        <span>Concierge Assist</span>
+                    {order.shippingAddress?.cardDetails?.mode === "custom_details" || (!order.designUrl && order.designMode === "team_assist") ? (
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] bg-[var(--accent)] text-[var(--foreground)] border border-[var(--border)] font-mono text-[10px] font-semibold">
+                        <FileText size={11} className="text-[var(--muted-foreground)]" />
+                        <span>Custom Details</span>
                       </div>
                     ) : order.designUrl ? (
                       <div className="flex items-center gap-2.5">
@@ -179,7 +180,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
                           target="_blank"
                           rel="noopener noreferrer"
                           className="group relative block h-9 w-12 shrink-0 overflow-hidden rounded-[5px] border border-[var(--border)] bg-white/5 hover:border-[var(--foreground)] transition-colors"
-                          title="Open design file"
+                          title="Open visiting card / artwork"
                         >
                           <img
                             src={order.designUrl}
@@ -193,7 +194,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--foreground)] hover:underline"
                         >
-                          <span>Artwork</span>
+                          <span>Visiting Card</span>
                           <ExternalLink size={10} className="text-[var(--muted-foreground)]" />
                         </a>
                       </div>
@@ -327,13 +328,13 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
                     {order.shippingAddress?.city || "Address on file"}
                   </span>
                 </div>
-                {order.designMode === "team_assist" ? (
-                  <span className="text-indigo-600 dark:text-indigo-400 font-mono text-[10px]">
-                    Concierge Assist
+                {order.shippingAddress?.cardDetails?.mode === "custom_details" || (!order.designUrl && order.designMode === "team_assist") ? (
+                  <span className="text-[var(--foreground)] font-mono text-[10px] font-semibold">
+                    Custom Details
                   </span>
                 ) : order.designUrl ? (
                   <span className="text-emerald-600 dark:text-emerald-400 font-mono text-[10px]">
-                    Artwork Attached
+                    Visiting Card
                   </span>
                 ) : null}
               </div>

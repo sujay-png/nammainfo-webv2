@@ -14,7 +14,9 @@ import {
   Download,
   CreditCard,
   Building2,
-  Sparkles,
+  FileText,
+  MessageSquare,
+  Image as ImageIcon,
   Loader2,
   Copy,
   Check,
@@ -291,76 +293,176 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           </div>
         </div>
 
-        {/* Card Artwork / Concierge Design Section */}
-        <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-              Card Artwork File
-            </span>
-            {order.designMode === "team_assist" ? (
-              <span className="inline-flex items-center gap-1 font-mono text-[11px] text-indigo-600 dark:text-indigo-400 font-medium">
-                <Sparkles size={12} />
-                <span>Complimentary Concierge Requested</span>
-              </span>
-            ) : (
-              <span className="font-mono text-[11px] text-[var(--muted-foreground)]">
-                Custom File Uploaded
-              </span>
-            )}
-          </div>
+        {/* Card Artwork / Custom Card Details Section */}
+        {(() => {
+          const cardDetails = order.cardDetails || order.shippingAddress?.cardDetails;
+          const isCustomDetails = cardDetails?.mode === "custom_details" || (!order.designUrl && order.designMode === "team_assist");
 
-          {order.designMode === "team_assist" ? (
-            <div className="p-3.5 rounded-[5px] bg-indigo-500/10 border border-indigo-500/20 space-y-1.5">
-              <p className="font-semibold text-xs text-indigo-700 dark:text-indigo-400">
-                Design Assistance Needed
-              </p>
-              <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
-                The customer selected our complimentary design concierge during checkout. Please call or WhatsApp their contact number ({order.phone || order.shippingAddress?.phone || "Phone on file"}) to gather their logo, typography, and card preferences before production.
-              </p>
-            </div>
-          ) : order.designUrl ? (
-            <div className="space-y-3">
-              <div className="relative overflow-hidden rounded-[5px] border border-[var(--border)] bg-black/10 dark:bg-black/30 p-2 flex items-center justify-center">
-                <img
-                  src={order.designUrl}
-                  alt="Customer Card Artwork"
-                  className="max-h-64 object-contain rounded-[4px]"
-                />
-              </div>
-
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-[11px] text-[var(--muted-foreground)] truncate max-w-sm">
-                  {order.designUrl}
+          return (
+            <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+                  Card Production Specifications
                 </span>
-                <div className="flex items-center gap-2">
-                  <a
-                    href={order.designUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-xs font-medium text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors"
-                  >
-                    <ExternalLink size={12} />
-                    <span>Open in New Tab</span>
-                  </a>
-                  <a
-                    href={order.designUrl}
-                    download={`Card_Design_${order.id.slice(0, 8)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-[5px] bg-[var(--foreground)] px-3 py-1.5 text-xs font-medium text-[var(--background)] hover:opacity-90 transition-opacity"
-                  >
-                    <Download size={12} />
-                    <span>Download File</span>
-                  </a>
-                </div>
+                {isCustomDetails ? (
+                  <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-semibold text-[var(--foreground)] px-2 py-0.5 rounded-[4px] bg-[var(--accent)] border border-[var(--border)]">
+                    <FileText size={12} className="text-[var(--muted-foreground)]" />
+                    <span>Custom Details Provided</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-semibold text-[var(--foreground)] px-2 py-0.5 rounded-[4px] bg-[var(--accent)] border border-[var(--border)]">
+                    <CreditCard size={12} className="text-[var(--muted-foreground)]" />
+                    <span>Existing Visiting Card Uploaded</span>
+                  </span>
+                )}
               </div>
+
+              {isCustomDetails ? (
+                <div className="space-y-3 pt-1">
+                  {/* Card Business Fields */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <div className="p-2.5 rounded-[5px] bg-[var(--accent)]/40 border border-[var(--border)]">
+                      <span className="block font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
+                        Company Name on Card
+                      </span>
+                      <span className="block font-semibold text-[var(--foreground)] mt-0.5">
+                        {cardDetails?.companyName || order.businessName || "—"}
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 rounded-[5px] bg-[var(--accent)]/40 border border-[var(--border)]">
+                      <span className="block font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
+                        Owner / Contact Name
+                      </span>
+                      <span className="block font-semibold text-[var(--foreground)] mt-0.5">
+                        {cardDetails?.ownerName || order.ownerName || "—"}
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 rounded-[5px] bg-[var(--accent)]/40 border border-[var(--border)]">
+                      <span className="block font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
+                        Contact Number on Card
+                      </span>
+                      <a
+                        href={`tel:${cardDetails?.contactNumber || order.phone || ""}`}
+                        className="font-mono font-semibold text-[var(--foreground)] hover:underline mt-0.5 inline-flex items-center gap-1.5"
+                      >
+                        <Phone size={12} className="text-[var(--muted-foreground)]" />
+                        <span>{cardDetails?.contactNumber || order.phone || "—"}</span>
+                      </a>
+                    </div>
+
+                    <div className="p-2.5 rounded-[5px] bg-[var(--accent)]/40 border border-[var(--border)]">
+                      <span className="block font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
+                        Company Address on Card
+                      </span>
+                      <span className="block text-[var(--foreground)] mt-0.5">
+                        {cardDetails?.companyAddress || order.shippingAddress?.street || "—"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Uploaded Logo (if available) */}
+                  {(cardDetails?.logoUrl || order.designUrl) && (
+                    <div className="p-3 rounded-[5px] bg-[var(--accent)]/30 border border-[var(--border)] flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={cardDetails?.logoUrl || order.designUrl || ""}
+                          alt="Company Logo"
+                          className="h-10 w-10 object-contain rounded-[4px] border border-[var(--border)] bg-black/10 p-1 shrink-0"
+                        />
+                        <div>
+                          <span className="block text-xs font-semibold text-[var(--foreground)]">
+                            Company Logo Attached
+                          </span>
+                          <span className="block font-mono text-[10px] text-[var(--muted-foreground)]">
+                            Use this logo vector/raster for card engraving
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={cardDetails?.logoUrl || order.designUrl || ""}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-2.5 py-1 text-xs font-medium text-[var(--foreground)] hover:bg-[var(--accent)]"
+                        >
+                          <ExternalLink size={11} />
+                          <span>View</span>
+                        </a>
+                        <a
+                          href={cardDetails?.logoUrl || order.designUrl || ""}
+                          download="Company_Logo"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 rounded-[5px] bg-[var(--foreground)] px-2.5 py-1 text-xs font-medium text-[var(--background)] hover:opacity-90"
+                        >
+                          <Download size={11} />
+                          <span>Download</span>
+                        </a>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Customer Suggestions / Notes */}
+                  {cardDetails?.designNotes && (
+                    <div className="p-3 rounded-[5px] bg-[var(--accent)]/30 border border-[var(--border)] space-y-1">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--foreground)]">
+                        <MessageSquare size={13} className="text-[var(--primary)] shrink-0" />
+                        <span>Customer Suggestions & Preferences:</span>
+                      </div>
+                      <p className="text-xs text-[var(--foreground)] pl-5 leading-relaxed bg-[var(--card)] p-2 rounded-[4px] border border-[var(--border)]">
+                        &quot;{cardDetails.designNotes}&quot;
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ) : order.designUrl ? (
+                <div className="space-y-3">
+                  <div className="relative overflow-hidden rounded-[5px] border border-[var(--border)] bg-black/10 dark:bg-black/30 p-2 flex items-center justify-center">
+                    <img
+                      src={order.designUrl}
+                      alt="Customer Visiting Card"
+                      className="max-h-64 object-contain rounded-[4px]"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[11px] text-[var(--muted-foreground)] truncate max-w-sm">
+                      {order.designUrl}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={order.designUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-xs font-medium text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors"
+                      >
+                        <ExternalLink size={12} />
+                        <span>Open in New Tab</span>
+                      </a>
+                      <a
+                        href={order.designUrl}
+                        download={`Visiting_Card_${order.id.slice(0, 8)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-[5px] bg-[var(--foreground)] px-3 py-1.5 text-xs font-medium text-[var(--background)] hover:opacity-90 transition-opacity"
+                      >
+                        <Download size={12} />
+                        <span>Download File</span>
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  No visiting card file was uploaded. Standard company branding layout applies.
+                </p>
+              )}
             </div>
-          ) : (
-            <p className="text-xs text-[var(--muted-foreground)]">
-              No custom design artwork file was uploaded. Standard company branding layout applies.
-            </p>
-          )}
-        </div>
+          );
+        })()}
 
         {/* Courier Shipping Address */}
         <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4 space-y-2">

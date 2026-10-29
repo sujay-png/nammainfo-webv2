@@ -13,6 +13,8 @@ import {
 import { CompaniesTable } from "@/admin/widgets/companies-table/ui/CompaniesTable";
 import { UpcomingRenewalsTable } from "@/admin/widgets/upcoming-renewals/ui/UpcomingRenewalsTable";
 import { ExpiredCardsTable } from "@/admin/widgets/expired-cards/ui/ExpiredCardsTable";
+import { PendingTrialsTable } from "@/admin/widgets/pending-trials/ui/PendingTrialsTable";
+import { FreeTrialsTable } from "@/admin/widgets/free-trials/ui/FreeTrialsTable";
 import { CompanyFiltersBar } from "@/admin/features/company-filters/ui/CompanyFiltersBar";
 import { CompanyDetailModal } from "@/admin/widgets/company-detail-modal/ui/CompanyDetailModal";
 import { DeleteCompanyModal } from "@/admin/features/delete-company/ui/DeleteCompanyModal";
@@ -45,10 +47,12 @@ export const AdminDashboardView: React.FC = () => {
     upcomingRenewalsCount: 0,
     expiredCardsCount: 0,
     lostCardsCount: 0,
+    pendingTrialsCount: 0,
+    activeTrialsCount: 0,
   });
   const [loading, setLoading] = useState(true);
 
-  // Active top KPI filter view: "all" | "upcoming_renewals" | "expired"
+  // Active top KPI filter view: "all" | "pending_trials" | "upcoming_renewals" | "expired"
   const [activeView, setActiveView] = useState<AdminViewFilter>("all");
 
   // Filters state for all companies
@@ -145,7 +149,7 @@ export const AdminDashboardView: React.FC = () => {
     router.replace(getLoginUrl());
   };
 
-  // Client-side filtering (All, Pro, Expired)
+  // Client-side filtering (All, Free Trial, Pro, Expired)
   const filteredCompanies = useMemo(() => {
     return companies.filter((c) => {
       if (filters.search.trim()) {
@@ -169,9 +173,14 @@ export const AdminDashboardView: React.FC = () => {
       }
 
       const validity = getDaysRemaining(c.membershipExpiresAt, c.subscriptionPlan);
-      const isExp = c.subscriptionPlan === "pro" && !validity.isLifetime && (validity.isExpired || (c.status === "expired" && !c.membershipExpiresAt));
+      const isExp =
+        (c.subscriptionPlan === "pro" || c.subscriptionPlan === "trial") &&
+        !validity.isLifetime &&
+        (validity.isExpired || (c.status === "expired" && !c.membershipExpiresAt));
 
-      if (filters.tab === "pro") {
+      if (filters.tab === "trial") {
+        if (c.subscriptionPlan !== "trial") return false;
+      } else if (filters.tab === "pro") {
         if (c.subscriptionPlan !== "pro") return false;
         if (isExp) return false;
       } else if (filters.tab === "expired") {
@@ -260,7 +269,7 @@ export const AdminDashboardView: React.FC = () => {
             totalCompaniesCount={stats.totalCompanies}
           />
 
-          <main className="flex-1 space-y-6 p-6 max-w-7xl w-full mx-auto pb-16">
+          <main className="flex-1 space-y-6 p-6 w-full pb-16">
             {/* Top 4 KPI Metrics Cards */}
             <KpiMetricsGrid
               stats={stats}
@@ -275,8 +284,10 @@ export const AdminDashboardView: React.FC = () => {
                 <span className="font-medium text-[var(--foreground)]">
                   Viewing:{" "}
                   <span className="font-semibold">
-                    {activeView === "upcoming_renewals"
-                      ? "Upcoming Renewals (Next 15 Days)"
+                    {activeView === "pending_trials"
+                      ? "Pending Free Trial Requests"
+                      : activeView === "upcoming_renewals"
+                      ? "Upcoming Renewals (Next 30 Days)"
                       : activeView === "expired"
                       ? "Expired Cards"
                       : "Filtered Cards"}
@@ -292,7 +303,14 @@ export const AdminDashboardView: React.FC = () => {
             )}
 
             {/* KPI Drilldown Views vs Unified Table */}
-            {activeView === "upcoming_renewals" ? (
+            {activeView === "pending_trials" ? (
+              <PendingTrialsTable
+                companies={companies}
+                loading={loading}
+                onSelectCompany={handleSelectCompany}
+                onRefresh={loadData}
+              />
+            ) : activeView === "upcoming_renewals" ? (
               <UpcomingRenewalsTable
                 companies={companies}
                 loading={loading}
@@ -305,6 +323,21 @@ export const AdminDashboardView: React.FC = () => {
                 loading={loading}
                 onSelectCompany={handleSelectCompany}
               />
+            ) : filters.tab === "trial" ? (
+              /* Dedicated 100-Day Free Trial Table with 20-Day Touchpoints & Custom Extensions */
+              <div className="space-y-4">
+                <CompanyFiltersBar
+                  filters={filters}
+                  onChange={setFilters}
+                  totalFiltered={filteredCompanies.length}
+                />
+                <FreeTrialsTable
+                  companies={filteredCompanies}
+                  loading={loading}
+                  onSelectCompany={handleSelectCompany}
+                  onRefresh={loadData}
+                />
+              </div>
             ) : (
               /* Unified Companies Registry & Controls */
               <div className="space-y-4">
@@ -328,30 +361,24 @@ export const AdminDashboardView: React.FC = () => {
 
       {/* Drill-down Modal */}
       <CompanyDetailModal
-        company={selectedCompany}
         isOpen={isDetailOpen}
         onClose={() => {
           setIsDetailOpen(false);
           setSelectedCompany(null);
         }}
+        company={selectedCompany}
         onRefresh={loadData}
-        onDeleteRequest={(c) => {
-          setIsDetailOpen(false);
-          handleDeleteRequest(c);
-        }}
       />
 
       {/* Delete Confirmation Modal */}
       <DeleteCompanyModal
-        company={deleteTarget}
         isOpen={isDeleteOpen}
         onClose={() => {
           setIsDeleteOpen(false);
           setDeleteTarget(null);
         }}
-        onSuccess={() => {
-          loadData();
-        }}
+        company={deleteTarget}
+        onSuccess={loadData}
       />
     </div>
   );

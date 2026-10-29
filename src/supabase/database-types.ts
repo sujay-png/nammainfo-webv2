@@ -78,6 +78,16 @@ export interface Profile {
   primary_card_count?: number;
   purchased_id_count?: number;
   subscription_started_at?: string | null;
+
+  // 100-Day Free Trial & Milestone Follow-ups
+  trial_status?: "none" | "pending_approval" | "approved" | "rejected" | null;
+  trial_coupon_code?: string | null;
+  trial_requested_at?: string | null;
+  trial_approved_at?: string | null;
+  trial_extension_days?: number;
+  trial_follow_up_milestone?: number;
+  trial_follow_up_status?: "unattended" | "attended" | null;
+  trial_follow_up_notes?: string | null;
 }
 
 export type ProfileInsert = Partial<Profile> & { id: string };

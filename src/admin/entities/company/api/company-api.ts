@@ -164,3 +164,81 @@ export async function bulkUpdateEmployees(
   return res.json();
 }
 
+/* ------------------------------------------------------------------ */
+/*  Free Trial APIs (100 Days, Custom Extensions, Milestones)          */
+/* ------------------------------------------------------------------ */
+
+export async function approveFreeTrial(
+  companyId: string
+): Promise<{ success: boolean; membershipExpiresAt: string; message: string }> {
+  const res = await fetch("/api/admin/trial/approve", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ companyId }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || "Failed to approve Free Trial");
+  }
+
+  return res.json();
+}
+
+export async function extendFreeTrial(
+  companyId: string,
+  extensionDays: number
+): Promise<{ success: boolean; newExpiry: string; totalExtensionDays: number; message: string }> {
+  const res = await fetch("/api/admin/trial/extend", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ companyId, extensionDays }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || "Failed to extend Free Trial");
+  }
+
+  return res.json();
+}
+
+export async function updateTrialFollowUp(
+  companyId: string,
+  updates: {
+    status?: "unattended" | "attended";
+    notes?: string;
+    milestone?: number;
+  }
+): Promise<{ success: boolean }> {
+  const res = await fetch("/api/admin/trial/follow-up", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ companyId, ...updates }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || "Failed to update trial follow-up");
+  }
+
+  return res.json();
+}
+
+export async function rejectFreeTrial(
+  companyId: string,
+  reason?: string
+): Promise<{ success: boolean }> {
+  const res = await fetch("/api/admin/trial/reject", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ companyId, reason }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || "Failed to reject Free Trial");
+  }
+
+  return res.json();
+}

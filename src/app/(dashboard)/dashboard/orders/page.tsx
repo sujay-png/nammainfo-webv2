@@ -347,42 +347,54 @@ export default function CardOrdersPage() {
                   </div>
                 )}
 
-                {/* Card Artwork / Concierge Details */}
-                <div className="p-3.5 rounded-2xl bg-[var(--accent)]/30 border border-[var(--border)] space-y-2.5">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-[var(--foreground)]">Card Artwork</span>
-                    {order.design_mode === "team_assist" ? (
-                      <span className="font-mono text-[11px] text-[var(--primary)] font-medium">
-                        Complimentary Design Concierge
-                      </span>
-                    ) : (
-                      <span className="font-mono text-[11px] text-[var(--muted-foreground)]">
-                        Custom Artwork Uploaded
-                      </span>
-                    )}
-                  </div>
+                {/* Card Artwork / Custom Card Details */}
+                {(() => {
+                  const cardDetails = (addr as any)?.cardDetails;
+                  const isCustom = cardDetails?.mode === "custom_details" || (!order.design_url && order.design_mode === "team_assist");
 
-                  {order.design_mode === "team_assist" ? (
-                    <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
-                      Our in-house design team will contact you directly on your phone ({addr.phone || "registered number"}) to review your card layout and preview before final laser engraving.
-                    </p>
-                  ) : order.design_url ? (
-                    <div className="flex items-center justify-between gap-3 pt-1">
-                      <div className="flex items-center gap-3">
-                        <img
-                          src={order.design_url}
-                          alt="Card Design Preview"
-                          className="h-12 w-16 object-cover rounded-xl border border-[var(--border)] shadow-xs shrink-0 bg-white/5"
-                        />
-                        <div>
-                          <p className="text-xs font-semibold text-[var(--foreground)]">Production Print File</p>
-                          <a
-                            href={order.design_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 font-mono text-[10px] text-[var(--primary)] hover:underline mt-0.5"
-                          >
-                            <span>Open Full Resolution</span>
+                  return (
+                    <div className="p-3.5 rounded-[5px] bg-[var(--accent)]/30 border border-[var(--border)] space-y-2.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-semibold text-[var(--foreground)]">Card Production Details</span>
+                        {isCustom ? (
+                          <span className="font-mono text-[11px] text-[var(--foreground)] font-semibold px-2 py-0.5 rounded-[4px] bg-[var(--accent)] border border-[var(--border)]">
+                            Custom Details Provided
+                          </span>
+                        ) : (
+                          <span className="font-mono text-[11px] text-[var(--foreground)] font-semibold px-2 py-0.5 rounded-[4px] bg-[var(--accent)] border border-[var(--border)]">
+                            Visiting Card Uploaded
+                          </span>
+                        )}
+                      </div>
+
+                      {isCustom ? (
+                        <div className="space-y-1.5 text-xs">
+                          <p className="text-[var(--muted-foreground)] leading-relaxed">
+                            Card details for <strong className="text-[var(--foreground)]">{cardDetails?.companyName || "your business"}</strong> ({cardDetails?.ownerName || "Cardholder"}) have been received. Our production team is formatting your laser-engraved NFC card.
+                          </p>
+                          {cardDetails?.designNotes && (
+                            <p className="text-[11px] text-[var(--muted-foreground)] italic bg-[var(--card)] p-2 rounded-[4px] border border-[var(--border)]">
+                              Note: &quot;{cardDetails.designNotes}&quot;
+                            </p>
+                          )}
+                        </div>
+                      ) : order.design_url ? (
+                        <div className="flex items-center justify-between gap-3 pt-1">
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={order.design_url}
+                              alt="Card Design Preview"
+                              className="h-12 w-16 object-cover rounded-[4px] border border-[var(--border)] shadow-xs shrink-0 bg-white/5"
+                            />
+                            <div>
+                              <p className="text-xs font-semibold text-[var(--foreground)]">Visiting Card / Artwork File</p>
+                              <a
+                                href={order.design_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 font-mono text-[10px] text-[var(--primary)] hover:underline mt-0.5"
+                              >
+                                <span>Open Full Resolution</span>
                             <ExternalLink size={10} />
                           </a>
                         </div>
@@ -426,6 +438,8 @@ export default function CardOrdersPage() {
                     <p className="text-xs text-[var(--muted-foreground)]">Standard Card Profile Format</p>
                   )}
                 </div>
+              );
+            })()}
 
                 {/* Delivery Address Details */}
                 <div className="p-3.5 rounded-2xl bg-[var(--accent)]/30 border border-[var(--border)] space-y-1.5 text-xs">
