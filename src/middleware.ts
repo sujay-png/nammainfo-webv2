@@ -42,23 +42,65 @@ export async function middleware(request: NextRequest) {
     claims?.app_metadata?.role === "admin"
   );
 
-  // Subdomain routing: if request is on admin.* subdomain, rewrite to /admin
+  // Subdomain routing: if request is on admin.* subdomain (e.g. admin.nammainfo.in or admin.localhost)
   const host = request.headers.get("host") || "";
-  const isAdminSubdomain = host.startsWith("admin.");
+  const isAdminSubdomain =
+    host.startsWith("admin.") || host.startsWith("admin.localhost");
+  const pathname = request.nextUrl.pathname;
 
-  if (isAdminSubdomain && !request.nextUrl.pathname.startsWith("/api")) {
-    if (!request.nextUrl.pathname.startsWith("/admin")) {
+  if (isAdminSubdomain) {
+    // If request has prefix /admin on admin subdomain, redirect to clean URL
+    if (pathname === "/admin") {
       const url = request.nextUrl.clone();
-      url.pathname = `/admin${request.nextUrl.pathname === "/" ? "" : request.nextUrl.pathname}`;
-      return NextResponse.rewrite(url);
+      url.pathname = "/";
+      return NextResponse.redirect(url);
     }
+    if (pathname === "/admin/login") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      return NextResponse.redirect(url);
+    }
+
+    const isLogin = pathname === "/login";
+
+    // Unauthenticated or non-admin attempting to access admin console
+    if (!isLogin && (!user || !isAdmin)) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      return NextResponse.redirect(url);
+    }
+
+    // Signed-in admin visiting /login -> redirect to home /
+    if (isLogin && user && isAdmin) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/";
+      return NextResponse.redirect(url);
+    }
+
+    // Rewrite internal paths to /admin or /admin/login while keeping clean browser URL
+    if (!pathname.startsWith("/api")) {
+      const url = request.nextUrl.clone();
+      if (pathname === "/") {
+        url.pathname = "/admin";
+        return NextResponse.rewrite(url);
+      } else if (pathname === "/login") {
+        url.pathname = "/admin/login";
+        return NextResponse.rewrite(url);
+      } else if (!pathname.startsWith("/admin")) {
+        url.pathname = `/admin${pathname}`;
+        return NextResponse.rewrite(url);
+      }
+    }
+
+    return response;
   }
 
-  // Protect admin routes — redirect to /admin/login if not signed in or not an admin
+  // -------------------------------------------------------------
+  // Main domain routing: nammainfo.in (or localhost)
+  // -------------------------------------------------------------
   const isAdminRoute =
-    request.nextUrl.pathname === "/admin" ||
-    request.nextUrl.pathname.startsWith("/admin/");
-  const isLoginPage = request.nextUrl.pathname.startsWith("/admin/login");
+    pathname === "/admin" || pathname.startsWith("/admin/");
+  const isLoginPage = pathname.startsWith("/admin/login");
 
   if (isAdminRoute && !isLoginPage) {
     if (!user || !isAdmin) {
@@ -77,8 +119,8 @@ export async function middleware(request: NextRequest) {
 
   // If an administrator accesses customer dashboard or onboarding, bounce them to /admin
   if (
-    (request.nextUrl.pathname.startsWith("/dashboard") ||
-      request.nextUrl.pathname.startsWith("/onboarding")) &&
+    (pathname.startsWith("/dashboard") ||
+      pathname.startsWith("/onboarding")) &&
     user &&
     isAdmin
   ) {
@@ -88,7 +130,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Protect dashboard routes for regular users
-  if (request.nextUrl.pathname.startsWith("/dashboard") && !user) {
+  if (pathname.startsWith("/dashboard") && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/signup";
     return NextResponse.redirect(url);
@@ -96,8 +138,7 @@ export async function middleware(request: NextRequest) {
 
   // Redirect logged-in users from signup/root
   if (
-    (request.nextUrl.pathname === "/signup" ||
-      request.nextUrl.pathname === "/") &&
+    (pathname === "/signup" || pathname === "/") &&
     user &&
     !isAdminSubdomain
   ) {
@@ -113,6 +154,7 @@ export const config = {
   // Routes needing auth decision and admin routing
   matcher: [
     "/",
+    "/login",
     "/signup",
     "/dashboard",
     "/dashboard/:path*",

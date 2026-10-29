@@ -52,7 +52,11 @@ export const AdminLoginView: React.FC = () => {
       }
 
       // 3. Successful admin login -> route to admin dashboard
-      router.push("/admin");
+      const isSubdomain =
+        typeof window !== "undefined" &&
+        (window.location.hostname.startsWith("admin.") ||
+          window.location.hostname.startsWith("admin.localhost"));
+      router.push(isSubdomain ? "/" : "/admin");
     } catch (err: any) {
       console.error("[Admin Login Error]:", err);
       const msg = err.message || "Failed to sign in.";

@@ -67,6 +67,14 @@ export const AdminDashboardView: React.FC = () => {
   const [unauthorizedEmail, setUnauthorizedEmail] = useState<string | null>(null);
 
   // Strict Client-Side Admin Auth Verification
+  const getLoginUrl = useCallback(() => {
+    const isSubdomain =
+      typeof window !== "undefined" &&
+      (window.location.hostname.startsWith("admin.") ||
+        window.location.hostname.startsWith("admin.localhost"));
+    return isSubdomain ? "/login" : "/admin/login";
+  }, []);
+
   useEffect(() => {
     const checkAdminAuth = async () => {
       try {
@@ -76,7 +84,7 @@ export const AdminDashboardView: React.FC = () => {
         } = await supabase.auth.getUser();
 
         if (!user) {
-          router.replace("/admin/login");
+          router.replace(getLoginUrl());
           return;
         }
 
@@ -95,12 +103,12 @@ export const AdminDashboardView: React.FC = () => {
         setAuthLoading(false);
       } catch (err) {
         console.error("Auth check failed:", err);
-        router.replace("/admin/login");
+        router.replace(getLoginUrl());
       }
     };
 
     checkAdminAuth();
-  }, [router]);
+  }, [router, getLoginUrl]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -134,7 +142,7 @@ export const AdminDashboardView: React.FC = () => {
   const handleSignOut = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
-    router.replace("/admin/login");
+    router.replace(getLoginUrl());
   };
 
   // Client-side filtering (All, Pro, Expired)
