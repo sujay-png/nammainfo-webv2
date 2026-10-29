@@ -33,7 +33,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           {/* Companies & Subscriptions */}
           <button
             onClick={() => onTabChange("overview")}
-            className={`flex w-full items-center gap-3 rounded-[5px] px-3 py-2 text-xs font-medium transition-colors ${
+            className={`flex w-full items-center gap-3 rounded-[5px] px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
               currentTab === "overview"
                 ? "bg-[var(--foreground)] text-[var(--background)]"
                 : "text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
@@ -46,7 +46,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           {/* Orders & Fulfillment */}
           <button
             onClick={() => onTabChange("orders")}
-            className={`flex w-full items-center justify-between rounded-[5px] px-3 py-2 text-xs font-medium transition-colors ${
+            className={`flex w-full items-center justify-between rounded-[5px] px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
               currentTab === "orders"
                 ? "bg-[var(--foreground)] text-[var(--background)]"
                 : "text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
@@ -74,7 +74,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
         <div className="border-t border-[var(--border)] pt-4">
           <button
             onClick={onSignOut}
-            className="flex w-full items-center justify-between rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs font-medium text-[var(--muted-foreground)] hover:text-red-600 dark:hover:text-red-400 hover:bg-[var(--accent)] transition-colors"
+            className="flex w-full items-center justify-between rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs font-medium text-[var(--muted-foreground)] hover:text-red-600 dark:hover:text-red-400 hover:bg-[var(--accent)] transition-colors cursor-pointer"
           >
             <span className="flex items-center gap-2">
               <LogOut size={14} />

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Shield, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/admin/shared/ui/Button";
+import { AdminThemeToggle } from "@/admin/shared/ui/AdminThemeToggle";
 
 export const AdminLoginView: React.FC = () => {
   const router = useRouter();
@@ -71,7 +72,11 @@ export const AdminLoginView: React.FC = () => {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[var(--background)] px-4 py-12">
+    <div className="relative flex min-h-screen items-center justify-center bg-[var(--background)] px-4 py-12">
+      <div className="fixed top-4 right-4 z-50">
+        <AdminThemeToggle />
+      </div>
+
       <div className="w-full max-w-md space-y-6">
         {/* Branding & Header */}
         <div className="text-center space-y-2">

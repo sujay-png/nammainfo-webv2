@@ -1,5 +1,8 @@
+"use client";
+
 import React from "react";
 import { RefreshCw } from "lucide-react";
+import { AdminThemeToggle } from "@/admin/shared/ui/AdminThemeToggle";
 
 interface AdminHeaderProps { 
   onRefresh: () => void;
@@ -23,11 +26,13 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
         </p>
       </div>
 
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-2">
+        <AdminThemeToggle />
+
         <button
           onClick={onRefresh}
           disabled={loading}
-          className="flex items-center gap-1.5 rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-xs font-medium text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors disabled:opacity-50"
+          className="flex items-center gap-1.5 rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-xs font-medium text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors disabled:opacity-50 cursor-pointer"
         >
           <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
           <span>Refresh</span>
