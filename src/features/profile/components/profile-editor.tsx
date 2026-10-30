@@ -15,6 +15,7 @@ import dynamic from "next/dynamic";
 const CropModal = dynamic(() => import("@/components/ui/image-crop-modal"), {
   ssr: false,
 });
+import UpgradeToProModal from "@/components/UpgradeToProModal";
 import {
   Edit3,
   Plus,
@@ -61,6 +62,7 @@ function OwnerProfilePage() {
   const [editing, setEditing] = useState<EditSection>(null);
   const [saving, setSaving] = useState(false);
   const [cardSlug, setCardSlug] = useState<string | null>(null);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   // Edit form states
   const [editForm, setEditForm] = useState<Partial<Profile>>({});
@@ -198,6 +200,8 @@ function OwnerProfilePage() {
         website: editForm.website ?? null,
         bio: editForm.bio ?? null,
         address: editForm.address ?? null,
+        city: editForm.city ?? null,
+        pincode: editForm.pincode ?? null,
         username: editForm.username ?? null,
         years_in_business: editForm.years_in_business ?? null,
         clients_served: editForm.clients_served ?? null,
@@ -236,6 +240,15 @@ function OwnerProfilePage() {
 
 
   async function shareProfile() {
+    const isFree =
+      profile?.subscription_plan === "free" ||
+      (!profile?.is_member && !profile?.membership_expires_at);
+
+    if (isFree) {
+      setShowUpgradeModal(true);
+      return;
+    }
+
     const url = profile?.username
       ? `${window.location.origin}/${profile.username}`
       : cardSlug
@@ -628,10 +641,18 @@ function OwnerProfilePage() {
         ) : (
           <p className="text-sm text-ink-400">Add a description about your business</p>
         )}
-        {profile.address && (
+        {(profile.address || profile.city || profile.pincode) && (
           <div className="mt-3 flex items-start gap-2">
             <MapPin size={14} className="mt-0.5 shrink-0 text-ink-400" />
-            <span className="text-sm text-ink-500">{profile.address}</span>
+            <span className="text-sm text-ink-500">
+              {[
+                profile.address,
+                profile.city,
+                profile.pincode ? `PIN: ${profile.pincode}` : null,
+              ]
+                .filter(Boolean)
+                .join(", ")}
+            </span>
           </div>
         )}
         {profile.maps_url && (
@@ -1097,10 +1118,25 @@ function OwnerProfilePage() {
             rows={4}
           />
           <InputField
-            label="Address"
+            label="Street Address / Landmark"
             value={editForm.address ?? ""}
             onChange={(v) => setEditForm({ ...editForm, address: v })}
+            placeholder="Shop no, street, locality"
           />
+          <div className="grid grid-cols-2 gap-3">
+            <InputField
+              label="City"
+              value={editForm.city ?? ""}
+              onChange={(v) => setEditForm({ ...editForm, city: v })}
+              placeholder="e.g. Bengaluru"
+            />
+            <InputField
+              label="PIN Code"
+              value={editForm.pincode ?? ""}
+              onChange={(v) => setEditForm({ ...editForm, pincode: v })}
+              placeholder="6-digit PIN code"
+            />
+          </div>
           <InputField
             label="Google Maps Link (for directions)"
             value={editForm.maps_url ?? ""}
@@ -1354,6 +1390,15 @@ function OwnerProfilePage() {
           }
           onCancel={handleCropCancel}
           onConfirm={handleCropConfirm}
+        />
+      )}
+
+      {/* Upgrade to Pro Modal */}
+      {profile && (
+        <UpgradeToProModal
+          isOpen={showUpgradeModal}
+          onClose={() => setShowUpgradeModal(false)}
+          profile={profile}
         />
       )}
     </div>

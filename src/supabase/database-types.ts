@@ -60,6 +60,8 @@ export interface Profile {
   bank_accounts: BankAccount[];
   brochure_url: string | null;
   address: string | null;
+  city?: string | null;
+  pincode?: string | null;
   gst_number: string | null;
   cover_url: string | null;
   // Added for web — will be migrated
@@ -70,6 +72,23 @@ export interface Profile {
   business_type?: string | null;
   products: ServiceItem[];
   theme: string;
+  is_admin?: boolean;
+  role?: "user" | "admin" | "designer" | null;
+  status?: "active" | "suspended" | "expired" | "pending";
+  subscription_plan?: string;
+  primary_card_count?: number;
+  purchased_id_count?: number;
+  subscription_started_at?: string | null;
+
+  // 100-Day Free Trial & Milestone Follow-ups
+  trial_status?: "none" | "pending_approval" | "approved" | "rejected" | null;
+  trial_coupon_code?: string | null;
+  trial_requested_at?: string | null;
+  trial_approved_at?: string | null;
+  trial_extension_days?: number;
+  trial_follow_up_milestone?: number;
+  trial_follow_up_status?: "unattended" | "attended" | null;
+  trial_follow_up_notes?: string | null;
 }
 
 export type ProfileInsert = Partial<Profile> & { id: string };
@@ -136,6 +155,10 @@ export interface Employee {
   avatar_url: string | null;
   cover_url: string | null;
   is_active: boolean;
+  is_premium?: boolean;
+  subscription_started_at?: string | null;
+  subscription_expires_at?: string | null;
+  status?: "active" | "suspended" | "unassigned";
   /** Set once the owner gives this employee a login (Team page). */
   user_id?: string | null;
   login_email?: string | null;

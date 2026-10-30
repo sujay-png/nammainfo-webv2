@@ -34,6 +34,8 @@ export default function OnboardingPage() {
     email: "",
     website: "",
     address: "",
+    city: "",
+    pincode: "",
     username: "",
     bio: "",
     business_type: "",
@@ -66,11 +68,25 @@ export default function OnboardingPage() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (user?.email) {
-        setForm((f) => ({ ...f, email: user.email! }));
+      if (user) {
+        // Prevent admin accounts from onboarding as customers
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("is_admin")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (prof?.is_admin) {
+          router.replace("/admin");
+          return;
+        }
+
+        if (user.email) {
+          setForm((f) => ({ ...f, email: user.email! }));
+        }
       }
     })();
-  }, []);
+  }, [router]);
 
   // Check username availability
   useEffect(() => {
@@ -140,6 +156,8 @@ export default function OnboardingPage() {
           email: form.email.trim() || null,
           website: form.website.trim() || null,
           address: form.address.trim() || null,
+          city: form.city.trim() || null,
+          pincode: form.pincode.trim() || null,
           username: username || null,
           bio: form.bio.trim() || null,
           business_type: form.business_type || null,
@@ -272,10 +290,22 @@ export default function OnboardingPage() {
               />
               <InputField
                 icon={<MapPin size={16} />}
-                placeholder="Business address (optional)"
+                placeholder="Street address / Landmark"
                 value={form.address}
                 onChange={(v) => updateField("address", v)}
               />
+              <div className="grid grid-cols-2 gap-2">
+                <InputField
+                  placeholder="City"
+                  value={form.city}
+                  onChange={(v) => updateField("city", v)}
+                />
+                <InputField
+                  placeholder="PIN Code"
+                  value={form.pincode}
+                  onChange={(v) => updateField("pincode", v)}
+                />
+              </div>
             </div>
 
             <div className="mt-6 flex gap-2">
@@ -402,7 +432,7 @@ function InputField({
   type = "text",
   required,
 }: {
-  icon: React.ReactNode;
+  icon?: React.ReactNode;
   placeholder: string;
   value: string;
   onChange: (v: string) => void;
@@ -411,7 +441,7 @@ function InputField({
 }) {
   return (
     <div className="flex items-center gap-3 rounded-2xl border border-ink-200 bg-white px-4 transition focus-within:border-ink-400 focus-within:ring-1 focus-within:ring-ink-400">
-      <span className="text-ink-400">{icon}</span>
+      {icon && <span className="text-ink-400">{icon}</span>}
       <input
         type={type}
         value={value}

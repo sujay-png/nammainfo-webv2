@@ -953,14 +953,14 @@ export default function PublicProfileView({
       <div id="details" className={`space-y-4 px-5 pb-8 ${hideHero ? "pt-2" : "pt-6"}`}>
 
         {/* ── About Us ── */}
-        {(profile.bio || profile.address || profile.coverage_area) && (
+        {(profile.bio || profile.address || profile.city || profile.pincode || profile.coverage_area) && (
           <CollapsibleSection title="About Us" icon={<Briefcase size={15} />}>
             {profile.bio && (
               <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">
                 {profile.bio}
               </p>
             )}
-            {profile.address && (
+            {(profile.address || profile.city || profile.pincode) && (
               <a
                 href={directionsHref ?? "#"}
                 target="_blank"
@@ -968,7 +968,13 @@ export default function PublicProfileView({
                 className={`${profile.bio ? "mt-3" : ""} flex items-start gap-2 text-xs text-[var(--muted-foreground)] underline-offset-2 hover:underline`}
               >
                 <MapPin size={13} className="mt-0.5 shrink-0" />
-                {profile.address}
+                {[
+                  profile.address,
+                  profile.city,
+                  profile.pincode ? `PIN: ${profile.pincode}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(", ")}
               </a>
             )}
             {profile.coverage_area && (

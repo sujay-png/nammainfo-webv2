@@ -2,216 +2,452 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ScanLine, Camera, Nfc, X, Loader2 } from "lucide-react";
+import {
+  ScanLine,
+  Camera,
+  Nfc,
+  X,
+  Loader2,
+  Zap,
+  ZapOff,
+  SwitchCamera,
+  Upload,
+  ArrowRight,
+  Sparkles,
+} from "lucide-react";
+import { Html5Qrcode, type CameraDevice } from "html5-qrcode";
 
 export default function ScannerPage() {
   const router = useRouter();
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [scanning, setScanning] = useState(false);
+  const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nfcSupported, setNfcSupported] = useState(false);
   const [nfcReading, setNfcReading] = useState(false);
-  const scanIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [cameras, setCameras] = useState<CameraDevice[]>([]);
+  const [currentCameraIndex, setCurrentCameraIndex] = useState(0);
+  const [torchAvailable, setTorchAvailable] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
+
+  const qrScannerRef = useRef<Html5Qrcode | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // Check NFC support
-    if ("NDEFReader" in window) {
+    // Check NFC support (Web NFC standard for Android)
+    if (typeof window !== "undefined" && "NDEFReader" in window) {
       setNfcSupported(true);
     }
+
     return () => {
-      stopScanner();
+      // Ensure camera stops cleanly when navigating away
+      stopScanner().catch(() => {});
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function startScanner() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-        setScanning(true);
-        setError(null);
+  async function startScanner(cameraDeviceId?: string) {
+    setError(null);
+    setStarting(true);
 
-        // Use BarcodeDetector if available
-        if ("BarcodeDetector" in window) {
-          // @ts-expect-error BarcodeDetector is not yet in TS lib
-          const detector = new BarcodeDetector({ formats: ["qr_code"] });
-          scanIntervalRef.current = setInterval(async () => {
-            if (!videoRef.current) return;
-            try {
-              const barcodes = await detector.detect(videoRef.current);
-              if (barcodes.length > 0) {
-                const url = barcodes[0].rawValue;
-                handleScannedUrl(url);
-              }
-            } catch {
-              // scan frame failed — continue
-            }
-          }, 300);
-        } else {
-          setError(
-            "QR scanning requires a modern browser. Try Chrome on Android or Safari on iOS."
-          );
+    try {
+      // Stop previous instance if running
+      await stopScanner();
+
+      // Create new Html5Qrcode instance attached to #qr-reader div
+      const scanner = new Html5Qrcode("qr-reader");
+      qrScannerRef.current = scanner;
+
+      // Detect available video input devices
+      try {
+        const devices = await Html5Qrcode.getCameras();
+        if (devices && devices.length > 0) {
+          setCameras(devices);
         }
+      } catch {
+        // Can fail if permission not granted yet - non-fatal
       }
-    } catch {
-      setError("Camera access denied. Please allow camera permissions.");
+
+      // Camera config: back camera environment preference
+      const cameraConfig = cameraDeviceId
+        ? { deviceId: { exact: cameraDeviceId } }
+        : { facingMode: "environment" };
+
+      await scanner.start(
+        cameraConfig,
+        {
+          fps: 15,
+          qrbox: (viewfinderWidth, viewfinderHeight) => {
+            const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+            const edge = Math.max(200, Math.floor(minEdge * 0.72));
+            return { width: edge, height: edge };
+          },
+          aspectRatio: 1.0,
+        },
+        (decodedText) => {
+          handleScannedUrl(decodedText);
+        },
+        () => {
+          // Frame parsed with no QR - continue scanning silently
+        }
+      );
+
+      setScanning(true);
+      setStarting(false);
+
+      // Check if camera supports torch (flashlight)
+      try {
+        const capabilities = (scanner as unknown as {
+          getRunningTrackCameraCapabilities?: () => {
+            torchFeature?: () => { isSupported: () => boolean };
+          };
+        }).getRunningTrackCameraCapabilities?.();
+        if (capabilities?.torchFeature?.().isSupported()) {
+          setTorchAvailable(true);
+        }
+      } catch {
+        setTorchAvailable(false);
+      }
+    } catch (err: unknown) {
+      setStarting(false);
+      setScanning(false);
+      const msg = err instanceof Error ? err.message : String(err);
+      if (
+        msg.toLowerCase().includes("permission") ||
+        msg.toLowerCase().includes("notallowed")
+      ) {
+        setError(
+          "Camera access was denied. Please allow camera permissions in your browser or phone settings."
+        );
+      } else {
+        setError(
+          "Unable to start camera scanner. You can also upload a QR screenshot below."
+        );
+      }
     }
   }
 
-  function stopScanner() {
-    if (scanIntervalRef.current) {
-      clearInterval(scanIntervalRef.current);
-      scanIntervalRef.current = null;
-    }
-    if (videoRef.current?.srcObject) {
-      const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
-      tracks.forEach((t) => t.stop());
-      videoRef.current.srcObject = null;
+  async function stopScanner() {
+    if (qrScannerRef.current) {
+      try {
+        if (qrScannerRef.current.isScanning) {
+          await qrScannerRef.current.stop();
+        }
+        qrScannerRef.current.clear();
+      } catch {
+        // Ignored
+      }
+      qrScannerRef.current = null;
     }
     setScanning(false);
+    setStarting(false);
+    setTorchOn(false);
+    setTorchAvailable(false);
+  }
+
+  async function toggleTorch() {
+    if (!qrScannerRef.current || !torchAvailable) return;
+    try {
+      const nextState = !torchOn;
+      await (qrScannerRef.current as unknown as {
+        applyVideoConstraints: (constraints: {
+          advanced: Array<{ torch?: boolean }>;
+        }) => Promise<void>;
+      }).applyVideoConstraints({
+        advanced: [{ torch: nextState }],
+      });
+      setTorchOn(nextState);
+    } catch {
+      setTorchAvailable(false);
+    }
+  }
+
+  async function switchCamera() {
+    if (cameras.length <= 1) return;
+    const nextIndex = (currentCameraIndex + 1) % cameras.length;
+    setCurrentCameraIndex(nextIndex);
+    const nextCamera = cameras[nextIndex];
+    if (nextCamera) {
+      await startScanner(nextCamera.id);
+    }
+  }
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setError(null);
+    setStarting(true);
+
+    try {
+      // Use temporary scanner to parse image file
+      const tempScanner = new Html5Qrcode("qr-file-helper");
+      const decoded = await tempScanner.scanFile(file, false);
+      tempScanner.clear();
+      setStarting(false);
+      handleScannedUrl(decoded);
+    } catch {
+      setStarting(false);
+      setError("No valid QR code could be found in that image. Please try another.");
+    }
   }
 
   async function startNfc() {
+    setError(null);
     try {
-      // @ts-expect-error NDEFReader is not yet in TS lib
+      // @ts-expect-error NDEFReader is standard Web NFC on Android Chrome
       const ndef = new NDEFReader();
       await ndef.scan();
       setNfcReading(true);
 
-      ndef.addEventListener("reading", (event: { message: { records: Array<{ recordType: string; data: ArrayBuffer }> } }) => {
-        for (const record of event.message.records) {
-          if (record.recordType === "url") {
-            const decoder = new TextDecoder();
-            const url = decoder.decode(record.data);
-            handleScannedUrl(url);
+      ndef.addEventListener(
+        "reading",
+        (event: {
+          message: {
+            records: Array<{ recordType: string; data: ArrayBuffer }>;
+          };
+        }) => {
+          for (const record of event.message.records) {
+            if (record.recordType === "url") {
+              const decoder = new TextDecoder();
+              const url = decoder.decode(record.data);
+              handleScannedUrl(url);
+            }
           }
         }
-      });
+      );
     } catch {
-      setError("NFC reading failed. Make sure NFC is enabled on your device.");
+      setError(
+        "NFC reading failed. Please ensure NFC is enabled in your phone settings and try again."
+      );
     }
   }
 
   function handleScannedUrl(url: string) {
-    stopScanner();
+    stopScanner().catch(() => {});
     setNfcReading(false);
 
-    // Extract slug from URL
     try {
-      const parsed = new URL(url);
+      if (typeof navigator !== "undefined" && navigator.vibrate) {
+        navigator.vibrate(80);
+      }
+    } catch {}
+
+    const clean = url.trim();
+
+    try {
+      // If it's a full URL e.g. https://nammainfo.in/username or /c/card_123
+      const parsed = new URL(clean);
       const path = parsed.pathname.replace(/^\//, "");
       if (path) {
         router.push(`/${path}`);
         return;
       }
     } catch {
-      // Not a URL — might be a slug directly
-      if (url && !url.includes(" ")) {
-        router.push(`/${url}`);
+      // Not a full URL — may be a slug directly like 'sujay' or 'c/card_123'
+      if (clean && !clean.includes(" ")) {
+        router.push(`/${clean}`);
         return;
       }
     }
-    setError("Could not recognize the scanned code.");
+
+    setError("Could not recognize the scanned code as a valid Namma Info card link.");
   }
 
   return (
-    <div className="mx-auto flex max-w-lg flex-col items-center px-4 py-5">
-      <h1 className="mb-6 text-xl font-semibold tracking-tight">
-        Scan Card
-      </h1>
+    <div className="mx-auto flex max-w-lg flex-col items-center px-4 py-6">
+      {/* Hidden file element for scanning QR from photo library */}
+      <div id="qr-file-helper" className="hidden" />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileUpload}
+      />
+
+      <div className="w-full flex items-center justify-between mb-5">
+        <div>
+          <h1 className="font-headline text-xl font-bold tracking-tight text-[var(--foreground)]">
+            Scan Card
+          </h1>
+          <p className="text-xs text-[var(--muted-foreground)]">
+            Point your camera at a Namma Info QR or tap an NFC card
+          </p>
+        </div>
+        <div className="flex h-9 w-9 items-center justify-center rounded-[5px] bg-[var(--accent)] border border-[var(--border)] text-[var(--foreground)]">
+          <ScanLine size={18} />
+        </div>
+      </div>
 
       {!scanning ? (
-        <div className="flex w-full flex-col items-center gap-4">
-          {/* QR Scanner */}
+        <div className="flex w-full flex-col gap-3">
+          {/* Camera Scanner Trigger */}
           <button
-            onClick={startScanner}
-            className="flex w-full items-center gap-4 rounded-2xl border border-ink-200 bg-white p-5 text-left transition hover:shadow-card"
+            onClick={() => startScanner()}
+            disabled={starting}
+            className="flex w-full items-center gap-4 rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4 text-left shadow-sm transition hover:border-[var(--primary)]/60 hover:bg-[var(--accent)] active:scale-[0.99] cursor-pointer"
           >
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-ink-950 text-white">
-              <Camera size={22} />
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm">
+              {starting ? (
+                <Loader2 size={22} className="animate-spin" />
+              ) : (
+                <Camera size={22} />
+              )}
             </div>
-            <div>
-              <p className="text-sm font-semibold">Scan QR Code</p>
-              <p className="text-xs text-ink-400">
-                Use your camera to scan a business card QR
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-[var(--foreground)]">
+                {starting ? "Starting camera…" : "Open Camera Scanner"}
+              </p>
+              <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                Scan instantly with live camera preview & auto-detect
               </p>
             </div>
+            <ArrowRight size={16} className="text-[var(--muted-foreground)] shrink-0" />
           </button>
 
-          {/* NFC Reader */}
+          {/* Upload Image from Photos Trigger */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={starting}
+            className="flex w-full items-center gap-4 rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4 text-left shadow-sm transition hover:border-[var(--primary)]/60 hover:bg-[var(--accent)] active:scale-[0.99] cursor-pointer"
+          >
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[5px] bg-[var(--accent)] border border-[var(--border)] text-[var(--foreground)]">
+              <Upload size={20} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-[var(--foreground)]">
+                Scan from Photo / Gallery
+              </p>
+              <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                Upload a screenshot or photo containing a QR code
+              </p>
+            </div>
+            <ArrowRight size={16} className="text-[var(--muted-foreground)] shrink-0" />
+          </button>
+
+          {/* NFC Reader Trigger */}
           {nfcSupported && (
             <button
               onClick={startNfc}
-              className="flex w-full items-center gap-4 rounded-2xl border border-ink-200 bg-white p-5 text-left transition hover:shadow-card"
+              disabled={nfcReading}
+              className="flex w-full items-center gap-4 rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4 text-left shadow-sm transition hover:border-[var(--primary)]/60 hover:bg-[var(--accent)] active:scale-[0.99] cursor-pointer"
             >
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-ink-950 text-white">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[5px] bg-[var(--accent)] border border-[var(--border)] text-[var(--foreground)]">
                 <Nfc size={22} />
               </div>
-              <div>
-                <p className="text-sm font-semibold">Tap NFC Card</p>
-                <p className="text-xs text-ink-400">
-                  Hold a Namma Info card to the back of your phone
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-[var(--foreground)]">
+                  Tap Physical NFC Card
+                </p>
+                <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                  Hold a physical Namma Info card to the back of your phone
                 </p>
               </div>
+              <ArrowRight size={16} className="text-[var(--muted-foreground)] shrink-0" />
             </button>
           )}
 
           {nfcReading && (
-            <div className="flex items-center gap-2 text-sm text-ink-500">
-              <Loader2 size={14} className="animate-spin" />
-              Waiting for NFC card…
+            <div className="flex items-center justify-center gap-2 rounded-[5px] border border-blue-500/20 bg-blue-500/10 p-3.5 text-xs font-medium text-blue-600 dark:text-blue-400">
+              <Loader2 size={16} className="animate-spin" />
+              Waiting for NFC card tap on back of device…
             </div>
           )}
         </div>
       ) : (
-        <div className="relative w-full overflow-hidden rounded-3xl bg-ink-950">
-          <video
-            ref={videoRef}
-            className="aspect-square w-full object-cover"
-            playsInline
-            muted
-          />
-          <canvas ref={canvasRef} className="hidden" />
+        /* Active Live Camera Viewfinder */
+        <div className="relative w-full overflow-hidden rounded-[5px] border border-[var(--border)] bg-black shadow-xl">
+          {/* Html5Qrcode video attaches into this container */}
+          <div id="qr-reader" className="w-full aspect-square overflow-hidden" />
 
-          {/* Viewfinder overlay */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="h-48 w-48 rounded-3xl border-2 border-white/30" />
+          {/* Targeting corner guides overlay */}
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div className="relative h-60 w-60 sm:h-64 sm:w-64">
+              {/* Corner brackets */}
+              <div className="absolute top-0 left-0 h-7 w-7 border-t-[3px] border-l-[3px] border-white rounded-tl-[4px]" />
+              <div className="absolute top-0 right-0 h-7 w-7 border-t-[3px] border-r-[3px] border-white rounded-tr-[4px]" />
+              <div className="absolute bottom-0 left-0 h-7 w-7 border-b-[3px] border-l-[3px] border-white rounded-bl-[4px]" />
+              <div className="absolute bottom-0 right-0 h-7 w-7 border-b-[3px] border-r-[3px] border-white rounded-br-[4px]" />
+
+              {/* Animated laser line */}
+              <div className="absolute left-2 right-2 h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_12px_#34d399] animate-qr-laser" />
+            </div>
           </div>
 
-          <div className="absolute bottom-4 left-0 right-0 flex justify-center">
+          {/* Top Controls Bar */}
+          <div className="absolute top-3 inset-x-3 flex items-center justify-between z-20">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/60 backdrop-blur-md text-[11px] font-mono font-medium text-white border border-white/10">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+              Scanning for QR…
+            </span>
+
+            <div className="flex items-center gap-2">
+              {cameras.length > 1 && (
+                <button
+                  type="button"
+                  onClick={switchCamera}
+                  className="h-9 w-9 flex items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-md border border-white/10 hover:bg-black/80 transition-all cursor-pointer"
+                  title="Switch camera"
+                >
+                  <SwitchCamera size={16} />
+                </button>
+              )}
+
+              {torchAvailable && (
+                <button
+                  type="button"
+                  onClick={toggleTorch}
+                  className={`h-9 w-9 flex items-center justify-center rounded-full backdrop-blur-md border transition-all cursor-pointer ${
+                    torchOn
+                      ? "bg-amber-400 text-black border-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.6)]"
+                      : "bg-black/60 text-white border-white/10 hover:bg-black/80"
+                  }`}
+                  title="Toggle flashlight"
+                >
+                  {torchOn ? <Zap size={16} /> : <ZapOff size={16} />}
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={stopScanner}
+                className="h-9 w-9 flex items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-md border border-white/10 hover:bg-red-500/80 transition-all cursor-pointer"
+                title="Close camera"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+
+          {/* Bottom helper text */}
+          <div className="absolute bottom-3 inset-x-3 flex justify-center z-20">
             <button
+              type="button"
               onClick={stopScanner}
-              className="flex items-center gap-2 rounded-full bg-white/90 px-4 py-2 text-xs font-medium text-ink-950 backdrop-blur-sm"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-black/75 backdrop-blur-md text-xs font-semibold text-white border border-white/15 hover:bg-black transition-all cursor-pointer"
             >
               <X size={14} />
-              Stop scanning
+              Stop Scanning
             </button>
-          </div>
-
-          <div className="absolute left-0 right-0 top-4 text-center">
-            <span className="rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-ink-950 backdrop-blur-sm">
-              Point at a QR code
-            </span>
           </div>
         </div>
       )}
 
+      {/* Error notification */}
       {error && (
-        <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-xs text-red-600">
+        <div className="mt-4 w-full rounded-[5px] border border-red-500/20 bg-red-500/10 p-3.5 text-xs text-red-600 dark:text-red-400 leading-relaxed">
           {error}
-        </p>
+        </div>
       )}
 
-      {/* Manual entry */}
-      <div className="mt-8 w-full">
-        <p className="mb-2 text-xs font-medium text-ink-400">
-          Or enter a card link manually
-        </p>
+      {/* Manual link input */}
+      <div className="mt-6 w-full rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
+        <label
+          htmlFor="manual-link"
+          className="block mb-2 font-mono text-[11px] uppercase tracking-wider text-[var(--muted-foreground)]"
+        >
+          Or enter card link / username manually
+        </label>
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -223,15 +459,16 @@ export default function ScannerPage() {
           className="flex gap-2"
         >
           <input
+            id="manual-link"
             name="url"
-            placeholder="nammainfo.in/username"
-            className="flex-1 rounded-xl border border-ink-200 bg-white px-3 py-2.5 text-sm outline-none"
+            placeholder="nammainfo.in/username or card_id"
+            className="flex-1 rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs outline-none focus:border-[var(--primary)] transition-colors"
           />
           <button
             type="submit"
-            className="rounded-xl bg-ink-950 px-4 py-2.5 text-xs font-medium text-white transition hover:bg-ink-800"
+            className="rounded-[5px] bg-[var(--primary)] px-4 py-2 text-xs font-semibold text-[var(--primary-foreground)] transition hover:opacity-90 active:scale-[0.98] cursor-pointer"
           >
-            Go
+            Open
           </button>
         </form>
       </div>

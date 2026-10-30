@@ -149,6 +149,49 @@ select {
 }
 @media (prefers-reduced-motion: reduce) {
   .auth-card-float { animation: none; transform: rotateX(12deg) rotateY(-14deg) rotateZ(3deg); }
+  .animate-qr-laser { animation: none; }
+}
+
+@keyframes qr-laser {
+  0% { top: 6%; opacity: 0.9; }
+  50% { top: 90%; opacity: 0.9; }
+  100% { top: 6%; opacity: 0.9; }
+}
+.animate-qr-laser {
+  animation: qr-laser 2.2s ease-in-out infinite;
+}
+
+/* Safe area utilities for mobile devices & PWAs */
+.pb-safe {
+  padding-bottom: max(env(safe-area-inset-bottom), 12px);
+}
+.pt-safe {
+  padding-top: max(env(safe-area-inset-top), 16px);
+}
+
+/* Hide namma info header when added to home screen (PWA standalone mode) */
+@media (display-mode: standalone) {
+  .pwa-hide-header {
+    display: none !important;
+  }
+  .pwa-standalone-main {
+    padding-top: max(env(safe-area-inset-top), 16px) !important;
+  }
+}
+
+/* Skeleton Loading utility */
+.skeleton {
+  background-color: var(--muted);
+  animation: skeleton-pulse 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
 }
 
 /* Light/dark switch on the home page: the new theme grows out of the

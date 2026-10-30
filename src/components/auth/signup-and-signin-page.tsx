@@ -229,11 +229,37 @@ function SignUpForm() {
           setCheckEmail(true);
         }
       } else {
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email,
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
           password,
         });
         if (signInError) throw signInError;
+
+        // Verify if account has admin privileges in profiles table
+        const authUser = signInData.user;
+        let isAdmin =
+          authUser?.app_metadata?.is_admin === true ||
+          authUser?.app_metadata?.role === "admin";
+
+        if (!isAdmin && authUser) {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("is_admin")
+            .eq("id", authUser.id)
+            .maybeSingle();
+
+          if (profile?.is_admin) {
+            isAdmin = true;
+          }
+        }
+
+        if (isAdmin) {
+          await supabase.auth.signOut();
+          setError("Administrator accounts must sign in via the Admin Portal at /admin/login.");
+          setLoading(false);
+          return;
+        }
+
         try {
           localStorage.setItem("nammainfo:hasAccount", "1");
         } catch {}

@@ -8,7 +8,7 @@ function initials(name: string | null) {
 
 export default function CardPreview({ profile }: { profile: Profile }) {
   return (
-    <div className="card-foil relative overflow-hidden rounded-[28px] p-6 text-white shadow-card sm:p-8">
+    <div className="card-foil relative overflow-hidden rounded-[5px] p-6 text-white shadow-card sm:p-8">
       <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/5 blur-2xl" />
       <div className="pointer-events-none absolute -bottom-16 -left-10 h-48 w-48 rounded-full bg-white/5 blur-3xl" />
 

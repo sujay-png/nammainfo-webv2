@@ -12,6 +12,10 @@ import dynamic from "next/dynamic";
 const CropModal = dynamic(() => import("@/components/ui/image-crop-modal"), {
   ssr: false,
 });
+import BuyTeamCardsModal from "@/components/BuyTeamCardsModal";
+import UpgradeToProModal from "@/components/UpgradeToProModal";
+import RenewalModal from "@/components/RenewalModal";
+import { calculateRenewalCost, getCardUnitPrice } from "@/lib/pricing";
 import {
   Plus,
   Trash2,
@@ -26,6 +30,10 @@ import {
   Camera,
   Loader2,
   AlertTriangle,
+  CreditCard,
+  Clock,
+  Sparkles,
+  ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
 import EmployeeLoginAccess, { removeEmployeeLogin } from "@/features/team/components/employee-login-access";
@@ -36,6 +44,8 @@ function OwnerTeamPage() {
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showBuyTeamModal, setShowBuyTeamModal] = useState(false);
+  const [showRenewalModal, setShowRenewalModal] = useState(false);
   const [editingEmp, setEditingEmp] = useState<Employee | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<Employee | null>(null);
   const [newEmp, setNewEmp] = useState({
@@ -78,6 +88,11 @@ function OwnerTeamPage() {
 
   async function addEmployee() {
     if (!profile || !newEmp.name || !newEmp.designation) return;
+    if (availableSlots <= 0) {
+      alert("No available team card slots. Please purchase additional team cards first.");
+      setShowBuyTeamModal(true);
+      return;
+    }
     setSaving(true);
     const supabase = createClient();
 
@@ -93,6 +108,10 @@ function OwnerTeamPage() {
       email: newEmp.email || null,
       phone: newEmp.phone || null,
       slug,
+      is_premium: true,
+      status: "active",
+      subscription_started_at: profile.subscription_started_at || new Date().toISOString(),
+      subscription_expires_at: profile.membership_expires_at || null,
     });
 
     if (!error) {
@@ -232,10 +251,31 @@ function OwnerTeamPage() {
     );
   }
 
+  // Primary card is the business owner's card
+  const isMember = Boolean(
+    profile?.subscription_plan === "pro" ||
+    profile?.subscription_plan === "lifetime" ||
+    profile?.is_member
+  );
+  const primaryCards = Number(profile?.primary_card_count ?? (isMember ? 1 : 0));
+
+  // Employee quota is strictly the slots purchased for team members
+  const quota = isMember ? Number(profile?.purchased_id_count || 0) : 0;
+  const availableSlots = Math.max(0, quota - employees.length);
+  const totalCards = primaryCards + employees.length;
+  const renewalCost = calculateRenewalCost(primaryCards, employees.length);
+
+  // Check company expiry (15 days alert)
+  const now = Date.now();
+  const dayMs = 86400000;
+  const expiresAt = profile?.membership_expires_at ? new Date(profile.membership_expires_at).getTime() : null;
+  const daysLeft = expiresAt ? Math.max(0, Math.ceil((expiresAt - now) / dayMs)) : null;
+  const isExpiringSoon = daysLeft !== null && daysLeft <= 15;
+
   return (
-    <div className="mx-auto max-w-lg px-4 py-5">
+    <div className="mx-auto max-w-lg px-4 py-5 space-y-4">
       {/* Header */}
-      <div className="mb-5 flex items-center justify-between">
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link
             href="/dashboard/settings"
@@ -243,23 +283,101 @@ function OwnerTeamPage() {
           >
             <ArrowLeft size={16} />
           </Link>
-          <h1 className="font-headline text-xl font-semibold">
-            Team / Employees
-          </h1>
+          <div>
+            <h1 className="font-headline text-xl font-semibold">
+              Team / Employees
+            </h1>
+            <p className="font-mono text-[11px] text-[var(--muted-foreground)]">
+              {totalCards} Total Cards ({primaryCards} Primary + {employees.length} Team)
+            </p>
+          </div>
         </div>
-        <button
-          onClick={() => setShowAdd(true)}
-          className="flex items-center gap-1.5 rounded-xl bg-[var(--foreground)] px-3 py-2 text-xs font-semibold text-[var(--background)] transition hover:opacity-80"
-        >
-          <Plus size={14} />
-          Add
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              if (availableSlots > 0) {
+                setShowAdd(true);
+              } else {
+                setShowBuyTeamModal(true);
+              }
+            }}
+            className="flex items-center gap-1.5 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 active:scale-[0.98] px-3.5 py-2 text-xs font-semibold shadow-sm transition-all cursor-pointer"
+          >
+            <Plus size={14} />
+            <span>Add Member</span>
+          </button>
+        </div>
       </div>
 
-      <p className="mb-4 text-sm text-[var(--muted-foreground)]">
-        Employees get their own digital card with their name and designation.
-        When someone scans their NFC or QR, it opens their profile.
-      </p>
+      {/* 15-Day Synchronized Company Renewal Warning */}
+      {isExpiringSoon && (
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Clock size={16} className="text-amber-600 dark:text-amber-400" />
+              <span className="font-semibold text-sm text-[var(--foreground)]">
+                Organization Subscription Expiring Soon
+              </span>
+            </div>
+            <span className="font-mono text-xs font-bold text-amber-700 bg-amber-500/20 px-2 py-0.5 rounded-md">
+              {daysLeft} days left
+            </span>
+          </div>
+          <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
+            All team member cards sync with your company&apos;s annual expiry. Renewing now covers all <strong>{totalCards} cards</strong> (1 Primary + {employees.length} Team) at the volume rate of <strong>₹{renewalCost.unitPrice}/card</strong>:
+          </p>
+          <div className="flex items-center justify-between pt-1 border-t border-amber-500/20">
+            <span className="font-headline font-bold text-sm text-[var(--foreground)]">
+              Total Renewal: ₹{renewalCost.totalAmount.toLocaleString("en-IN")}
+            </span>
+            <button
+              onClick={() => setShowRenewalModal(true)}
+              className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shadow-sm transition"
+            >
+              Renew All Cards
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Quota & Cards Allocation Bar */}
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-3 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Users size={16} className="text-[var(--primary)]" />
+            <span className="text-xs font-semibold text-[var(--foreground)]">
+              Card Slots Quota:
+            </span>
+          </div>
+          <span className="font-mono text-xs font-bold text-[var(--foreground)]">
+            {employees.length} of {quota} Slots Used
+          </span>
+        </div>
+
+        <div className="h-1.5 overflow-hidden rounded-full bg-[var(--muted)]">
+          <div
+            className="h-full rounded-full bg-[var(--primary)] transition-all duration-500"
+            style={{ width: `${Math.min(100, quota > 0 ? (employees.length / quota) * 100 : 0)}%` }}
+          />
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+          <span className="text-xs text-[var(--muted-foreground)]">
+            {availableSlots > 0
+              ? `${availableSlots} slot${availableSlots === 1 ? "" : "s"} ready to assign`
+              : quota === 0
+              ? "0 paid employee slots — purchase cards below to add members"
+              : "All paid employee slots currently assigned"}
+          </span>
+          <button
+            onClick={() => setShowBuyTeamModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--accent)] hover:bg-[var(--accent)]/80 text-[var(--foreground)] text-xs font-semibold transition cursor-pointer"
+          >
+            <CreditCard size={13} />
+            <span>Buy More Team Cards</span>
+          </button>
+        </div>
+      </div>
 
       {/* Employee list */}
       {employees.length > 0 ? (
@@ -417,11 +535,17 @@ function OwnerTeamPage() {
             No team members yet
           </p>
           <button
-            onClick={() => setShowAdd(true)}
-            className="flex items-center gap-1.5 rounded-xl bg-[var(--foreground)] px-4 py-2 text-xs font-semibold text-[var(--background)]"
+            onClick={() => {
+              if (availableSlots > 0) {
+                setShowAdd(true);
+              } else {
+                setShowBuyTeamModal(true);
+              }
+            }}
+            className="flex items-center gap-1.5 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 active:scale-[0.98] px-4 py-2 text-xs font-semibold shadow-sm transition-all cursor-pointer"
           >
             <Plus size={14} />
-            Add first member
+            {availableSlots > 0 ? "Add first member" : "Buy Cards to Add Member"}
           </button>
         </div>
       )}
@@ -605,6 +729,28 @@ function OwnerTeamPage() {
           }
           onCancel={handleCropCancel}
           onConfirm={handleCropConfirm}
+        />
+      )}
+
+      {/* Buy Team Member Cards Modal */}
+      {profile && (
+        <BuyTeamCardsModal
+          isOpen={showBuyTeamModal}
+          onClose={() => setShowBuyTeamModal(false)}
+          profile={profile}
+          currentTeamCount={employees.length}
+          onSuccess={() => load()}
+        />
+      )}
+
+      {/* Renewal Modal */}
+      {profile && (
+        <RenewalModal
+          isOpen={showRenewalModal}
+          onClose={() => setShowRenewalModal(false)}
+          profile={profile}
+          employeesCount={employees.length}
+          onSuccess={() => load()}
         />
       )}
     </div>

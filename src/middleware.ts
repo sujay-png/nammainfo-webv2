@@ -31,26 +31,119 @@ export async function middleware(request: NextRequest) {
 
   // getClaims() verifies the JWT locally (no network call when the project
   // uses asymmetric JWT signing keys) and still refreshes an expired
-  // session. getUser() hit Supabase Auth over the network on every single
-  // request, which was a big part of the slowness.
+  // session.
   const { data } = await supabase.auth.getClaims();
   const user = data?.claims?.sub ? { id: data.claims.sub } : null;
 
-  // Protect dashboard routes
-  if (request.nextUrl.pathname.startsWith("/dashboard") && !user) {
+  const claims = data?.claims as Record<string, any> | undefined;
+  const isAdmin = Boolean(
+    claims?.is_admin === true ||
+    claims?.app_metadata?.is_admin === true ||
+    claims?.app_metadata?.role === "admin"
+  );
+
+  // Subdomain routing: if request is on admin.* subdomain (e.g. admin.nammainfo.in or admin.localhost)
+  const host = request.headers.get("host") || "";
+  const isAdminSubdomain =
+    host.startsWith("admin.") || host.startsWith("admin.localhost");
+  const pathname = request.nextUrl.pathname;
+
+  if (isAdminSubdomain) {
+    // If request has prefix /admin on admin subdomain, redirect to clean URL
+    if (pathname === "/admin") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/";
+      return NextResponse.redirect(url);
+    }
+    if (pathname === "/admin/login") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      return NextResponse.redirect(url);
+    }
+
+    const isLogin = pathname === "/login";
+
+    // Unauthenticated user attempting to access admin console
+    if (!isLogin && !user) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      return NextResponse.redirect(url);
+    }
+
+    // Signed-in user visiting /login -> redirect to home /
+    if (isLogin && user) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/";
+      return NextResponse.redirect(url);
+    }
+
+    // Rewrite internal paths to /admin or /admin/login while keeping clean browser URL
+    if (!pathname.startsWith("/api")) {
+      const url = request.nextUrl.clone();
+      if (pathname === "/") {
+        url.pathname = "/admin";
+        return NextResponse.rewrite(url);
+      } else if (pathname === "/login") {
+        url.pathname = "/admin/login";
+        return NextResponse.rewrite(url);
+      } else if (!pathname.startsWith("/admin")) {
+        url.pathname = `/admin${pathname}`;
+        return NextResponse.rewrite(url);
+      }
+    }
+
+    return response;
+  }
+
+  // -------------------------------------------------------------
+  // Main domain routing: nammainfo.in (or localhost)
+  // -------------------------------------------------------------
+  const isAdminRoute =
+    pathname === "/admin" || pathname.startsWith("/admin/");
+  const isLoginPage = pathname.startsWith("/admin/login");
+
+  if (isAdminRoute && !isLoginPage) {
+    if (!user) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/admin/login";
+      return NextResponse.redirect(url);
+    }
+  }
+
+  // Redirect signed-in user from /admin/login to /admin
+  if (isLoginPage && user) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/admin";
+    return NextResponse.redirect(url);
+  }
+
+  // If an administrator accesses customer dashboard or onboarding, bounce them to /admin
+  if (
+    (pathname.startsWith("/dashboard") ||
+      pathname.startsWith("/onboarding")) &&
+    user &&
+    isAdmin
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/admin";
+    return NextResponse.redirect(url);
+  }
+
+  // Protect dashboard routes for regular users
+  if (pathname.startsWith("/dashboard") && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/signup";
     return NextResponse.redirect(url);
   }
 
-  // Redirect logged-in users from signup to dashboard
+  // Redirect logged-in users from signup/root
   if (
-    (request.nextUrl.pathname === "/signup" ||
-      request.nextUrl.pathname === "/") &&
-    user
+    (pathname === "/signup" || pathname === "/") &&
+    user &&
+    !isAdminSubdomain
   ) {
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    url.pathname = isAdmin ? "/admin" : "/dashboard";
     return NextResponse.redirect(url);
   }
 
@@ -58,8 +151,16 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Only the routes that actually need an auth decision. Public profile
-  // pages (/<username>, /c/<id>, …) no longer pay for an auth check on
-  // every visitor's request.
-  matcher: ["/", "/signup", "/dashboard/:path*", "/onboarding/:path*"],
+  // Routes needing auth decision and admin routing
+  matcher: [
+    "/",
+    "/login",
+    "/signup",
+    "/dashboard",
+    "/dashboard/:path*",
+    "/onboarding/:path*",
+    "/admin",
+    "/admin/:path*",
+  ],
 };
+
