@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdminAuth } from "@/admin/shared/lib/admin-auth";
+import { saveAdminNotes } from "@/admin/shared/lib/admin-notes";
 
 export const dynamic = "force-dynamic";
 
@@ -39,10 +40,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "No fields to update" });
     }
 
-    const { error: updateErr } = await supabase
-      .from("profiles")
-      .update(updates)
-      .eq("id", companyId);
+    // Stored in the admin-only notes table (see lib/admin-notes).
+    const { error: updateErr } = await saveAdminNotes(supabase, companyId, {
+      status: updates.trial_follow_up_status,
+      notes: updates.trial_follow_up_notes,
+      milestone: updates.trial_follow_up_milestone,
+    });
 
     if (updateErr) {
       console.error("[Admin Trial Follow-Up] Error:", updateErr);

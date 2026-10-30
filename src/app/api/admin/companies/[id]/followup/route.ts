@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdminAuth } from "@/admin/shared/lib/admin-auth";
+import { saveAdminNotes } from "@/admin/shared/lib/admin-notes";
 
 const followUpSchema = z.object({
   status: z.enum(["unattended", "attended"]).optional(),
@@ -28,19 +29,16 @@ export async function POST(
       );
     }
 
-    const updates: Record<string, any> = {};
-    if (parsed.data.status !== undefined) {
-      updates.follow_up_status = parsed.data.status;
-    }
-    if (parsed.data.notes !== undefined) {
-      updates.follow_up_notes = parsed.data.notes;
-    }
+    const updates = {
+      ...(parsed.data.status !== undefined ? { follow_up_status: parsed.data.status } : {}),
+      ...(parsed.data.notes !== undefined ? { follow_up_notes: parsed.data.notes } : {}),
+    };
 
-    const supabase = auth.adminSupabase;
-    const { error: updateError } = await supabase
-      .from("profiles")
-      .update(updates)
-      .eq("id", id);
+    // Stored in the admin-only notes table (see lib/admin-notes).
+    const { error: updateError } = await saveAdminNotes(auth.adminSupabase, id, {
+      companyStatus: parsed.data.status,
+      companyNotes: parsed.data.notes,
+    });
 
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });

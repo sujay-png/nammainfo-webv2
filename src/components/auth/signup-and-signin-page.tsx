@@ -160,6 +160,39 @@ function passwordStrength(pw: string) {
 /*  Page                                                                */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Turns Supabase / network errors into a sentence people can act on.
+ * (A dropped connection used to fail silently: "Failed to fetch".)
+ */
+function friendlyAuthError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err ?? "");
+  const name = err instanceof Error ? err.name : "";
+  const offline = typeof navigator !== "undefined" && navigator.onLine === false;
+  if (
+    offline ||
+    name === "AuthRetryableFetchError" ||
+    /failed to fetch|network ?error|load failed|fetch failed|networkerror/i.test(raw)
+  ) {
+    return "Can't reach Namma Info right now. Check your internet connection and try again.";
+  }
+  if (/already registered|already exists/i.test(raw)) {
+    return "An account with that email already exists. Try signing in instead.";
+  }
+  if (/invalid login credentials/i.test(raw)) {
+    return "That email and password don't match our records.";
+  }
+  if (/email not confirmed/i.test(raw)) {
+    return "Please confirm your email first. Open the link we sent you, then sign in.";
+  }
+  if (/rate limit|too many requests|429/i.test(raw)) {
+    return "Too many attempts. Please wait a minute and try again.";
+  }
+  if (/password should be at least|weak password/i.test(raw)) {
+    return "Please choose a stronger password (at least 6 characters).";
+  }
+  return raw || "Something went wrong. Please try again.";
+}
+
 function SignUpForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -199,7 +232,7 @@ function SignUpForm() {
     try {
       if (mode === "signup") {
         const { data, error: signUpError } = await supabase.auth.signUp({
-          email,
+          email: email.trim(),
           password,
           options: {
             // In the save-card flow there's no onboarding: the confirmation
@@ -268,14 +301,7 @@ function SignUpForm() {
         router.push(saveId ? "/dashboard/saved" : next ?? "/dashboard");
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Something went wrong.";
-      setError(
-        message.includes("already registered")
-          ? "An account with that email already exists — try signing in instead."
-          : message.includes("Invalid login credentials")
-            ? "That email and password don't match our records."
-            : message
-      );
+      setError(friendlyAuthError(err));
     } finally {
       setLoading(false);
     }

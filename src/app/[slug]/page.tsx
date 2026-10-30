@@ -73,6 +73,7 @@ export async function generateMetadata({
 }
 
 import GatedProfileView from "@/components/GatedProfileView";
+import { getMembership } from "@/lib/membership";
 
 export default async function SlugPage({
   params,
@@ -85,31 +86,17 @@ export default async function SlugPage({
 
   const { profile } = result;
 
-  // Access Control: Suspended account
-  if (profile.status === "suspended") {
+  // Access control: suspended, free (never paid) or expired accounts show
+  // a holding page instead of the profile. Shared rule: lib/membership.
+  const membership = getMembership(profile);
+  if (membership.isSuspended) {
     return <GatedProfileView profile={profile} reason="suspended" />;
   }
-
-  // Check plan & expiry
-  const isLifetime =
-    profile.subscription_plan === "lifetime" ||
-    (profile.membership_expires_at
-      ? new Date(profile.membership_expires_at).getFullYear() >= 2090
-      : false);
-
-  const isFree =
-    profile.subscription_plan === "free" ||
-    (!profile.is_member && !profile.membership_expires_at);
-
-  if (isFree) {
+  if (membership.isFree) {
     return <GatedProfileView profile={profile} reason="free" />;
   }
-
-  if (!isLifetime && profile.membership_expires_at) {
-    const expiryTime = new Date(profile.membership_expires_at).getTime();
-    if (expiryTime < Date.now()) {
-      return <GatedProfileView profile={profile} reason="expired" />;
-    }
+  if (membership.isExpired) {
+    return <GatedProfileView profile={profile} reason="expired" />;
   }
 
   const supabase = createCachedPublicClient();

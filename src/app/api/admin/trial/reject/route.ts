@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdminAuth } from "@/admin/shared/lib/admin-auth";
+import { saveAdminNotes } from "@/admin/shared/lib/admin-notes";
 
 export const dynamic = "force-dynamic";
 
@@ -23,11 +24,13 @@ export async function POST(request: Request) {
 
     const { error: updateErr } = await supabase
       .from("profiles")
-      .update({
-        trial_status: "rejected",
-        trial_follow_up_notes: reason ? `Rejected: ${reason}` : "Trial application rejected by admin.",
-      })
+      .update({ trial_status: "rejected" })
       .eq("id", companyId);
+    if (!updateErr) {
+      await saveAdminNotes(supabase, companyId, {
+        notes: reason ? `Rejected: ${reason}` : "Trial application rejected by admin.",
+      });
+    }
 
     if (updateErr) {
       console.error("[Admin Trial Reject] Error:", updateErr);

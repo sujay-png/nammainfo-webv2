@@ -118,6 +118,13 @@ function OwnerTeamPage() {
       setNewEmp({ name: "", designation: "", email: "", phone: "" });
       setShowAdd(false);
       load();
+    } else if (/team slots/i.test(error.message)) {
+      // The database checks paid slots too (e.g. if this page was out of date).
+      alert("No available team card slots. Please purchase additional team cards first.");
+      setShowAdd(false);
+      setShowBuyTeamModal(true);
+    } else {
+      alert(`Couldn't add this member: ${error.message}`);
     }
     setSaving(false);
   }

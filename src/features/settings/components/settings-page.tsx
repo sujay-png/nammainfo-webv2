@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import UpgradeToProModal from "@/components/UpgradeToProModal";
 import RenewalModal from "@/components/RenewalModal";
+import { getMembership } from "@/lib/membership";
 
 function OwnerSettingsPage() {
   const router = useRouter();
@@ -158,14 +159,12 @@ function OwnerSettingsPage() {
           sublabel="Digital vanity link and NFC card access"
           badge={(() => {
             if (!profile) return "";
-            if (profile.subscription_plan === "lifetime") return "Lifetime";
-            if (profile.subscription_plan === "free" || (!profile.is_member && !profile.membership_expires_at)) {
-              return "Free Tier";
-            }
-            const day = 86400000;
-            const expires = new Date(profile.membership_expires_at!);
-            const left = Math.max(0, Math.ceil((expires.getTime() - Date.now()) / day));
-            return left > 0 ? `Pro (${left}d)` : "Expired";
+            const m = getMembership(profile);
+            if (m.isLifetime) return "Lifetime";
+            if (m.isFree) return "Free Tier";
+            if (m.isExpired) return "Expired";
+            const label = m.isTrial ? "Trial" : "Pro";
+            return m.daysLeft !== null ? `${label} (${m.daysLeft}d)` : label;
           })()}
           onClick={() => {
             const isMember = Boolean(

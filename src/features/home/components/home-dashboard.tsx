@@ -71,6 +71,7 @@ function ConnectionAvatar({
 import RenewalModal from "@/components/RenewalModal";
 import { calculateRenewalCost } from "@/lib/pricing";
 import { calculateProfileCompletion } from "@/lib/profile-completion";
+import { getMembership } from "@/lib/membership";
 
 /* ------------------------------------------------------------------ */
 /*  Stat card                                                          */
@@ -130,19 +131,12 @@ function ValidityCard({
 }) {
   const joined = startOfDay(new Date(profile.created_at));
 
-  const isTrial = profile.subscription_plan === "trial";
-
-  const isFree =
-    !isTrial &&
-    (profile.subscription_plan === "free" ||
-      (!profile.is_member && !profile.membership_expires_at));
-
-  const isLifetime =
-    !isTrial &&
-    (profile.subscription_plan === "lifetime" ||
-      (profile.membership_expires_at
-        ? new Date(profile.membership_expires_at).getFullYear() >= 2090
-        : false));
+  // Shared rule (lib/membership): members from before the plans system
+  // have plan "free" but is_member = true, and must not be shown as free.
+  const membership = getMembership(profile);
+  const isTrial = membership.isTrial;
+  const isFree = membership.isFree;
+  const isLifetime = !isTrial && membership.isLifetime;
 
   if (isFree) {
     const isProfileComplete = completionPct === 100;
@@ -577,10 +571,6 @@ function OwnerHomePage() {
   const completedCount = completionData.completedCount;
   const completionPct = completionData.percentage;
   const pendingItems = completionData.missingItems;
-
-  const isFree =
-    profile.subscription_plan === "free" ||
-    (!profile.is_member && !profile.membership_expires_at);
 
   const avgRating =
     reviews.length > 0

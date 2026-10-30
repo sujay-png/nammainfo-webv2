@@ -98,6 +98,14 @@ export async function middleware(request: NextRequest) {
   // -------------------------------------------------------------
   // Main domain routing: nammainfo.in (or localhost)
   // -------------------------------------------------------------
+  // Friendly aliases people type: nammainfo.in/login, /signin
+  if (pathname === "/login" || pathname === "/signin") {
+    const url = request.nextUrl.clone();
+    url.pathname = user ? "/dashboard" : "/signup";
+    url.search = user ? "" : "?mode=signin";
+    return NextResponse.redirect(url);
+  }
+
   const isAdminRoute =
     pathname === "/admin" || pathname.startsWith("/admin/");
   const isLoginPage = pathname.startsWith("/admin/login");
@@ -107,6 +115,23 @@ export async function middleware(request: NextRequest) {
       const url = request.nextUrl.clone();
       url.pathname = "/admin/login";
       return NextResponse.redirect(url);
+    }
+    // Signed-in customers don't belong in the admin console: send them to
+    // their dashboard. (Staff = admin or designer; checked in the database
+    // because designers have no admin claim in their login token.)
+    if (!isAdmin) {
+      const { data: staff } = await supabase
+        .from("profiles")
+        .select("is_admin, role")
+        .eq("id", user.id)
+        .maybeSingle();
+      const isStaff = Boolean(staff?.is_admin || staff?.role === "admin" || staff?.role === "designer");
+      if (!isStaff) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/dashboard";
+        url.search = "";
+        return NextResponse.redirect(url);
+      }
     }
   }
 
@@ -155,6 +180,7 @@ export const config = {
   matcher: [
     "/",
     "/login",
+    "/signin",
     "/signup",
     "/dashboard",
     "/dashboard/:path*",

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireStaffAuth } from "@/admin/shared/lib/admin-auth";
+import { loadAdminNotes } from "@/admin/shared/lib/admin-notes";
 import type { Company, AdminStats, AccountStatus, SubscriptionPlanType } from "@/admin/entities/company/model/types";
 import { calculateProfileCompletion } from "@/lib/profile-completion";
 
@@ -103,7 +104,14 @@ export async function GET(request: Request) {
       (p: any) => !p.is_admin && p.role !== "admin"
     );
 
+    // Admin-only follow-up notes live in their own table (lib/admin-notes).
+    const notesMap = await loadAdminNotes(
+      supabase,
+      customerProfiles.map((p: any) => p.id as string)
+    );
+
     const companies: Company[] = customerProfiles.map((p: any) => {
+      const n = notesMap.get(p.id);
       const assignedCount = employeeMap.get(p.id) || 0;
       const premEmpCount = premiumEmployeeMap.get(p.id) || 0;
       const latestEmpExpiry = employeeExpiryMap.get(p.id);
@@ -236,8 +244,8 @@ export async function GET(request: Request) {
         createdAt: p.created_at,
         avatarUrl: p.avatar_url,
         logoUrl: p.logo_url,
-        followUpStatus: (p.follow_up_status as "unattended" | "attended") || "unattended",
-        followUpNotes: p.follow_up_notes || "",
+        followUpStatus: n?.followUpStatus ?? ((p.follow_up_status as "unattended" | "attended") || "unattended"),
+        followUpNotes: n?.followUpNotes ?? (p.follow_up_notes || ""),
 
         // 100-Day Free Trial details
         trialStatus: p.trial_status || "none",
@@ -245,9 +253,10 @@ export async function GET(request: Request) {
         trialRequestedAt: p.trial_requested_at || null,
         trialApprovedAt: p.trial_approved_at || null,
         trialExtensionDays: p.trial_extension_days || 0,
-        trialFollowUpMilestone: p.trial_follow_up_milestone || 0,
-        trialFollowUpStatus: (p.trial_follow_up_status as "unattended" | "attended") || "unattended",
-        trialFollowUpNotes: p.trial_follow_up_notes || "",
+        trialFollowUpMilestone: n?.trialFollowUpMilestone ?? (p.trial_follow_up_milestone || 0),
+        trialFollowUpStatus:
+          n?.trialFollowUpStatus ?? ((p.trial_follow_up_status as "unattended" | "attended") || "unattended"),
+        trialFollowUpNotes: n?.trialFollowUpNotes ?? (p.trial_follow_up_notes || ""),
         profileCompletionPercentage: completion.percentage,
       };
     });

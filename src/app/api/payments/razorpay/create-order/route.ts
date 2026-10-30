@@ -127,9 +127,14 @@ export async function POST(req: Request) {
       amount: amountInPaise,
       currency: "INR",
       receipt,
+      // The payment check reads these back from Razorpay, so what was bought
+      // can't be changed from the browser.
       notes: {
         userId: user.id,
         orderType,
+        cardQuantity: calculation.cardQuantity,
+        unitPrice: calculation.unitPrice,
+        totalAmount: calculation.totalAmount,
         businessName: profile.business_name || profile.owner_name || "",
       },
     });

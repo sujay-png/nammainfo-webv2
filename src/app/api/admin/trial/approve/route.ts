@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdminAuth } from "@/admin/shared/lib/admin-auth";
+import { saveAdminNotes } from "@/admin/shared/lib/admin-notes";
 
 export const dynamic = "force-dynamic";
 
@@ -39,23 +40,30 @@ export async function POST(request: Request) {
     const oneHundredDaysMs = 100 * 24 * 60 * 60 * 1000;
     const expiresAt = new Date(now.getTime() + oneHundredDaysMs).toISOString();
 
-    const { error: updateErr } = await supabase
-      .from("profiles")
-      .update({
-        subscription_plan: "trial",
-        is_member: true,
-        status: "active",
-        primary_card_count: 1,
-        subscription_started_at: now.toISOString(),
-        membership_expires_at: expiresAt,
-        trial_status: "approved",
-        trial_approved_at: now.toISOString(),
-        trial_extension_days: 0,
-        trial_follow_up_milestone: 0,
-        trial_follow_up_status: "unattended",
-        trial_follow_up_notes: `100-day Free Trial approved on ${now.toLocaleDateString("en-IN")}. Day 20 follow-up scheduled.`,
-      })
-      .eq("id", companyId);
+    const approval: Record<string, unknown> = {
+      subscription_plan: "trial",
+      is_member: true,
+      status: "active",
+      primary_card_count: 1,
+      subscription_started_at: now.toISOString(),
+      membership_expires_at: expiresAt,
+      trial_status: "approved",
+      trial_approved_at: now.toISOString(),
+      trial_extension_days: 0,
+    };
+    let { error: updateErr } = await supabase.from("profiles").update(approval).eq("id", companyId);
+    if (updateErr?.message?.includes("primary_card_count")) {
+      // Database migration not run yet: approve without that column.
+      delete approval.primary_card_count;
+      ({ error: updateErr } = await supabase.from("profiles").update(approval).eq("id", companyId));
+    }
+    if (!updateErr) {
+      await saveAdminNotes(supabase, companyId, {
+        milestone: 0,
+        status: "unattended",
+        notes: `100-day Free Trial approved on ${now.toLocaleDateString("en-IN")}. Day 20 follow-up scheduled.`,
+      });
+    }
 
     if (updateErr) {
       console.error("[Admin Trial Approve] Error updating profile:", updateErr);

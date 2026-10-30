@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { calculateProfileCompletion } from "@/lib/profile-completion";
+import { createAdminClient } from "@/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -91,8 +92,19 @@ export async function POST(req: Request) {
       );
     }
 
+    // Trial fields are protected in the database, so the server records the
+    // application (the checks above already ran for this signed-in user).
+    let admin;
+    try {
+      admin = createAdminClient();
+    } catch {
+      return NextResponse.json(
+        { error: "Free trial applications are not set up on the server yet (missing SUPABASE_SERVICE_ROLE_KEY)." },
+        { status: 500 }
+      );
+    }
     const now = new Date().toISOString();
-    const { error: updateErr } = await supabase
+    const { error: updateErr } = await admin
       .from("profiles")
       .update({
         trial_status: "pending_approval",

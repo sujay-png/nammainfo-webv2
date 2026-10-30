@@ -16,6 +16,7 @@ const CropModal = dynamic(() => import("@/components/ui/image-crop-modal"), {
   ssr: false,
 });
 import UpgradeToProModal from "@/components/UpgradeToProModal";
+import { getMembership } from "@/lib/membership";
 import {
   Edit3,
   Plus,
@@ -240,11 +241,7 @@ function OwnerProfilePage() {
 
 
   async function shareProfile() {
-    const isFree =
-      profile?.subscription_plan === "free" ||
-      (!profile?.is_member && !profile?.membership_expires_at);
-
-    if (isFree) {
+    if (getMembership(profile).isFree) {
       setShowUpgradeModal(true);
       return;
     }
