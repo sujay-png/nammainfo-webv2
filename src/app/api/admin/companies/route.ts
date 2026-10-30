@@ -98,12 +98,9 @@ export async function GET(request: Request) {
     let pendingTrialsCount = 0;
     let activeTrialsCount = 0;
 
-    // Strictly filter out platform administrator & internal agency accounts so they are not treated as customer companies
+    // Filter out platform administrator accounts so only customer companies are listed
     const customerProfiles = (profiles || []).filter(
-      (p: any) =>
-        !p.is_admin &&
-        p.email !== "aksharadigitalindia@outlook.com" &&
-        p.email !== "adithyaputhraya@gmail.com"
+      (p: any) => !p.is_admin && p.role !== "admin"
     );
 
     const companies: Company[] = customerProfiles.map((p: any) => {
