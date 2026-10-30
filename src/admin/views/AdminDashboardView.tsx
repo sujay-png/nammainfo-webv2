@@ -21,15 +21,13 @@ import { DeleteCompanyModal } from "@/admin/features/delete-company/ui/DeleteCom
 import { AdminOrdersView } from "@/admin/views/AdminOrdersView";
 import { DesignerDashboardView } from "@/admin/views/DesignerDashboardView";
 import { StaffAccountsView } from "@/admin/widgets/staff-accounts/ui/StaffAccountsView";
-import { fetchAdminCompanies, updateCompanyValidity } from "@/admin/entities/company/api/company-api";
+import { fetchAdminCompanies } from "@/admin/entities/company/api/company-api";
 import { fetchAdminOrders } from "@/admin/entities/order/api/order-api";
 import { getDaysRemaining } from "@/admin/shared/lib/formatters";
 import type {
   Company,
   AdminStats,
   CompanyFilters,
-  SubscriptionPlanType,
-  AccountStatus,
 } from "@/admin/entities/company/model/types";
 
 export const AdminDashboardView: React.FC = () => {
@@ -230,63 +228,6 @@ export const AdminDashboardView: React.FC = () => {
     []
   );
 
-  // 1-click plan change directly from table row without opening modal or page reload
-  const handleQuickPlanChange = useCallback(
-    async (company: Company, newPlan: SubscriptionPlanType) => {
-      const today = new Date().toISOString().split("T")[0];
-      let finalStart: string | null = null;
-      let finalExpiry: string | null = null;
-      const newStatus: AccountStatus =
-        company.status === "suspended" ? "suspended" : "active";
-
-      if (newPlan === "trial") {
-        finalStart = new Date(`${today}T00:00:00.000Z`).toISOString();
-        const trialDaysMs = 99 * 24 * 60 * 60 * 1000;
-        const expDate = new Date(new Date(today).getTime() + trialDaysMs)
-          .toISOString()
-          .split("T")[0];
-        finalExpiry = new Date(`${expDate}T23:59:59.000Z`).toISOString();
-      } else if (newPlan === "pro") {
-        finalStart = new Date(`${today}T00:00:00.000Z`).toISOString();
-        const [y, m, d] = today.split("-").map(Number);
-        const nextY = y + 1;
-        const mm = String(m).padStart(2, "0");
-        const dd = String(d).padStart(2, "0");
-        const expDate = `${nextY}-${mm}-${dd}`;
-        finalExpiry = new Date(`${expDate}T23:59:59.000Z`).toISOString();
-      } else {
-        finalStart = null;
-        finalExpiry = null;
-      }
-
-      // 1. Instant local update in 0ms (no reload, instant badge change)
-      handleUpdateCompanyLocally({
-        id: company.id,
-        subscriptionPlan: newPlan,
-        subscriptionStartedAt: finalStart,
-        membershipExpiresAt: finalExpiry,
-        status: newStatus,
-        primaryCardCount: newPlan === "free" ? 0 : 1,
-      });
-
-      // 2. Persist to API
-      try {
-        await updateCompanyValidity(company.id, {
-          subscriptionPlan: newPlan,
-          subscriptionStartedAt: finalStart,
-          membershipExpiresAt: finalExpiry,
-          primaryCardCount: newPlan === "free" ? 0 : 1,
-        });
-        // 3. Silent background sync without table spinner
-        loadData({ silent: true });
-      } catch (err: any) {
-        alert(`Failed to update plan: ${err.message}`);
-        loadData({ silent: true });
-      }
-    },
-    [handleUpdateCompanyLocally, loadData]
-  );
-
   // Open detail modal
   const handleSelectCompany = (company: Company) => {
     setSelectedCompany(company);
@@ -457,7 +398,6 @@ export const AdminDashboardView: React.FC = () => {
                   loading={loading}
                   onSelectCompany={handleSelectCompany}
                   onDeleteCompany={handleDeleteRequest}
-                  onQuickPlanChange={handleQuickPlanChange}
                 />
               </div>
             )}

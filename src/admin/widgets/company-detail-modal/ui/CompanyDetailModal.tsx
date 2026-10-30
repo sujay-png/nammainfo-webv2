@@ -557,9 +557,9 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                     onChange={(e) => handlePlanSelect(e.target.value as SubscriptionPlanType)}
                     className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs font-medium outline-none focus:border-[var(--foreground)]"
                   >
-                    <option value="free">Free Plan</option>
-                    <option value="trial">Free Trial (100 Days)</option>
-                    <option value="pro">Pro Plan</option>
+                    <option value="free">Free</option>
+                    <option value="trial">Free Trial</option>
+                    <option value="pro">Pro</option>
                   </select>
                 </div>
 
