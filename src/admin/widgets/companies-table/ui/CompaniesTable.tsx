@@ -7,13 +7,14 @@ import {
 } from "lucide-react";
 import { formatDate, getDaysRemaining } from "@/admin/shared/lib/formatters";
 import { Badge } from "@/admin/shared/ui/Badge";
-import type { Company } from "@/admin/entities/company/model/types";
+import type { Company, SubscriptionPlanType } from "@/admin/entities/company/model/types";
 
 interface CompaniesTableProps {
   companies: Company[];
   loading: boolean;
   onSelectCompany: (company: Company) => void;
   onDeleteCompany: (company: Company, e: React.MouseEvent) => void;
+  onQuickPlanChange?: (company: Company, newPlan: SubscriptionPlanType) => void;
 }
 
 export const CompaniesTable: React.FC<CompaniesTableProps> = ({
@@ -21,6 +22,7 @@ export const CompaniesTable: React.FC<CompaniesTableProps> = ({
   loading,
   onSelectCompany,
   onDeleteCompany,
+  onQuickPlanChange,
 }) => {
   if (loading) {
     return (
@@ -127,23 +129,46 @@ export const CompaniesTable: React.FC<CompaniesTableProps> = ({
                     )}
                   </td>
 
-                  {/* Plan Tier - Pro in Gold, Free Trial in Sky, Free in Neutral */}
+                  {/* Plan Tier - Pro in Gold, Free Trial in Sky, Free in Neutral (1-click changer) */}
                   <td className="px-4 py-3.5 whitespace-nowrap">
-                    <Badge
-                      variant={
-                        company.subscriptionPlan === "pro"
-                          ? "pro"
+                    {onQuickPlanChange ? (
+                      <div onClick={(e) => e.stopPropagation()} className="inline-block">
+                        <select
+                          value={company.subscriptionPlan}
+                          onChange={(e) =>
+                            onQuickPlanChange(company, e.target.value as SubscriptionPlanType)
+                          }
+                          className={`rounded-[4px] px-2 py-1 text-xs font-semibold cursor-pointer border transition-colors outline-none ${
+                            company.subscriptionPlan === "pro"
+                              ? "bg-amber-500/10 text-[#D4AF37] dark:text-[#F3C95F] border-amber-500/30"
+                              : company.subscriptionPlan === "trial"
+                              ? "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30"
+                              : "bg-[var(--accent)] text-[var(--muted-foreground)] border-[var(--border)]"
+                          }`}
+                          title="Click to instantly change plan tier"
+                        >
+                          <option value="free" className="bg-[var(--card)] text-[var(--foreground)]">Free Tier</option>
+                          <option value="trial" className="bg-[var(--card)] text-[var(--foreground)]">Free Trial (100d)</option>
+                          <option value="pro" className="bg-[var(--card)] text-[var(--foreground)]">Pro Plan (1y)</option>
+                        </select>
+                      </div>
+                    ) : (
+                      <Badge
+                        variant={
+                          company.subscriptionPlan === "pro"
+                            ? "pro"
+                            : company.subscriptionPlan === "trial"
+                            ? "trial"
+                            : "free"
+                        }
+                      >
+                        {company.subscriptionPlan === "pro"
+                          ? "Pro"
                           : company.subscriptionPlan === "trial"
-                          ? "trial"
-                          : "free"
-                      }
-                    >
-                      {company.subscriptionPlan === "pro"
-                        ? "Pro"
-                        : company.subscriptionPlan === "trial"
-                        ? "Free Trial"
-                        : "Free"}
-                    </Badge>
+                          ? "Free Trial"
+                          : "Free"}
+                      </Badge>
+                    )}
                   </td>
 
                   {/* Member Since */}
@@ -246,21 +271,43 @@ export const CompaniesTable: React.FC<CompaniesTableProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
-                  <Badge
-                    variant={
-                      company.subscriptionPlan === "pro"
-                        ? "pro"
+                  {onQuickPlanChange ? (
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <select
+                        value={company.subscriptionPlan}
+                        onChange={(e) =>
+                          onQuickPlanChange(company, e.target.value as SubscriptionPlanType)
+                        }
+                        className={`rounded-[4px] px-2 py-0.5 text-[11px] font-semibold cursor-pointer border transition-colors outline-none ${
+                          company.subscriptionPlan === "pro"
+                            ? "bg-amber-500/10 text-[#D4AF37] dark:text-[#F3C95F] border-amber-500/30"
+                            : company.subscriptionPlan === "trial"
+                            ? "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30"
+                            : "bg-[var(--accent)] text-[var(--muted-foreground)] border-[var(--border)]"
+                        }`}
+                      >
+                        <option value="free" className="bg-[var(--card)] text-[var(--foreground)]">Free</option>
+                        <option value="trial" className="bg-[var(--card)] text-[var(--foreground)]">Free Trial</option>
+                        <option value="pro" className="bg-[var(--card)] text-[var(--foreground)]">Pro</option>
+                      </select>
+                    </div>
+                  ) : (
+                    <Badge
+                      variant={
+                        company.subscriptionPlan === "pro"
+                          ? "pro"
+                          : company.subscriptionPlan === "trial"
+                          ? "trial"
+                          : "free"
+                      }
+                    >
+                      {company.subscriptionPlan === "pro"
+                        ? "Pro"
                         : company.subscriptionPlan === "trial"
-                        ? "trial"
-                        : "free"
-                    }
-                  >
-                    {company.subscriptionPlan === "pro"
-                      ? "Pro"
-                      : company.subscriptionPlan === "trial"
-                      ? "Free Trial"
-                      : "Free"}
-                  </Badge>
+                        ? "Free Trial"
+                        : "Free"}
+                    </Badge>
+                  )}
                   {company.subscriptionPlan === "free" ? (
                     <Badge variant="na">N/A</Badge>
                   ) : isExpired ? (

@@ -40,9 +40,11 @@ interface CompanyDetailModalProps {
   company: Company | null;
   isOpen: boolean;
   onClose: () => void;
-  onRefresh: () => void;
+  onRefresh?: (options?: { silent?: boolean }) => void;
+  onUpdateCompany?: (updated: Partial<Company> & { id: string }) => void;
   onDeleteRequest?: (company: Company) => void;
   readOnly?: boolean;
+  initialTab?: "overview" | "subscription" | "employees" | "qrcodes";
 }
 
 export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
@@ -50,8 +52,10 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
   isOpen,
   onClose,
   onRefresh,
+  onUpdateCompany,
   onDeleteRequest,
   readOnly = false,
+  initialTab,
 }) => {
   const [details, setDetails] = useState<CompanyWithEmployees | null>(null);
   const [loading, setLoading] = useState(false);
@@ -73,30 +77,51 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
   // State for updating an individual employee plan
   const [updatingEmpId, setUpdatingEmpId] = useState<string | null>(null);
 
+  // Instantly initialize form values & details from company props (0ms wait)
   useEffect(() => {
-    if (company?.id && isOpen) {
+    if (company && isOpen) {
+      if (initialTab) {
+        setActiveTab(initialTab);
+      }
+      const activePlan: SubscriptionPlanType = company.subscriptionPlan || "free";
+      setEditPlan(activePlan);
+      setEditStartDate(activePlan !== "free" ? formatDateInput(company.subscriptionStartedAt) : "");
+      setEditExpiryDate(activePlan !== "free" ? formatDateInput(company.membershipExpiresAt) : "");
+
+      // Synchronously seed details from company props so UI renders immediately
+      setDetails((prev) => {
+        if (prev && prev.id === company.id) return prev;
+        return {
+          ...company,
+          employees: [],
+        };
+      });
+
+      // Background fetch for team members and fresh database status
+      let isCancelled = false;
       setLoading(true);
       fetchCompanyDetails(company.id)
         .then((data) => {
+          if (isCancelled) return;
           setDetails(data);
-          const activePlan: SubscriptionPlanType =
-            data.subscriptionPlan === "trial"
-              ? "trial"
-              : data.subscriptionPlan === "pro"
-              ? "pro"
-              : "free";
-          setEditPlan(activePlan);
-          setEditStartDate(activePlan !== "free" ? formatDateInput(data.subscriptionStartedAt) : "");
-          setEditExpiryDate(activePlan !== "free" ? formatDateInput(data.membershipExpiresAt) : "");
+          // Only update edit form if user hasn't modified it yet
+          setEditPlan((prev) => (prev === company.subscriptionPlan ? (data.subscriptionPlan || "free") : prev));
         })
         .catch((err) => {
-          console.error("Failed to load company details:", err);
+          if (!isCancelled) console.error("Failed to load company details:", err);
         })
-        .finally(() => setLoading(false));
+        .finally(() => {
+          if (!isCancelled) setLoading(false);
+        });
+
+      return () => {
+        isCancelled = true;
+      };
     } else if (!isOpen) {
       setDetails(null);
+      setSavedSuccess(false);
     }
-  }, [company?.id, isOpen]);
+  }, [company, isOpen, initialTab]);
 
   if (!company) return null;
 
@@ -216,9 +241,26 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
       setEditStartDate(finalStart ? formatDateInput(finalStart) : "");
       setEditExpiryDate(finalExpiry ? formatDateInput(finalExpiry) : "");
 
+      const primaryCount = editPlan === "free" ? 0 : 1;
+      // Optimistically update company in parent table immediately (0ms delay)
+      if (onUpdateCompany) {
+        onUpdateCompany({
+          id: current.id,
+          subscriptionPlan: editPlan,
+          subscriptionStartedAt: finalStart,
+          membershipExpiresAt: finalExpiry,
+          status: newStatus,
+          primaryCardCount: primaryCount,
+        });
+      }
+
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 2500);
-      onRefresh();
+
+      // Silent sync with backend without showing full-screen table reload
+      if (onRefresh) {
+        onRefresh({ silent: true });
+      }
     } catch (err: any) {
       alert(`Failed to update validity: ${err.message}`);
     } finally {
@@ -266,7 +308,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
         };
       });
 
-      onRefresh();
+      onRefresh?.({ silent: true });
     } catch (err: any) {
       alert(`Failed to update team member plan: ${err.message}`);
     } finally {
@@ -460,21 +502,32 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                   </div>
                   <div>
                     <span className="text-[var(--muted-foreground)] block">Current Validity</span>
-                    <span
-                      className={`font-mono font-bold ${
-                        isExpired
-                          ? "text-rose-500"
-                          : validity.isEndingSoon
-                          ? "text-amber-500"
-                          : "text-[var(--foreground)]"
-                      }`}
-                    >
-                      {current.subscriptionPlan === "free"
-                        ? "N/A (Free Tier)"
-                        : isExpired
-                        ? "Subscription Expired"
-                        : validity.label}
-                    </span>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span
+                        className={`font-mono font-bold ${
+                          isExpired
+                            ? "text-rose-500"
+                            : validity.isEndingSoon
+                            ? "text-amber-500"
+                            : "text-[var(--foreground)]"
+                        }`}
+                      >
+                        {current.subscriptionPlan === "free"
+                          ? "N/A (Free Tier)"
+                          : isExpired
+                          ? "Subscription Expired"
+                          : validity.label}
+                      </span>
+                      {!readOnly && (
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab("subscription")}
+                          className="rounded-[4px] px-2 py-0.5 text-[10px] font-semibold text-[var(--foreground)] bg-[var(--accent)] hover:bg-[var(--foreground)] hover:text-[var(--background)] border border-[var(--border)] transition-colors cursor-pointer"
+                        >
+                          Change Plan
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
