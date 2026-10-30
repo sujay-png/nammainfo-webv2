@@ -139,8 +139,9 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
       }
     } else if (newPlan === "trial") {
       setEditStartDate(start);
-      const oneHundredDaysMs = 100 * 24 * 60 * 60 * 1000;
-      const exp = new Date(new Date(start).getTime() + oneHundredDaysMs).toISOString().split("T")[0];
+      // 100-day countdown starting from start day: ends at 23:59:59 on day 100 (start + 99 days)
+      const trialDaysMs = 99 * 24 * 60 * 60 * 1000;
+      const exp = new Date(new Date(start).getTime() + trialDaysMs).toISOString().split("T")[0];
       setEditExpiryDate(exp);
     } else if (newPlan === "free") {
       setEditStartDate("");
@@ -153,8 +154,9 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
     setEditStartDate(val);
     if (val) {
       if (editPlan === "trial") {
-        const oneHundredDaysMs = 100 * 24 * 60 * 60 * 1000;
-        const exp = new Date(new Date(val).getTime() + oneHundredDaysMs).toISOString().split("T")[0];
+        // 100-day countdown starting from start day: ends at 23:59:59 on day 100 (start + 99 days)
+        const trialDaysMs = 99 * 24 * 60 * 60 * 1000;
+        const exp = new Date(new Date(val).getTime() + trialDaysMs).toISOString().split("T")[0];
         setEditExpiryDate(exp);
       } else {
         setEditExpiryDate(calculateOneYearLater(val));
@@ -320,7 +322,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                   current.subscriptionPlan === "pro"
                     ? "pro"
                     : current.subscriptionPlan === "trial"
-                    ? "renew"
+                    ? "trial"
                     : "free"
                 }
               >

@@ -44,10 +44,11 @@ function calculateFollowUpSchedule(
 ): FollowUpSchedule {
   const started = startedAtString ? new Date(startedAtString).getTime() : Date.now();
   const now = Date.now();
-  const daysActive = Math.max(0, Math.floor((now - started) / DAY_MS));
+  // 1-based day count (Day 1 of 100 on the first day)
+  const daysActive = Math.min(100, Math.max(1, Math.floor((now - started) / DAY_MS) + 1));
 
-  // Current 20-day cycle: Days 0-20 -> 1, Days 21-40 -> 2, etc.
-  const currentCycle = Math.min(5, Math.floor(daysActive / 20) + 1);
+  // Current 20-day cycle: Days 1-20 -> 1, Days 21-40 -> 2, etc.
+  const currentCycle = Math.min(5, Math.floor((daysActive - 1) / 20) + 1);
 
   // If attendedMilestone is >= currentCycle, the current cycle has already been completed!
   const isCurrentAttended = attendedMilestone >= currentCycle;

@@ -8,6 +8,7 @@ export type BadgeVariant =
   | "expired"
   | "pending"
   | "pro"
+  | "trial"
   | "lifetime"
   | "enterprise"
   | "free"
@@ -28,6 +29,7 @@ const variantStyles: Record<BadgeVariant, string> = {
   expired: "text-red-600 dark:text-red-400 font-medium",
   pending: "text-amber-500 dark:text-amber-400 font-medium",
   pro: "text-[#D4AF37] dark:text-[#F3C95F] font-semibold", // Elegant Gold
+  trial: "text-sky-600 dark:text-sky-400 font-semibold", // Free Trial
   lifetime: "text-purple-600 dark:text-purple-400 font-semibold",
   enterprise: "text-indigo-600 dark:text-indigo-400 font-semibold",
   free: "text-[var(--muted-foreground)] font-normal",

@@ -68,7 +68,10 @@ export const CompaniesTable: React.FC<CompaniesTableProps> = ({
           <tbody className="divide-y divide-[var(--border)]">
             {companies.map((company) => {
               const validity = getDaysRemaining(company.membershipExpiresAt, company.subscriptionPlan);
-              const isExpired = company.subscriptionPlan === "pro" && !validity.isLifetime && (validity.isExpired || (company.status === "expired" && !company.membershipExpiresAt));
+              const isExpired =
+                (company.subscriptionPlan === "pro" || company.subscriptionPlan === "trial") &&
+                !validity.isLifetime &&
+                (validity.isExpired || (company.status === "expired" && !company.membershipExpiresAt));
 
               return (
                 <tr
@@ -124,10 +127,22 @@ export const CompaniesTable: React.FC<CompaniesTableProps> = ({
                     )}
                   </td>
 
-                  {/* Plan Tier - Pro in Gold */}
+                  {/* Plan Tier - Pro in Gold, Free Trial in Sky, Free in Neutral */}
                   <td className="px-4 py-3.5 whitespace-nowrap">
-                    <Badge variant={company.subscriptionPlan === "pro" ? "pro" : "free"}>
-                      {company.subscriptionPlan === "pro" ? "Pro" : "Free"}
+                    <Badge
+                      variant={
+                        company.subscriptionPlan === "pro"
+                          ? "pro"
+                          : company.subscriptionPlan === "trial"
+                          ? "trial"
+                          : "free"
+                      }
+                    >
+                      {company.subscriptionPlan === "pro"
+                        ? "Pro"
+                        : company.subscriptionPlan === "trial"
+                        ? "Free Trial"
+                        : "Free"}
                     </Badge>
                   </td>
 
@@ -204,7 +219,10 @@ export const CompaniesTable: React.FC<CompaniesTableProps> = ({
       <div className="divide-y divide-[var(--border)] lg:hidden">
         {companies.map((company) => {
           const validity = getDaysRemaining(company.membershipExpiresAt, company.subscriptionPlan);
-          const isExpired = company.subscriptionPlan === "pro" && !validity.isLifetime && (validity.isExpired || (company.status === "expired" && !company.membershipExpiresAt));
+          const isExpired =
+            (company.subscriptionPlan === "pro" || company.subscriptionPlan === "trial") &&
+            !validity.isLifetime &&
+            (validity.isExpired || (company.status === "expired" && !company.membershipExpiresAt));
 
           return (
             <div
@@ -228,8 +246,20 @@ export const CompaniesTable: React.FC<CompaniesTableProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
-                  <Badge variant={company.subscriptionPlan === "pro" ? "pro" : "free"}>
-                    {company.subscriptionPlan === "pro" ? "Pro" : "Free"}
+                  <Badge
+                    variant={
+                      company.subscriptionPlan === "pro"
+                        ? "pro"
+                        : company.subscriptionPlan === "trial"
+                        ? "trial"
+                        : "free"
+                    }
+                  >
+                    {company.subscriptionPlan === "pro"
+                      ? "Pro"
+                      : company.subscriptionPlan === "trial"
+                      ? "Free Trial"
+                      : "Free"}
                   </Badge>
                   {company.subscriptionPlan === "free" ? (
                     <Badge variant="na">N/A</Badge>
