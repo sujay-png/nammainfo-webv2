@@ -96,12 +96,6 @@ export default function ScannerPage() {
         // Can fail if permission not granted yet - non-fatal
       }
 
-      const qrboxConfig = (viewfinderWidth: number, viewfinderHeight: number) => {
-        const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-        const edge = Math.max(100, Math.floor(minEdge * 0.72));
-        return { width: edge, height: edge };
-      };
-
       // Camera config: back camera preference on mobile, with fallback to any available camera
       const cameraConfig = cameraDeviceId
         ? { deviceId: { exact: cameraDeviceId } }
@@ -112,7 +106,6 @@ export default function ScannerPage() {
           cameraConfig,
           {
             fps: 15,
-            qrbox: qrboxConfig,
           },
           (decodedText) => {
             handleScannedUrl(decodedText);
@@ -127,7 +120,6 @@ export default function ScannerPage() {
             { facingMode: "user" },
             {
               fps: 15,
-              qrbox: qrboxConfig,
             },
             (decodedText) => {
               handleScannedUrl(decodedText);
@@ -141,7 +133,6 @@ export default function ScannerPage() {
               availableDevices[0].id,
               {
                 fps: 15,
-                qrbox: qrboxConfig,
               },
               (decodedText) => {
                 handleScannedUrl(decodedText);
@@ -342,18 +333,10 @@ export default function ScannerPage() {
         }`}
       >
         {/* Html5Qrcode video attaches into this container */}
-        <div id="qr-reader" className="w-full aspect-square overflow-hidden" />
-
-        {/* Targeting corner guides overlay */}
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className="relative h-60 w-60 sm:h-64 sm:w-64">
-            {/* Corner brackets */}
-            <div className="absolute top-0 left-0 h-7 w-7 border-t-[3px] border-l-[3px] border-white rounded-tl-[4px]" />
-            <div className="absolute top-0 right-0 h-7 w-7 border-t-[3px] border-r-[3px] border-white rounded-tr-[4px]" />
-            <div className="absolute bottom-0 left-0 h-7 w-7 border-b-[3px] border-l-[3px] border-white rounded-bl-[4px]" />
-            <div className="absolute bottom-0 right-0 h-7 w-7 border-b-[3px] border-r-[3px] border-white rounded-br-[4px]" />
-          </div>
-        </div>
+        <div
+          id="qr-reader"
+          className="w-full aspect-square overflow-hidden [&_video]:w-full [&_video]:h-full [&_video]:object-cover [&_#qr-shaded-region]:!hidden"
+        />
 
         {/* Top Controls Bar */}
         <div className="absolute top-3 inset-x-3 flex items-center justify-between z-20">
