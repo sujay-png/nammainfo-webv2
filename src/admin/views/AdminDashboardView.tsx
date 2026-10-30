@@ -19,6 +19,8 @@ import { CompanyFiltersBar } from "@/admin/features/company-filters/ui/CompanyFi
 import { CompanyDetailModal } from "@/admin/widgets/company-detail-modal/ui/CompanyDetailModal";
 import { DeleteCompanyModal } from "@/admin/features/delete-company/ui/DeleteCompanyModal";
 import { AdminOrdersView } from "@/admin/views/AdminOrdersView";
+import { DesignerDashboardView } from "@/admin/views/DesignerDashboardView";
+import { StaffAccountsView } from "@/admin/widgets/staff-accounts/ui/StaffAccountsView";
 import { fetchAdminCompanies } from "@/admin/entities/company/api/company-api";
 import { fetchAdminOrders } from "@/admin/entities/order/api/order-api";
 import { getDaysRemaining } from "@/admin/shared/lib/formatters";
@@ -67,10 +69,11 @@ export const AdminDashboardView: React.FC = () => {
   const [deleteTarget, setDeleteTarget] = useState<Company | null>(null);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [pendingOrdersCount, setPendingOrdersCount] = useState<number>(0);
+  const [userRole, setUserRole] = useState<"admin" | "designer">("admin");
 
   const [unauthorizedEmail, setUnauthorizedEmail] = useState<string | null>(null);
 
-  // Strict Client-Side Admin Auth Verification
+  // Strict Client-Side Admin / Designer Auth Verification
   const getLoginUrl = useCallback(() => {
     const isSubdomain =
       typeof window !== "undefined" &&
@@ -92,18 +95,35 @@ export const AdminDashboardView: React.FC = () => {
           return;
         }
 
-        const { data: profile } = await supabase
+        let profile: any = null;
+        const { data: profileWithRole, error: profileError } = await supabase
           .from("profiles")
-          .select("is_admin")
+          .select("is_admin, role")
           .eq("id", user.id)
           .maybeSingle();
 
-        if (!profile || !profile.is_admin) {
+        if (profileError) {
+          console.warn("Could not check role column, checking is_admin:", profileError.message);
+          const { data: fallbackProfile } = await supabase
+            .from("profiles")
+            .select("is_admin")
+            .eq("id", user.id)
+            .maybeSingle();
+          profile = fallbackProfile;
+        } else {
+          profile = profileWithRole;
+        }
+
+        const isStaff = Boolean(profile?.is_admin || profile?.role === "admin" || profile?.role === "designer");
+
+        if (!profile || !isStaff) {
           setUnauthorizedEmail(user.email || "Current User");
           setAuthLoading(false);
           return;
         }
 
+        const role = profile.role || (profile.is_admin ? "admin" : "user");
+        setUserRole(role === "designer" ? "designer" : "admin");
         setAuthLoading(false);
       } catch (err) {
         console.error("Auth check failed:", err);
@@ -232,7 +252,7 @@ export const AdminDashboardView: React.FC = () => {
               Access Restricted
             </h3>
             <p className="text-xs text-[var(--muted-foreground)] mt-1">
-              User <span className="font-semibold text-[var(--foreground)]">{unauthorizedEmail}</span> does not have administrator privileges.
+              User <span className="font-semibold text-[var(--foreground)]">{unauthorizedEmail}</span> does not have staff or administrator privileges.
             </p>
           </div>
           <button
@@ -244,6 +264,11 @@ export const AdminDashboardView: React.FC = () => {
         </div>
       </div>
     );
+  }
+
+  // Designer Studio (Read-only order assets & QR downloads)
+  if (userRole === "designer") {
+    return <DesignerDashboardView />;
   }
 
   return (
@@ -261,6 +286,10 @@ export const AdminDashboardView: React.FC = () => {
         <AdminOrdersView
           onOrderCountUpdate={(cnt) => setPendingOrdersCount(cnt)}
         />
+      ) : currentTab === "staff" ? (
+        <div className="flex flex-1 flex-col h-screen overflow-y-auto min-w-0">
+          <StaffAccountsView />
+        </div>
       ) : (
         <div className="flex flex-1 flex-col h-screen overflow-y-auto min-w-0">
           <AdminHeader

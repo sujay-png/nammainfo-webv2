@@ -1,5 +1,5 @@
 import React from "react";
-import { Building2, Package, LogOut } from "lucide-react";
+import { Building2, Package, UserPlus, LogOut } from "lucide-react";
 
 interface AdminSidebarProps {
   currentTab: string;
@@ -65,6 +65,19 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                 {ordersPendingCount}
               </span>
             )}
+          </button>
+
+          {/* Account Creation (Staff Management) */}
+          <button
+            onClick={() => onTabChange("staff")}
+            className={`flex w-full items-center gap-3 rounded-[5px] px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
+              currentTab === "staff"
+                ? "bg-[var(--foreground)] text-[var(--background)]"
+                : "text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+            }`}
+          >
+            <UserPlus size={15} />
+            <span>Account Creation</span>
           </button>
         </nav>
       </div>

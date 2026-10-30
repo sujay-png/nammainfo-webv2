@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { Gift, Check, Clock, AlertCircle, ArrowRight, X, Copy } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Check, Clock, AlertCircle, ArrowRight, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { Profile } from "@/lib/supabase/types";
 import { getProfileCompletionItems } from "@/lib/profile-completion";
@@ -22,15 +22,32 @@ export default function ApplyFreeTrialModal({
   onSuccess,
 }: ApplyFreeTrialModalProps) {
   const router = useRouter();
-  const [couponCode, setCouponCode] = useState<string>("ADI100");
+  const [couponCode, setCouponCode] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Reset state when modal is closed or opened
+  useEffect(() => {
+    if (!isOpen) {
+      setCouponCode("");
+      setErrorMsg(null);
+      setSuccessMsg(null);
+    }
+  }, [isOpen]);
+
+  const handleClose = () => {
+    setCouponCode("");
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    onClose();
+  };
 
   if (!isOpen) return null;
 
   const isEligible = completionPct >= 60;
   const missingItems = getProfileCompletionItems(profile).filter((i) => !i.done);
+  const isApplied = couponCode.trim().toUpperCase() === "ADI100";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,7 +77,7 @@ export default function ApplyFreeTrialModal({
         throw new Error(data.error || "Failed to submit application");
       }
 
-      setSuccessMsg(data.message || "Your 100 days free trial is awaiting confirmation from our team.");
+      setSuccessMsg(data.message || "Your 100-day free trial application is awaiting confirmation from our team.");
       onSuccess();
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to apply for free trial.");
@@ -74,23 +91,23 @@ export default function ApplyFreeTrialModal({
       <div className="relative w-full max-w-md rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-5 sm:p-6 shadow-xl space-y-4 text-[var(--foreground)]">
         {/* Close Button */}
         <button
-          onClick={onClose}
-          className="absolute right-4 top-4 rounded-[5px] p-1 text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors"
+          onClick={handleClose}
+          className="absolute right-4 top-4 rounded-[5px] p-1 text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors cursor-pointer"
         >
           <X size={16} />
         </button>
 
         {/* Modal Header */}
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[5px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-            <Gift size={20} strokeWidth={1.8} />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[5px] bg-[var(--accent)] text-[var(--foreground)] border border-[var(--border)]">
+            <Clock size={18} strokeWidth={1.75} />
           </div>
           <div>
             <h3 className="font-headline text-base font-bold text-[var(--foreground)]">
               100-Day Free Trial
             </h3>
             <p className="text-xs text-[var(--muted-foreground)]">
-              Unlock complete Pro Plan features for 100 days
+              Experience full Pro Plan features for 100 days
             </p>
           </div>
         </div>
@@ -98,23 +115,23 @@ export default function ApplyFreeTrialModal({
         {/* State A: Success Submitted */}
         {successMsg ? (
           <div className="space-y-4 pt-2 text-center">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-              <Check size={24} />
+            <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-[5px] bg-[var(--accent)] text-[var(--foreground)] border border-[var(--border)]">
+              <Check size={20} strokeWidth={2} />
             </div>
             <div>
               <h4 className="font-headline text-sm font-bold text-[var(--foreground)]">
-                Application Submitted!
+                Application Submitted
               </h4>
-              <p className="mt-1 text-xs text-[var(--muted-foreground)] leading-relaxed">
+              <p className="mt-1 text-xs text-[var(--muted-foreground)] leading-relaxed max-w-sm mx-auto">
                 {successMsg}
               </p>
             </div>
-            <div className="rounded-[5px] border border-[var(--border)] bg-[var(--accent)]/40 p-3 text-xs text-[var(--muted-foreground)]">
-              Your dashboard status is now set to <strong>Waiting for Approval</strong>. Our team will verify and activate your 100-day trial shortly.
+            <div className="rounded-[5px] border border-[var(--border)] bg-[var(--accent)]/30 p-3 text-xs text-[var(--muted-foreground)] text-left leading-relaxed">
+              Your account status is now set to <strong>Waiting for Approval</strong>. Platform administrators have been notified to review and activate your 100-day trial.
             </div>
             <button
-              onClick={onClose}
-              className="w-full rounded-[5px] bg-[var(--foreground)] py-2 text-xs font-semibold text-[var(--background)] hover:opacity-90 transition-opacity"
+              onClick={handleClose}
+              className="w-full rounded-[5px] bg-[var(--primary)] py-2.5 text-xs font-semibold text-[var(--primary-foreground)] hover:opacity-90 transition-opacity cursor-pointer"
             >
               Back to Dashboard
             </button>
@@ -122,45 +139,55 @@ export default function ApplyFreeTrialModal({
         ) : !isEligible ? (
           /* State B: Profile completion is under 60% */
           <div className="space-y-4 pt-1">
-            <div className="rounded-[5px] border border-amber-500/30 bg-amber-500/10 p-3.5 space-y-2">
-              <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 font-semibold text-xs">
-                <AlertCircle size={15} />
-                <span>Profile Completion: {completionPct}% (Min 60% Required)</span>
+            <div className="rounded-[5px] border border-[var(--border)] bg-[var(--accent)]/30 p-3.5 space-y-2.5">
+              <div className="flex items-center justify-between text-xs font-semibold text-[var(--foreground)]">
+                <div className="flex items-center gap-1.5">
+                  <AlertCircle size={14} className="text-[var(--muted-foreground)]" />
+                  <span>Profile Completion</span>
+                </div>
+                <span className="font-mono text-[11px] text-[var(--muted-foreground)]">
+                  {completionPct}% of 60% required
+                </span>
               </div>
+
               <p className="text-[11px] text-[var(--muted-foreground)] leading-relaxed">
-                To prevent spam and ensure high-quality digital business cards, we require at least <strong>60% profile completion</strong> before approving the 100-Day Free Trial.
+                Complete at least 60% of your business profile details to qualify for the 100-Day Free Trial.
               </p>
-              {/* Progress bar */}
+
+              {/* Monochrome progress bar */}
               <div className="h-1.5 w-full rounded-full bg-[var(--muted)] overflow-hidden">
                 <div
-                  className="h-full rounded-full bg-amber-500 transition-all duration-300"
-                  style={{ width: `${completionPct}%` }}
+                  className="h-full rounded-full bg-[var(--foreground)] transition-all duration-300"
+                  style={{ width: `${Math.min(100, Math.round((completionPct / 60) * 100))}%` }}
                 />
               </div>
             </div>
 
             {missingItems.length > 0 && (
               <div className="space-y-1.5">
-                <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)] block">
-                  Quick fields you can complete:
+                <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)] block font-semibold px-0.5">
+                  Incomplete profile fields:
                 </span>
-                <ul className="space-y-1 text-xs text-[var(--muted-foreground)]">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                   {missingItems.slice(0, 4).map((item) => (
-                    <li key={item.id} className="flex items-center gap-1.5">
-                      <span className="h-1 w-1 rounded-full bg-amber-500" />
-                      <span>{item.label}</span>
-                    </li>
+                    <div
+                      key={item.id}
+                      className="flex items-center gap-2 p-2 rounded-[4px] border border-[var(--border)] bg-[var(--card)] text-xs text-[var(--muted-foreground)]"
+                    >
+                      <span className="h-1.5 w-1.5 rounded-full bg-[var(--muted-foreground)] shrink-0" />
+                      <span className="truncate">{item.label}</span>
+                    </div>
                   ))}
-                </ul>
+                </div>
               </div>
             )}
 
             <button
               onClick={() => {
-                onClose();
+                handleClose();
                 router.push("/dashboard/profile");
               }}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-[5px] bg-[var(--foreground)] text-[var(--background)] text-xs font-semibold shadow-sm hover:opacity-90 transition-all cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold shadow-xs hover:opacity-90 transition-all cursor-pointer"
             >
               <span>Complete Profile Setup</span>
               <ArrowRight size={14} />
@@ -169,50 +196,70 @@ export default function ApplyFreeTrialModal({
         ) : (
           /* State C: Eligible (>= 60%), Enter Coupon Code */
           <form onSubmit={handleSubmit} className="space-y-4 pt-1">
-            <div className="rounded-[5px] border border-[var(--border)] bg-[var(--accent)]/30 p-3 space-y-1 text-xs">
+            <div className="rounded-[5px] border border-[var(--border)] bg-[var(--accent)]/30 p-3 space-y-1.5 text-xs">
               <div className="flex items-center justify-between">
-                <span className="text-[var(--muted-foreground)]">Profile Verified:</span>
-                <span className="font-mono font-bold text-emerald-500">{completionPct}% Complete ✓</span>
+                <span className="text-[var(--muted-foreground)] font-medium">Profile Verification</span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] border border-[var(--border)] bg-[var(--card)] font-mono text-[11px] font-semibold text-[var(--foreground)]">
+                  <Check size={11} className="text-[var(--foreground)]" />
+                  <span>{completionPct}% Complete</span>
+                </span>
               </div>
               <p className="text-[11px] text-[var(--muted-foreground)] leading-relaxed">
-                You qualify for the 100-day Free Trial with full Pro features. Apply the coupon code below to submit your request for approval.
+                Your profile meets the 60% requirement. Enter the coupon code below to submit your request for approval.
               </p>
             </div>
 
             {/* Coupon Code Input */}
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-[var(--foreground)] block">
-                Enter Coupon Code:
+                Coupon Code
               </label>
               <input
                 type="text"
                 value={couponCode}
-                onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                onChange={(e) => {
+                  setCouponCode(e.target.value.toUpperCase());
+                  if (errorMsg) setErrorMsg(null);
+                }}
                 placeholder="ADI100"
-                className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm font-mono font-semibold tracking-wider text-[var(--foreground)] outline-none focus:border-[var(--foreground)]"
+                className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs font-mono font-semibold tracking-wider text-[var(--foreground)] outline-none focus:border-[var(--foreground)] transition-colors placeholder:text-[var(--muted-foreground)]/50"
                 autoFocus
               />
 
-              {/* Helper badge below text area */}
-              <button
-                type="button"
-                onClick={() => setCouponCode("ADI100")}
-                className="w-full flex items-center justify-between p-2.5 rounded-[5px] border border-dashed border-[var(--border)] bg-[var(--accent)]/20 hover:bg-[var(--accent)]/50 transition-colors text-left"
-              >
+              {/* Eligible Code Row */}
+              <div className="flex items-center justify-between p-2.5 rounded-[5px] border border-[var(--border)] bg-[var(--accent)]/20">
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-[var(--muted-foreground)]">Use coupon code:</span>
-                  <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                  <span className="text-[11px] text-[var(--muted-foreground)]">Eligible code:</span>
+                  <code className="font-mono text-xs font-bold text-[var(--foreground)] bg-[var(--card)] px-2 py-0.5 rounded-[4px] border border-[var(--border)] tracking-wider">
                     ADI100
-                  </span>
+                  </code>
                 </div>
-                <span className="font-mono text-[10px] text-[var(--muted-foreground)] underline">
-                  Click to fill
-                </span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCouponCode("ADI100");
+                    setErrorMsg(null);
+                  }}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-[4px] border text-[11px] font-medium transition-colors cursor-pointer ${
+                    isApplied
+                      ? "border-[var(--border)] bg-[var(--accent)] text-[var(--foreground)] font-semibold"
+                      : "border-[var(--border)] bg-[var(--card)] hover:bg-[var(--accent)] text-[var(--foreground)]"
+                  }`}
+                >
+                  {isApplied ? (
+                    <>
+                      <Check size={11} className="text-emerald-500" />
+                      <span>Applied</span>
+                    </>
+                  ) : (
+                    <span>Apply Code</span>
+                  )}
+                </button>
+              </div>
             </div>
 
             {errorMsg && (
-              <div className="rounded-[5px] border border-rose-500/30 bg-rose-500/10 p-2.5 text-xs text-rose-500 flex items-center gap-1.5">
+              <div className="rounded-[5px] border border-rose-500/20 bg-rose-500/10 p-2.5 text-xs text-rose-600 dark:text-rose-400 flex items-center gap-2">
                 <AlertCircle size={14} className="shrink-0" />
                 <span>{errorMsg}</span>
               </div>
@@ -221,7 +268,7 @@ export default function ApplyFreeTrialModal({
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50"
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold shadow-xs hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50"
             >
               {loading ? (
                 <span>Submitting application...</span>
@@ -238,4 +285,3 @@ export default function ApplyFreeTrialModal({
     </div>
   );
 }
-

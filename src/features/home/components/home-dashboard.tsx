@@ -18,7 +18,6 @@ import {
   Edit3,
   Scan,
   Settings,
-  Gift,
   Clock,
   CheckCircle2,
 } from "lucide-react";
@@ -181,9 +180,11 @@ function ValidityCard({
 
         {/* Pending Approval Notice */}
         {isPendingApproval && (
-          <div className="flex items-center gap-2.5 p-3 rounded-[5px] bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs">
-            <Clock size={16} className="shrink-0" />
-            <span>Your 100-Day Free Trial application is awaiting confirmation from our team.</span>
+          <div className="flex items-center gap-2.5 p-3 rounded-[5px] bg-[var(--accent)]/40 border border-[var(--border)] text-[var(--foreground)] text-xs">
+            <Clock size={15} className="text-[var(--muted-foreground)] shrink-0" />
+            <span className="leading-snug">
+              Your 100-Day Free Trial application is under review. Our team will verify and activate your trial shortly.
+            </span>
           </div>
         )}
 
@@ -191,7 +192,7 @@ function ValidityCard({
         <div className="flex flex-col sm:flex-row gap-2">
           <button
             onClick={onOpenUpgrade}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold shadow-xs hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
           >
             <span>{isProfileComplete ? "Order Custom NFC Card & Upgrade" : "Upgrade to Pro"}</span>
             <ArrowRight size={14} />
@@ -200,17 +201,17 @@ function ValidityCard({
           {isPendingApproval ? (
             <button
               disabled
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-[5px] border border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)] text-xs font-semibold cursor-not-allowed opacity-80"
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-[5px] border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] text-xs font-semibold cursor-not-allowed opacity-75"
             >
-              <Clock size={14} />
+              <Clock size={14} className="text-[var(--muted-foreground)]" />
               <span>Waiting for Approval</span>
             </button>
           ) : (
             <button
               onClick={onOpenTrial}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-[5px] border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-semibold shadow-sm hover:bg-amber-500/20 active:scale-[0.98] transition-all cursor-pointer"
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-[5px] border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--accent)] text-[var(--foreground)] text-xs font-semibold shadow-xs hover:border-[var(--foreground)]/40 active:scale-[0.98] transition-all cursor-pointer"
             >
-              <Gift size={14} />
+              <Clock size={14} className="text-[var(--muted-foreground)]" />
               <span>Apply for Free Trial</span>
             </button>
           )}
@@ -328,7 +329,7 @@ function ValidityCard({
                   expired
                     ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
                     : isTrial
-                      ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                      ? "bg-[var(--accent)] text-[var(--foreground)] border-[var(--border)] font-semibold"
                       : endingSoon
                         ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
                         : "bg-[var(--accent)] text-[var(--muted-foreground)] border-[var(--border)]"
@@ -376,7 +377,7 @@ function ValidityCard({
       {isTrial && Number(profile.trial_extension_days ?? 0) > 0 && (
         <div className="p-3 rounded-[5px] bg-[var(--accent)] border border-[var(--border)] text-xs text-[var(--foreground)] space-y-1">
           <div className="flex items-center gap-2 font-medium">
-            <CheckCircle2 size={15} className="text-emerald-500 shrink-0" />
+            <CheckCircle2 size={15} className="text-[var(--foreground)] shrink-0" />
             <span>
               Your free trial plan has been extended for {profile.trial_extension_days}{" "}
               {profile.trial_extension_days === 1 ? "day" : "days"}!

@@ -73,6 +73,7 @@ export interface Profile {
   products: ServiceItem[];
   theme: string;
   is_admin?: boolean;
+  role?: "user" | "admin" | "designer" | null;
   status?: "active" | "suspended" | "expired" | "pending";
   subscription_plan?: string;
   primary_card_count?: number;

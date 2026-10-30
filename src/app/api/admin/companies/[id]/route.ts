@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAdminSupabase } from "@/admin/shared/lib/supabase-admin";
+import { requireAdminAuth, requireStaffAuth } from "@/admin/shared/lib/admin-auth";
 import type { CompanyWithEmployees, AccountStatus, SubscriptionPlanType } from "@/admin/entities/company/model/types";
 import type { AdminEmployee } from "@/admin/entities/employee/model/types";
 
@@ -9,9 +9,14 @@ export async function GET(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  const auth = await requireStaffAuth(request);
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   try {
     const { id } = params;
-    const supabase = await getAdminSupabase();
+    const supabase = auth.adminSupabase;
 
     // 1. Fetch profile
     const { data: p, error: profileError } = await supabase
@@ -153,9 +158,14 @@ export async function DELETE(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  const auth = await requireAdminAuth(request);
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   try {
     const { id } = params;
-    const supabase = await getAdminSupabase();
+    const supabase = auth.adminSupabase;
 
     // 1. Delete associated data
     await supabase.from("employees").delete().eq("owner_id", id);

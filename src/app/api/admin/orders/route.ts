@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { requireAdminAuth } from "@/admin/shared/lib/admin-auth";
+import { requireAdminAuth, requireStaffAuth } from "@/admin/shared/lib/admin-auth";
 import type { OrderStatus, OrderType, DesignMode, AdminOrder, OrderStats } from "@/admin/entities/order/model/types";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const auth = await requireAdminAuth(request);
+  const auth = await requireStaffAuth(request);
   if (!auth.authorized) {
     return auth.response;
   }

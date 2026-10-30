@@ -6,16 +6,13 @@ import {
   Calendar,
   Phone,
   Mail,
-  Save,
   Check,
   PlusCircle,
   ExternalLink,
   MessageSquare,
-  Gift,
-  ArrowRight,
   FileText,
+  ChevronDown,
 } from "lucide-react";
-import { Badge } from "@/admin/shared/ui/Badge";
 import { Button } from "@/admin/shared/ui/Button";
 import { Modal } from "@/admin/shared/ui/Modal";
 import { formatDate, getDaysRemaining } from "@/admin/shared/lib/formatters";
@@ -29,31 +26,53 @@ interface FreeTrialsTableProps {
   onSelectCompany: (company: Company) => void;
 }
 
-// Milestone helper: 100 days broken into 5 consecutive 20-day touchpoints
-function getMilestoneInfo(startedAtString: string | null | undefined, attendedMilestone: number = 0) {
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+interface FollowUpSchedule {
+  daysActive: number;
+  currentCycle: number; // 1 to 5 (current 20-day interval)
+  displayMilestone: number; // which follow-up number to display (1 to 5)
+  nextDate: Date;
+  daysToNextDate: number;
+  isAttended: boolean;
+  status: "unattended" | "attended";
+}
+
+function calculateFollowUpSchedule(
+  startedAtString: string | null | undefined,
+  attendedMilestone: number = 0
+): FollowUpSchedule {
   const started = startedAtString ? new Date(startedAtString).getTime() : Date.now();
-  const daysActive = Math.max(0, Math.floor((Date.now() - started) / (1000 * 60 * 60 * 24)));
-  const milestoneNum = Math.min(5, Math.floor(daysActive / 20) + 1);
-  const targetDay = milestoneNum === 5 ? 100 : milestoneNum * 20;
-  const daysToTarget = targetDay - daysActive;
+  const now = Date.now();
+  const daysActive = Math.max(0, Math.floor((now - started) / DAY_MS));
 
-  const milestoneTitles: Record<number, string> = {
-    1: "Day 20 (Setup & Taps Check-in)",
-    2: "Day 40 (Usage & Card Adoption)",
-    3: "Day 60 (Mid-Trial Value Review)",
-    4: "Day 80 (Conversion Readiness)",
-    5: "Day 100 (Final Pro Upgrade)",
-  };
+  // Current 20-day cycle: Days 0-20 -> 1, Days 21-40 -> 2, etc.
+  const currentCycle = Math.min(5, Math.floor(daysActive / 20) + 1);
 
-  const isAttended = attendedMilestone >= milestoneNum;
+  // If attendedMilestone is >= currentCycle, the current cycle has already been completed!
+  const isCurrentAttended = attendedMilestone >= currentCycle;
+
+  let displayMilestone: number;
+  if (!isCurrentAttended) {
+    // Current cycle is pending attendance
+    displayMilestone = currentCycle;
+  } else {
+    // Current cycle was attended, target is the next milestone
+    displayMilestone = Math.min(5, currentCycle + 1);
+  }
+
+  const targetDay = displayMilestone * 20;
+  const nextDate = new Date(started + targetDay * DAY_MS);
+  const daysToNextDate = targetDay - daysActive;
 
   return {
     daysActive,
-    milestoneNum,
-    targetDay,
-    daysToTarget,
-    title: milestoneTitles[milestoneNum] || `Day ${targetDay} Touchpoint`,
-    isAttended,
+    currentCycle,
+    displayMilestone,
+    nextDate,
+    daysToNextDate,
+    isAttended: isCurrentAttended,
+    status: isCurrentAttended ? "attended" : "unattended",
   };
 }
 
@@ -69,8 +88,6 @@ export const FreeTrialsTable: React.FC<FreeTrialsTableProps> = ({
   // Local state for follow-up notes & status per company
   const [followUpNotes, setFollowUpNotes] = useState<Record<string, string>>({});
   const [followUpStatuses, setFollowUpStatuses] = useState<Record<string, "unattended" | "attended">>({});
-  const [savingId, setSavingId] = useState<string | null>(null);
-  const [savedSuccessId, setSavedSuccessId] = useState<string | null>(null);
 
   // Extend Modal State
   const [extendTarget, setExtendTarget] = useState<Company | null>(null);
@@ -79,33 +96,42 @@ export const FreeTrialsTable: React.FC<FreeTrialsTableProps> = ({
   const [extendSuccessMsg, setExtendSuccessMsg] = useState<string | null>(null);
 
   // Follow-up Note Modal State
-  const [noteModalTarget, setNoteModalTarget] = useState<{
-    company: Company;
-    milestoneNum: number;
-    title: string;
-  } | null>(null);
+  const [noteModalTarget, setNoteModalTarget] = useState<Company | null>(null);
   const [noteModalText, setNoteModalText] = useState<string>("");
   const [isSavingNote, setIsSavingNote] = useState<boolean>(false);
 
-  const handleOpenNoteModal = (company: Company, milestoneNum: number, title: string) => {
-    setNoteModalTarget({ company, milestoneNum, title });
-    setNoteModalText(company.trialFollowUpNotes || "");
+  const getNote = (c: Company) =>
+    followUpNotes[c.id] !== undefined ? followUpNotes[c.id] : c.trialFollowUpNotes || "";
+
+  const getStatus = (c: Company, schedule: FollowUpSchedule): "unattended" | "attended" => {
+    if (followUpStatuses[c.id] !== undefined) {
+      return followUpStatuses[c.id];
+    }
+    return schedule.status;
+  };
+
+  const handleOpenNoteModal = (company: Company) => {
+    setNoteModalTarget(company);
+    setNoteModalText(getNote(company));
   };
 
   const handleSaveModalNote = async () => {
     if (!noteModalTarget) return;
     setIsSavingNote(true);
     try {
-      const msInfo = getMilestoneInfo(
-        noteModalTarget.company.subscriptionStartedAt,
-        noteModalTarget.company.trialFollowUpMilestone || 0
+      const schedule = calculateFollowUpSchedule(
+        noteModalTarget.subscriptionStartedAt,
+        noteModalTarget.trialFollowUpMilestone || 0
       );
-      const status = getStatus(noteModalTarget.company, msInfo);
-      await updateTrialFollowUp(noteModalTarget.company.id, {
+      const status = getStatus(noteModalTarget, schedule);
+
+      await updateTrialFollowUp(noteModalTarget.id, {
         status,
         notes: noteModalText.trim(),
-        milestone: status === "attended" ? noteModalTarget.milestoneNum : noteModalTarget.company.trialFollowUpMilestone || 0,
+        milestone: status === "attended" ? schedule.currentCycle : noteModalTarget.trialFollowUpMilestone || 0,
       });
+
+      setFollowUpNotes((prev) => ({ ...prev, [noteModalTarget.id]: noteModalText.trim() }));
       setNoteModalTarget(null);
       onRefresh();
     } catch (err: any) {
@@ -115,48 +141,28 @@ export const FreeTrialsTable: React.FC<FreeTrialsTableProps> = ({
     }
   };
 
-  const getNote = (c: Company) =>
-    followUpNotes[c.id] !== undefined ? followUpNotes[c.id] : c.trialFollowUpNotes || "";
+  const handleStatusChange = async (company: Company, newStatus: "unattended" | "attended") => {
+    const schedule = calculateFollowUpSchedule(
+      company.subscriptionStartedAt,
+      company.trialFollowUpMilestone || 0
+    );
 
-  const getStatus = (c: Company, milestone: { isAttended: boolean }): "unattended" | "attended" => {
-    if (followUpStatuses[c.id] !== undefined) {
-      return followUpStatuses[c.id];
-    }
-    return milestone.isAttended ? "attended" : "unattended";
-  };
+    const updatedMilestone =
+      newStatus === "attended"
+        ? schedule.currentCycle
+        : Math.max(0, schedule.currentCycle - 1);
 
-  const handleStatusChange = async (company: Company, status: "unattended" | "attended", currentMilestone: number) => {
-    setFollowUpStatuses((prev) => ({ ...prev, [company.id]: status }));
+    setFollowUpStatuses((prev) => ({ ...prev, [company.id]: newStatus }));
+
     try {
       await updateTrialFollowUp(company.id, {
-        status,
+        status: newStatus,
         notes: getNote(company),
-        milestone: status === "attended" ? currentMilestone : Math.max(0, currentMilestone - 1),
+        milestone: updatedMilestone,
       });
       onRefresh();
     } catch (err: any) {
-      alert(`Failed to update milestone status: ${err.message}`);
-    }
-  };
-
-  const handleSaveNote = async (company: Company, currentMilestone: number) => {
-    const note = getNote(company);
-    setSavingId(company.id);
-    const msInfo = getMilestoneInfo(company.subscriptionStartedAt, company.trialFollowUpMilestone || 0);
-    const status = getStatus(company, msInfo);
-    try {
-      await updateTrialFollowUp(company.id, {
-        status,
-        notes: note,
-        milestone: status === "attended" ? currentMilestone : company.trialFollowUpMilestone || 0,
-      });
-      setSavedSuccessId(company.id);
-      setTimeout(() => setSavedSuccessId(null), 2000);
-      onRefresh();
-    } catch (err: any) {
-      alert(`Failed to save note: ${err.message}`);
-    } finally {
-      setSavingId(null);
+      alert(`Failed to update follow-up status: ${err.message}`);
     }
   };
 
@@ -194,7 +200,7 @@ export const FreeTrialsTable: React.FC<FreeTrialsTableProps> = ({
   if (trialList.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-[5px] border border-dashed border-[var(--border)] bg-[var(--card)] py-16 text-center">
-        <Gift size={36} className="text-[var(--muted-foreground)] opacity-40 mb-3" />
+        <Clock size={32} className="text-[var(--muted-foreground)] opacity-40 mb-3" />
         <h4 className="font-headline text-base font-semibold text-[var(--foreground)]">
           No Active Free Trial Accounts
         </h4>
@@ -215,18 +221,22 @@ export const FreeTrialsTable: React.FC<FreeTrialsTableProps> = ({
               <tr>
                 <th scope="col" className="px-5 py-3">Company & Owner</th>
                 <th scope="col" className="px-4 py-3">100-Day Countdown</th>
-                <th scope="col" className="px-4 py-3">20-Day Touchpoint</th>
+                <th scope="col" className="px-4 py-3">Next Follow-Up</th>
                 <th scope="col" className="px-4 py-3">Status</th>
-                <th scope="col" className="px-4 py-3 whitespace-nowrap">Follow-Up Notes</th>
+                <th scope="col" className="px-4 py-3 whitespace-nowrap">Notes & Feedback</th>
                 <th scope="col" className="px-5 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
               {trialList.map((company) => {
                 const validity = getDaysRemaining(company.membershipExpiresAt, company.subscriptionPlan);
-                const msInfo = getMilestoneInfo(company.subscriptionStartedAt, company.trialFollowUpMilestone || 0);
-                const currentStatus = getStatus(company, msInfo);
+                const schedule = calculateFollowUpSchedule(
+                  company.subscriptionStartedAt,
+                  company.trialFollowUpMilestone || 0
+                );
+                const currentStatus = getStatus(company, schedule);
                 const extensionDays = company.trialExtensionDays || 0;
+                const noteText = getNote(company);
 
                 // WhatsApp clean URL
                 const rawPhone = company.phone ? company.phone.replace(/[^0-9]/g, "") : null;
@@ -278,7 +288,7 @@ export const FreeTrialsTable: React.FC<FreeTrialsTableProps> = ({
 
                     {/* 100-Day Countdown */}
                     <td className="px-4 py-3.5 whitespace-nowrap">
-                      <div className="space-y-1">
+                      <div className="space-y-0.5">
                         <div className="flex items-center gap-1.5">
                           <span
                             className={`font-mono text-xs font-bold ${
@@ -292,78 +302,80 @@ export const FreeTrialsTable: React.FC<FreeTrialsTableProps> = ({
                             {validity.isExpired ? "Trial Expired" : `${validity.days} days left`}
                           </span>
                           {extensionDays > 0 && (
-                            <span className="inline-flex items-center px-1.5 py-0.2 rounded font-mono text-[9px] font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                            <span className="inline-flex items-center px-1.5 py-0.2 rounded font-mono text-[9px] font-semibold bg-[var(--accent)] text-[var(--foreground)] border border-[var(--border)]">
                               +{extensionDays}d
                             </span>
                           )}
                         </div>
                         <p className="font-mono text-[10px] text-[var(--muted-foreground)]">
-                          Day {msInfo.daysActive} of 100 • Exp: {formatDate(company.membershipExpiresAt)}
+                          Day {schedule.daysActive} of 100 • Exp: {formatDate(company.membershipExpiresAt)}
                         </p>
                       </div>
                     </td>
 
-                    {/* 20-Day Touchpoint Milestone */}
+                    {/* Dynamic Next Follow-up Date */}
                     <td className="px-4 py-3.5 whitespace-nowrap">
-                      <div className="space-y-1">
-                        <span className="font-semibold text-xs text-[var(--foreground)] block">
-                          Milestone {msInfo.milestoneNum}: {msInfo.title}
-                        </span>
-                        <div className="flex items-center gap-1 text-[10px] font-mono">
-                          {msInfo.daysToTarget > 0 ? (
-                            <span className="text-[var(--muted-foreground)]">
-                              Due in {msInfo.daysToTarget} days
-                            </span>
-                          ) : (
-                            <span className="font-bold text-amber-500">
-                              Touchpoint Due Now
-                            </span>
-                          )}
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-1.5">
+                          <Calendar size={12} className="text-[var(--muted-foreground)] shrink-0" />
+                          <span className="font-semibold text-xs text-[var(--foreground)]">
+                            {formatDate(schedule.nextDate.toISOString())}
+                          </span>
                         </div>
+                        <p className="font-mono text-[10px] text-[var(--muted-foreground)]">
+                          {schedule.daysToNextDate > 0
+                            ? `Due in ${schedule.daysToNextDate} days`
+                            : schedule.daysToNextDate === 0
+                            ? "Due today"
+                            : `Overdue by ${Math.abs(schedule.daysToNextDate)} days`}{" "}
+                          • Follow-up {schedule.displayMilestone} of 5
+                        </p>
                       </div>
                     </td>
 
-                    {/* Follow-up Attended / Unattended Selector */}
+                    {/* Clean Status Selector (Attended / Unattended) */}
                     <td className="px-4 py-3.5 whitespace-nowrap">
-                      <select
-                        value={currentStatus}
-                        onChange={(e) =>
-                          handleStatusChange(
-                            company,
-                            e.target.value as "unattended" | "attended",
-                            msInfo.milestoneNum
-                          )
-                        }
-                        className={`rounded-[5px] border px-2 py-1 text-xs font-semibold outline-none transition cursor-pointer ${
-                          currentStatus === "attended"
-                            ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                            : "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                        }`}
-                      >
-                        <option value="unattended">Unattended</option>
-                        <option value="attended">Attended</option>
-                      </select>
+                      <div className="relative inline-flex items-center">
+                        <select
+                          value={currentStatus}
+                          onChange={(e) =>
+                            handleStatusChange(
+                              company,
+                              e.target.value as "unattended" | "attended"
+                            )
+                          }
+                          className={`appearance-none rounded-[5px] border pl-2.5 pr-6 py-1 text-xs font-mono font-medium outline-none transition-colors cursor-pointer ${
+                            currentStatus === "attended"
+                              ? "border-[var(--border)] bg-[var(--accent)] text-[var(--foreground)] font-semibold"
+                              : "border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:border-[var(--foreground)]/40"
+                          }`}
+                        >
+                          <option value="unattended">Unattended</option>
+                          <option value="attended">Attended</option>
+                        </select>
+                        <ChevronDown size={11} className="pointer-events-none absolute right-2 text-[var(--muted-foreground)]" />
+                      </div>
                     </td>
 
-                    {/* Follow-up Note Button */}
+                    {/* Notes & Feedback Button */}
                     <td className="px-4 py-3.5 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                      {company.trialFollowUpNotes ? (
+                      {noteText ? (
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => handleOpenNoteModal(company, msInfo.milestoneNum, msInfo.title)}
+                            onClick={() => handleOpenNoteModal(company)}
                             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] border border-[var(--border)] bg-[var(--accent)] hover:border-[var(--foreground)] text-xs font-medium text-[var(--foreground)] transition-colors cursor-pointer"
-                            title={company.trialFollowUpNotes}
+                            title={noteText}
                           >
-                            <FileText size={12} className="text-[var(--primary)] shrink-0" />
+                            <FileText size={12} className="text-[var(--foreground)] shrink-0" />
                             <span>View / Edit Note</span>
                           </button>
-                          <span className="text-[11px] text-[var(--muted-foreground)] max-w-[130px] truncate" title={company.trialFollowUpNotes}>
-                            {company.trialFollowUpNotes}
+                          <span className="text-[11px] text-[var(--muted-foreground)] max-w-[130px] truncate" title={noteText}>
+                            {noteText}
                           </span>
                         </div>
                       ) : (
                         <button
-                          onClick={() => handleOpenNoteModal(company, msInfo.milestoneNum, msInfo.title)}
+                          onClick={() => handleOpenNoteModal(company)}
                           className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] border border-dashed border-[var(--border)] hover:border-[var(--foreground)] text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors cursor-pointer"
                         >
                           <PlusCircle size={12} className="shrink-0" />
@@ -381,7 +393,7 @@ export const FreeTrialsTable: React.FC<FreeTrialsTableProps> = ({
                             href={waUrl}
                             target="_blank"
                             rel="noreferrer"
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-[5px] border border-[var(--border)] bg-[var(--accent)] text-[var(--foreground)] hover:border-emerald-500 hover:text-emerald-500 transition-colors"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-[5px] border border-[var(--border)] bg-[var(--accent)] text-[var(--foreground)] hover:border-[var(--foreground)] transition-colors"
                             title="Chat on WhatsApp"
                           >
                             <MessageSquare size={13} />
@@ -400,7 +412,7 @@ export const FreeTrialsTable: React.FC<FreeTrialsTableProps> = ({
                         {/* Extend Trial Button */}
                         <Button
                           size="sm"
-                          variant="primary"
+                          variant="secondary"
                           onClick={() => {
                             setExtendTarget(company);
                             setExtendDays(15);
@@ -452,7 +464,7 @@ export const FreeTrialsTable: React.FC<FreeTrialsTableProps> = ({
             </div>
 
             {extendSuccessMsg && (
-              <div className="rounded-[5px] border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+              <div className="rounded-[5px] border border-[var(--border)] bg-[var(--accent)] p-3 text-xs font-medium text-[var(--foreground)]">
                 {extendSuccessMsg}
               </div>
             )}
@@ -484,21 +496,12 @@ export const FreeTrialsTable: React.FC<FreeTrialsTableProps> = ({
         <Modal
           isOpen={Boolean(noteModalTarget)}
           onClose={() => setNoteModalTarget(null)}
-          title={`Follow-up Note: ${noteModalTarget.company.businessName}`}
+          title={`Follow-up Note: ${noteModalTarget.businessName}`}
         >
           <div className="space-y-4 pt-2">
-            <div>
-              <p className="text-xs font-semibold text-[var(--foreground)]">
-                {noteModalTarget.title}
-              </p>
-              <p className="text-[11px] text-[var(--muted-foreground)] mt-0.5">
-                Owner: {noteModalTarget.company.ownerName} {noteModalTarget.company.phone ? `• ${noteModalTarget.company.phone}` : ""}
-              </p>
-            </div>
-
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-[var(--foreground)]">
-                Touchpoint Notes & Feedback:
+                Notes and Feedback
               </label>
               <textarea
                 rows={6}
@@ -533,4 +536,3 @@ export const FreeTrialsTable: React.FC<FreeTrialsTableProps> = ({
     </div>
   );
 };
-

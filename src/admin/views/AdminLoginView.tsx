@@ -33,26 +33,38 @@ export const AdminLoginView: React.FC = () => {
       if (signInError) throw signInError;
       if (!authData.user) throw new Error("No user returned from login.");
 
-      // 2. Verify platform admin privileges in profiles table
-      const { data: profile, error: profileError } = await supabase
+      // 2. Verify platform admin or designer privileges in profiles table
+      let profile: any = null;
+      const { data: profileWithRole, error: profileError } = await supabase
         .from("profiles")
-        .select("is_admin, business_name")
+        .select("is_admin, role, business_name")
         .eq("id", authData.user.id)
         .maybeSingle();
 
       if (profileError) {
-        console.warn("Could not check admin profile flag:", profileError.message);
+        console.warn("Could not check role column, checking is_admin:", profileError.message);
+        const { data: fallbackProfile } = await supabase
+          .from("profiles")
+          .select("is_admin, business_name")
+          .eq("id", authData.user.id)
+          .maybeSingle();
+        profile = fallbackProfile;
+      } else {
+        profile = profileWithRole;
       }
 
-      // If is_admin flag is false or missing, deny access and sign out
-      if (!profile || !profile.is_admin) {
+      const isAdmin = Boolean(profile?.is_admin || profile?.role === "admin");
+      const isDesigner = profile?.role === "designer";
+
+      // If neither admin nor designer, deny access and sign out
+      if (!profile || (!isAdmin && !isDesigner)) {
         await supabase.auth.signOut();
         throw new Error(
-          "Access Denied: This account is authenticated but does not have administrator privileges."
+          "Access Denied: This account does not have administrator or designer privileges."
         );
       }
 
-      // 3. Successful admin login -> route to admin dashboard
+      // 3. Successful login -> route to console
       const isSubdomain =
         typeof window !== "undefined" &&
         (window.location.hostname.startsWith("admin.") ||
@@ -84,10 +96,10 @@ export const AdminLoginView: React.FC = () => {
             <Shield size={28} />
           </div>
           <h1 className="font-headline text-2xl font-bold tracking-tight text-[var(--foreground)]">
-            Admin Portal
+            Admin & Staff Portal
           </h1>
           <p className="text-xs text-[var(--muted-foreground)]">
-            Sign in with your administrator credentials to manage companies and subscriptions.
+            Sign in with your administrator or designer credentials to access the console.
           </p>
         </div>
 
@@ -104,7 +116,7 @@ export const AdminLoginView: React.FC = () => {
             {/* Email Field */}
             <div className="space-y-1.5">
               <label className="font-mono text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-                Admin Email
+                Email Address
               </label>
               <div className="relative">
                 <Mail

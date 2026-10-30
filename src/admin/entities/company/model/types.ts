@@ -37,6 +37,7 @@ export interface Company {
   trialFollowUpStatus?: "unattended" | "attended" | null;
   trialFollowUpNotes?: string | null;
   profileCompletionPercentage?: number;
+  role?: "user" | "admin" | "designer" | null;
 }
 
 export interface CompanyWithEmployees extends Company {

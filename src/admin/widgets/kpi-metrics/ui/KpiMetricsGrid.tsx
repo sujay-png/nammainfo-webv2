@@ -1,5 +1,5 @@
 import React from "react";
-import { CreditCard, Clock, CalendarX, Gift } from "lucide-react";
+import { CreditCard, Clock, CalendarX, FileText } from "lucide-react";
 import { StatCard } from "@/admin/shared/ui/StatCard";
 import type { AdminStats } from "@/admin/entities/company/model/types";
 
@@ -40,11 +40,11 @@ export const KpiMetricsGrid: React.FC<KpiMetricsGridProps> = ({
         title="Pending Trials"
         value={loading ? "—" : stats.pendingTrialsCount ?? 0}
         subtitle={
-          <span className={(stats.pendingTrialsCount ?? 0) > 0 ? "font-semibold text-amber-500" : ""}>
-            {(stats.pendingTrialsCount ?? 0) > 0 ? "Awaiting approval (ADI100)" : "No pending requests"}
+          <span className={(stats.pendingTrialsCount ?? 0) > 0 ? "font-semibold text-[var(--foreground)]" : ""}>
+            {(stats.pendingTrialsCount ?? 0) > 0 ? "Awaiting approval" : "No pending requests"}
           </span>
         }
-        icon={<Gift size={18} strokeWidth={1.8} />}
+        icon={<FileText size={18} strokeWidth={1.8} />}
         isActive={activeView === "pending_trials"}
         onClick={() => onSelectView("pending_trials")}
       />

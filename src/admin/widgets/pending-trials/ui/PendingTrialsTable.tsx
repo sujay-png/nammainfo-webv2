@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
-import { Check, X, Clock, ExternalLink, Phone, Mail, Gift, ShieldAlert } from "lucide-react";
+import { Check, X, Clock, ExternalLink, Phone, Mail, FileText, ShieldAlert, AlertTriangle } from "lucide-react";
 import { Badge } from "@/admin/shared/ui/Badge";
 import { Button } from "@/admin/shared/ui/Button";
+import { Modal } from "@/admin/shared/ui/Modal";
 import { formatDate } from "@/admin/shared/lib/formatters";
 import { approveFreeTrial, rejectFreeTrial } from "@/admin/entities/company/api/company-api";
 import type { Company } from "@/admin/entities/company/model/types";
@@ -24,14 +25,20 @@ export const PendingTrialsTable: React.FC<PendingTrialsTableProps> = ({
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [successId, setSuccessId] = useState<string | null>(null);
 
+  // Confirmation Modal state
+  const [confirmApproveCompany, setConfirmApproveCompany] = useState<Company | null>(null);
+  const [confirmRejectCompany, setConfirmRejectCompany] = useState<Company | null>(null);
+  const [rejectReason, setRejectReason] = useState<string>("");
+
   // Filter only companies awaiting trial approval
   const pendingList = companies.filter((c) => c.trialStatus === "pending_approval");
 
-  const handleApprove = async (company: Company) => {
+  const executeApprove = async (company: Company) => {
     setActionLoadingId(company.id);
     try {
       await approveFreeTrial(company.id);
       setSuccessId(company.id);
+      setConfirmApproveCompany(null);
       setTimeout(() => setSuccessId(null), 2500);
       onRefresh();
     } catch (err: any) {
@@ -41,13 +48,11 @@ export const PendingTrialsTable: React.FC<PendingTrialsTableProps> = ({
     }
   };
 
-  const handleReject = async (company: Company) => {
-    const reason = prompt("Enter a brief reason for rejecting this trial application (optional):");
-    if (reason === null) return; // User cancelled prompt
-
+  const executeReject = async (company: Company, reason: string) => {
     setActionLoadingId(company.id);
     try {
-      await rejectFreeTrial(company.id, reason);
+      await rejectFreeTrial(company.id, reason.trim() || undefined);
+      setConfirmRejectCompany(null);
       onRefresh();
     } catch (err: any) {
       alert(`Failed to reject free trial: ${err.message}`);
@@ -72,12 +77,12 @@ export const PendingTrialsTable: React.FC<PendingTrialsTableProps> = ({
   if (pendingList.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-[5px] border border-dashed border-[var(--border)] bg-[var(--card)] py-16 text-center">
-        <Gift size={36} className="text-[var(--muted-foreground)] opacity-40 mb-3" />
+        <FileText size={32} className="text-[var(--muted-foreground)] opacity-40 mb-3" />
         <h4 className="font-headline text-base font-semibold text-[var(--foreground)]">
           No Pending Free Trial Requests
         </h4>
         <p className="mt-1 text-xs text-[var(--muted-foreground)] max-w-sm">
-          All 100-day Free Trial applications have been reviewed. When new users apply using coupon code <strong>ADI100</strong>, they will appear here.
+          All 100-day Free Trial applications have been reviewed. When new users apply for the free trial, they will appear here.
         </p>
       </div>
     );
@@ -86,19 +91,15 @@ export const PendingTrialsTable: React.FC<PendingTrialsTableProps> = ({
   return (
     <div className="space-y-4">
       {/* Informative Header Banner */}
-      <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4">
         <div>
           <h3 className="font-headline text-sm font-bold text-[var(--foreground)] flex items-center gap-2">
-            <Gift size={16} className="text-amber-500" />
+            <Clock size={15} className="text-[var(--muted-foreground)]" />
             Pending 100-Day Free Trial Applications
           </h3>
           <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
             {pendingList.length} application{pendingList.length === 1 ? "" : "s"} awaiting approval. Approving starts the 100-day countdown with full Pro plan capabilities.
           </p>
-        </div>
-        <div className="shrink-0 flex items-center gap-2">
-          <Badge variant="pro">Code: ADI100</Badge>
-          <Badge variant="active">Min 60% Profile Verified</Badge>
         </div>
       </div>
 
@@ -131,65 +132,48 @@ export const PendingTrialsTable: React.FC<PendingTrialsTableProps> = ({
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-3">
                         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[5px] bg-[var(--accent)] font-headline text-xs font-bold text-[var(--foreground)] border border-[var(--border)]">
-                          {company.avatarUrl ? (
-                            <img
-                              src={company.avatarUrl}
-                              alt=""
-                              className="h-full w-full rounded-[5px] object-cover"
-                            />
-                          ) : (
-                            company.businessName.charAt(0).toUpperCase()
-                          )}
+                          {company.businessName.charAt(0).toUpperCase()}
                         </div>
-                        <div className="min-w-0">
-                          <button
-                            onClick={() => onSelectCompany(company)}
-                            className="text-left font-semibold text-[var(--foreground)] hover:underline truncate block max-w-[200px]"
-                          >
-                            {company.businessName}
-                          </button>
-                          <div className="flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)]">
-                            <span>Owner: {company.ownerName}</span>
-                            {company.username && (
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-semibold text-xs text-[var(--foreground)]">
+                              {company.businessName}
+                            </span>
+                            {company.slug && (
                               <a
-                                href={`/${company.username}`}
+                                href={`/${company.slug}`}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="inline-flex items-center gap-0.5 text-[var(--foreground)] hover:underline"
-                                title="Open digital card"
+                                className="text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+                                title="Preview Public Profile"
                               >
-                                <ExternalLink size={10} />
+                                <ExternalLink size={12} />
                               </a>
                             )}
                           </div>
+                          <p className="font-mono text-[11px] text-[var(--muted-foreground)] mt-0.5">
+                            Owner: {company.ownerName}
+                          </p>
                         </div>
                       </div>
                     </td>
 
                     {/* Contact */}
-                    <td className="px-4 py-3.5 whitespace-nowrap">
-                      <div className="space-y-1">
-                        {company.phone ? (
-                          <a
-                            href={`tel:${company.phone}`}
-                            className="flex items-center gap-1.5 font-mono text-[11px] text-[var(--foreground)] hover:underline"
-                          >
-                            <Phone size={11} className="text-[var(--muted-foreground)]" />
-                            {company.phone}
-                          </a>
-                        ) : (
-                          <span className="font-mono text-[11px] text-[var(--muted-foreground)]">—</span>
-                        )}
-                        {company.email && (
-                          <a
-                            href={`mailto:${company.email}`}
-                            className="flex items-center gap-1.5 font-mono text-[11px] text-[var(--muted-foreground)] hover:underline truncate max-w-[180px]"
-                          >
-                            <Mail size={11} className="shrink-0" />
-                            <span className="truncate">{company.email}</span>
-                          </a>
-                        )}
-                      </div>
+                    <td className="px-4 py-3.5 font-mono text-[11px] space-y-1">
+                      {company.phone ? (
+                        <div className="flex items-center gap-1.5 text-[var(--foreground)]">
+                          <Phone size={12} className="text-[var(--muted-foreground)]" />
+                          <span>{company.phone}</span>
+                        </div>
+                      ) : (
+                        <span className="text-[var(--muted-foreground)]">No phone</span>
+                      )}
+                      {company.email && (
+                        <div className="flex items-center gap-1.5 text-[var(--muted-foreground)] truncate max-w-[180px]">
+                          <Mail size={12} />
+                          <span className="truncate">{company.email}</span>
+                        </div>
+                      )}
                     </td>
 
                     {/* Profile Completion */}
@@ -201,9 +185,7 @@ export const PendingTrialsTable: React.FC<PendingTrialsTableProps> = ({
                         </div>
                         <div className="h-1.5 w-full rounded-full bg-[var(--muted)] overflow-hidden">
                           <div
-                            className={`h-full rounded-full transition-all duration-300 ${
-                              completion >= 60 ? "bg-emerald-500" : "bg-amber-500"
-                            }`}
+                            className="h-full rounded-full bg-[var(--foreground)] transition-all duration-300"
                             style={{ width: `${Math.min(100, completion)}%` }}
                           />
                         </div>
@@ -217,7 +199,7 @@ export const PendingTrialsTable: React.FC<PendingTrialsTableProps> = ({
 
                     {/* Coupon Code */}
                     <td className="px-4 py-3.5 whitespace-nowrap">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] font-mono text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] font-mono text-xs font-semibold bg-[var(--accent)] text-[var(--foreground)] border border-[var(--border)]">
                         {company.trialCouponCode || "ADI100"}
                       </span>
                     </td>
@@ -226,15 +208,18 @@ export const PendingTrialsTable: React.FC<PendingTrialsTableProps> = ({
                     <td className="px-5 py-3.5 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-2">
                         {isSuccess ? (
-                          <span className="flex items-center gap-1.5 font-mono text-xs font-bold text-emerald-500">
-                            <Check size={14} /> Approved!
+                          <span className="flex items-center gap-1.5 font-mono text-xs font-semibold text-[var(--foreground)]">
+                            <Check size={14} /> Approved
                           </span>
                         ) : (
                           <>
                             <Button
                               size="sm"
                               variant="secondary"
-                              onClick={() => handleReject(company)}
+                              onClick={() => {
+                                setConfirmRejectCompany(company);
+                                setRejectReason("");
+                              }}
                               disabled={isActioning}
                               className="text-xs text-rose-500 hover:text-rose-600"
                             >
@@ -244,12 +229,12 @@ export const PendingTrialsTable: React.FC<PendingTrialsTableProps> = ({
                             <Button
                               size="sm"
                               variant="primary"
-                              onClick={() => handleApprove(company)}
+                              onClick={() => setConfirmApproveCompany(company)}
                               isLoading={isActioning}
                               className="text-xs font-semibold"
                             >
                               <Check size={13} className="mr-1" />
-                              Approve 100-Day Trial
+                              Approve
                             </Button>
                           </>
                         )}
@@ -262,7 +247,109 @@ export const PendingTrialsTable: React.FC<PendingTrialsTableProps> = ({
           </table>
         </div>
       </div>
+
+      {/* 1. Modal: Confirmation for Approval */}
+      {confirmApproveCompany && (
+        <Modal
+          isOpen={Boolean(confirmApproveCompany)}
+          onClose={() => setConfirmApproveCompany(null)}
+          title="Approve Free Trial"
+          maxWidth="sm"
+        >
+          <div className="space-y-4">
+            <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
+              Are you sure you want to approve the 100-Day Free Trial for{" "}
+              <strong className="text-[var(--foreground)]">{confirmApproveCompany.businessName}</strong>?
+            </p>
+
+            <div className="rounded-[5px] border border-[var(--border)] bg-[var(--accent)]/30 p-3 text-xs text-[var(--muted-foreground)] space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span>Applicant:</span>
+                <span className="font-semibold text-[var(--foreground)]">{confirmApproveCompany.ownerName}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Duration:</span>
+                <span className="font-mono font-semibold text-[var(--foreground)]">100 Days</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Access:</span>
+                <span className="font-semibold text-[var(--foreground)]">Full Pro Plan Features</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border)]">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setConfirmApproveCompany(null)}
+                disabled={actionLoadingId === confirmApproveCompany.id}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => executeApprove(confirmApproveCompany)}
+                isLoading={actionLoadingId === confirmApproveCompany.id}
+              >
+                <Check size={13} className="mr-1" />
+                Confirm & Approve
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* 2. Modal: Confirmation for Rejection */}
+      {confirmRejectCompany && (
+        <Modal
+          isOpen={Boolean(confirmRejectCompany)}
+          onClose={() => setConfirmRejectCompany(null)}
+          title="Reject Free Trial Application"
+          maxWidth="sm"
+        >
+          <div className="space-y-4">
+            <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
+              Are you sure you want to decline the trial application for{" "}
+              <strong className="text-[var(--foreground)]">{confirmRejectCompany.businessName}</strong>?
+              This will remove the request from pending trials.
+            </p>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-[var(--foreground)] block">
+                Reason for Rejection <span className="font-normal text-[var(--muted-foreground)]">(Optional)</span>
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Incomplete profile details, duplicate request..."
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs text-[var(--foreground)] outline-none focus:border-[var(--foreground)] transition-colors placeholder:text-[var(--muted-foreground)]/50"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border)]">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setConfirmRejectCompany(null)}
+                disabled={actionLoadingId === confirmRejectCompany.id}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => executeReject(confirmRejectCompany, rejectReason)}
+                isLoading={actionLoadingId === confirmRejectCompany.id}
+              >
+                <X size={13} className="mr-1" />
+                Confirm Rejection
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };
-

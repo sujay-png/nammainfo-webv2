@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { requireAdminAuth } from "@/admin/shared/lib/admin-auth";
+import { requireStaffAuth } from "@/admin/shared/lib/admin-auth";
 import type { Company, AdminStats, AccountStatus, SubscriptionPlanType } from "@/admin/entities/company/model/types";
 import { calculateProfileCompletion } from "@/lib/profile-completion";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const auth = await requireAdminAuth(request);
+  const auth = await requireStaffAuth(request);
   if (!auth.authorized) {
     return auth.response;
   }

@@ -11,7 +11,9 @@ import {
   Search,
   Loader2,
   Check,
-  Gift,
+  QrCode,
+  Copy,
+  Download,
 } from "lucide-react";
 import { Modal } from "@/admin/shared/ui/Modal";
 import { Badge } from "@/admin/shared/ui/Badge";
@@ -31,6 +33,8 @@ import type {
   CompanyWithEmployees,
   SubscriptionPlanType,
 } from "@/admin/entities/company/model/types";
+import { CompanyQrCardRow } from "./CompanyQrCardRow";
+import { buildPublicCardUrl } from "@/admin/shared/lib/card-urls";
 
 interface CompanyDetailModalProps {
   company: Company | null;
@@ -38,6 +42,7 @@ interface CompanyDetailModalProps {
   onClose: () => void;
   onRefresh: () => void;
   onDeleteRequest?: (company: Company) => void;
+  readOnly?: boolean;
 }
 
 export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
@@ -46,19 +51,21 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
   onClose,
   onRefresh,
   onDeleteRequest,
+  readOnly = false,
 }) => {
   const [details, setDetails] = useState<CompanyWithEmployees | null>(null);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"overview" | "subscription" | "employees">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "subscription" | "employees" | "qrcodes">("overview");
 
   // Plan and Date Form state for Company
   const [editPlan, setEditPlan] = useState<SubscriptionPlanType>("free");
   const [editStartDate, setEditStartDate] = useState<string>("");
   const [editExpiryDate, setEditExpiryDate] = useState<string>("");
 
-  // Search in team tab
+  // Search in team tab & QR tab
   const [empSearch, setEmpSearch] = useState<string>("");
+  const [qrSearch, setQrSearch] = useState<string>("");
 
   // Save Feedback State
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
@@ -338,16 +345,18 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
             >
               Overview & Details
             </button>
-            <button
-              onClick={() => setActiveTab("subscription")}
-              className={`border-b-2 px-3.5 py-2 text-xs font-semibold uppercase tracking-wider transition-all whitespace-nowrap ${
-                activeTab === "subscription"
-                  ? "border-[var(--foreground)] text-[var(--foreground)]"
-                  : "border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              Subscription & Validity
-            </button>
+            {!readOnly && (
+              <button
+                onClick={() => setActiveTab("subscription")}
+                className={`border-b-2 px-3.5 py-2 text-xs font-semibold uppercase tracking-wider transition-all whitespace-nowrap ${
+                  activeTab === "subscription"
+                    ? "border-[var(--foreground)] text-[var(--foreground)]"
+                    : "border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                }`}
+              >
+                Subscription & Validity
+              </button>
+            )}
             <button
               onClick={() => setActiveTab("employees")}
               className={`border-b-2 px-3.5 py-2 text-xs font-semibold uppercase tracking-wider transition-all whitespace-nowrap ${
@@ -357,6 +366,17 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
               }`}
             >
               Team Members ({teamCount})
+            </button>
+            <button
+              onClick={() => setActiveTab("qrcodes")}
+              className={`border-b-2 px-3.5 py-2 text-xs font-semibold uppercase tracking-wider transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                activeTab === "qrcodes"
+                  ? "border-[var(--foreground)] text-[var(--foreground)]"
+                  : "border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+              }`}
+            >
+              <QrCode size={13} />
+              <span>QR Codes & URLs ({1 + teamCount})</span>
             </button>
           </div>
 
@@ -660,24 +680,30 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                           </div>
 
                           <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-[var(--border)] shrink-0">
-                            <div className="flex items-center gap-2">
-                              <select
-                                value={emp.isPremium && current.subscriptionPlan !== "free" ? "pro" : "free"}
-                                onChange={(e) => handleEmployeePlanChange(emp.id, e.target.value as "pro" | "free")}
-                                disabled={updatingEmpId === emp.id}
-                                className={`rounded-[5px] border px-2.5 py-1 text-xs font-semibold outline-none cursor-pointer transition-all ${
-                                  emp.isPremium && current.subscriptionPlan !== "free"
-                                    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400 focus:border-emerald-500"
-                                    : "border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] focus:border-[var(--foreground)]"
-                                }`}
-                              >
-                                <option value="pro" className="bg-[#18181b] text-emerald-400 font-medium">Pro Plan (Team Card)</option>
-                                <option value="free" className="bg-[#18181b] text-gray-300 font-medium">Free Plan (No Card)</option>
-                              </select>
-                              {updatingEmpId === emp.id && (
-                                <Loader2 size={13} className="animate-spin text-[var(--muted-foreground)]" />
-                              )}
-                            </div>
+                            {readOnly ? (
+                              <span className="px-2 py-0.5 rounded-[4px] border border-[var(--border)] bg-[var(--accent)] font-mono text-[10px] font-semibold text-[var(--foreground)]">
+                                {emp.isPremium && current.subscriptionPlan !== "free" ? "Pro Card" : "Free Plan"}
+                              </span>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <select
+                                  value={emp.isPremium && current.subscriptionPlan !== "free" ? "pro" : "free"}
+                                  onChange={(e) => handleEmployeePlanChange(emp.id, e.target.value as "pro" | "free")}
+                                  disabled={updatingEmpId === emp.id}
+                                  className={`rounded-[5px] border px-2.5 py-1 text-xs font-semibold outline-none cursor-pointer transition-all ${
+                                    emp.isPremium && current.subscriptionPlan !== "free"
+                                      ? "border-[var(--border)] bg-[var(--accent)] text-[var(--foreground)] font-semibold"
+                                      : "border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] focus:border-[var(--foreground)]"
+                                  }`}
+                                >
+                                  <option value="pro" className="bg-[#18181b] text-gray-100 font-medium">Pro Plan (Team Card)</option>
+                                  <option value="free" className="bg-[#18181b] text-gray-300 font-medium">Free Plan (No Card)</option>
+                                </select>
+                                {updatingEmpId === emp.id && (
+                                  <Loader2 size={13} className="animate-spin text-[var(--muted-foreground)]" />
+                                )}
+                              </div>
+                            )}
 
                             <span className="font-mono text-[11px] text-[var(--muted-foreground)] min-w-[70px] text-right">
                               {!emp.isPremium || current.subscriptionPlan === "free"
@@ -701,6 +727,122 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                   </p>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Tab 4: QR Codes & Public URLs */}
+          {activeTab === "qrcodes" && (
+            <div className="space-y-4">
+              {/* Optional Search bar if there are multiple team members */}
+              {teamCount > 2 && (
+                <div className="relative">
+                  <Search
+                    size={14}
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Search QR code by team member name, designation, or email..."
+                    value={qrSearch}
+                    onChange={(e) => setQrSearch(e.target.value)}
+                    className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] pl-10 pr-4 py-2 text-xs outline-none focus:border-[var(--foreground)]"
+                  />
+                </div>
+              )}
+
+              {/* QR Code List */}
+              <div className="space-y-3 max-h-[440px] overflow-y-auto pr-1">
+                {/* 1. Primary Company / Owner Card */}
+                {(() => {
+                  const ownerMatches =
+                    !qrSearch.trim() ||
+                    current.businessName.toLowerCase().includes(qrSearch.toLowerCase()) ||
+                    current.ownerName.toLowerCase().includes(qrSearch.toLowerCase()) ||
+                    (current.username && current.username.toLowerCase().includes(qrSearch.toLowerCase()));
+
+                  if (!ownerMatches) return null;
+
+                  const ownerSlug = current.username || current.slug || current.id;
+                  const ownerUrl = buildPublicCardUrl(ownerSlug);
+                  const ownerFileName = `qr-${(current.username || current.businessName).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+
+                  return (
+                    <div className="space-y-1">
+                      <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)] block font-semibold px-0.5">
+                        Primary Card
+                      </span>
+                      <CompanyQrCardRow
+                        isPrimary
+                        title={current.businessName}
+                        subtitle={`Owner: ${current.ownerName}${current.email ? ` • ${current.email}` : ""}`}
+                        url={ownerUrl}
+                        badge="Primary"
+                        downloadFileName={ownerFileName}
+                      />
+                    </div>
+                  );
+                })()}
+
+                {/* 2. Team Member Cards */}
+                {teamCount > 0 ? (
+                  (() => {
+                    const filteredTeam = (current.employees || []).filter((emp) => {
+                      if (!qrSearch.trim()) return true;
+                      const q = qrSearch.toLowerCase();
+                      return (
+                        emp.name.toLowerCase().includes(q) ||
+                        (emp.designation && emp.designation.toLowerCase().includes(q)) ||
+                        (emp.email && emp.email.toLowerCase().includes(q))
+                      );
+                    });
+
+                    if (filteredTeam.length === 0 && qrSearch.trim()) {
+                      return (
+                        <div className="p-6 text-center text-xs text-[var(--muted-foreground)] rounded-[5px] border border-dashed border-[var(--border)]">
+                          No team members matched &quot;{qrSearch}&quot;
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="space-y-1 pt-1">
+                        <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)] block font-semibold px-0.5">
+                          Team Cards ({filteredTeam.length})
+                        </span>
+                        <div className="space-y-1.5">
+                          {filteredTeam.map((emp) => {
+                            const ownerSlug = current.username || current.slug || current.id;
+                            const empSlug = emp.slug || emp.id;
+                            const empUrl = buildPublicCardUrl(ownerSlug, empSlug);
+                            const dlName = `qr-${ownerSlug}-${empSlug}`.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+
+                            return (
+                              <CompanyQrCardRow
+                                key={emp.id}
+                                title={emp.name}
+                                subtitle={`${emp.designation || "Team Member"}${emp.email ? ` • ${emp.email}` : ""}`}
+                                url={empUrl}
+                                badge={
+                                  emp.isPremium && current.subscriptionPlan !== "free"
+                                    ? "Team Pro"
+                                    : "Team Member"
+                                }
+                                downloadFileName={dlName}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()
+                ) : (
+                  <div className="rounded-[5px] border border-dashed border-[var(--border)] p-4 text-center">
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      No team member cards yet. You can add employees in the <strong>Team Members</strong> tab.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
