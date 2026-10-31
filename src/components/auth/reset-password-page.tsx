@@ -48,7 +48,9 @@ export default function ResetPasswordPage() {
       setError(
         message.includes("same password")
           ? "New password must be different from your current password."
-          : message
+          : /session missing|not authenticated|jwt/i.test(message)
+            ? "This reset link has expired. Go back to Forgot password and request a new one."
+            : message
       );
     } finally {
       setLoading(false);

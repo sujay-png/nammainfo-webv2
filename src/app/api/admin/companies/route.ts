@@ -3,6 +3,7 @@ import { requireStaffAuth } from "@/admin/shared/lib/admin-auth";
 import { loadAdminNotes } from "@/admin/shared/lib/admin-notes";
 import type { Company, AdminStats, AccountStatus, SubscriptionPlanType } from "@/admin/entities/company/model/types";
 import { calculateProfileCompletion } from "@/lib/profile-completion";
+import { getMembership } from "@/lib/membership";
 
 export const dynamic = "force-dynamic";
 
@@ -123,15 +124,12 @@ export async function GET(request: Request) {
         pendingTrialsCount++;
       }
 
-      const hasCompanyProPlan = Boolean(
-        p.subscription_plan === "pro" ||
-        p.subscription_plan === "starter" ||
-        p.subscription_plan === "enterprise" ||
-        p.subscription_plan === "lifetime" ||
-        (p.is_member === true && p.membership_expires_at && new Date(p.membership_expires_at).getTime() > now) ||
-        (p.membership_expires_at && new Date(p.membership_expires_at).getTime() > now) ||
-        hasValidEmpExpiry
-      );
+      // Same rule as the public profile page (lib/membership), so the admin
+      // console never shows "Pro" for a company whose public profile is
+      // locked. A paid team member does NOT make the company Pro: set the
+      // company's own plan for that.
+      void hasValidEmpExpiry;
+      const hasCompanyProPlan = getMembership(p).isPaid;
 
       const plan: SubscriptionPlanType = isTrial
         ? "trial"

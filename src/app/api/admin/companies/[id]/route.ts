@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdminAuth, requireStaffAuth } from "@/admin/shared/lib/admin-auth";
 import type { CompanyWithEmployees, AccountStatus, SubscriptionPlanType } from "@/admin/entities/company/model/types";
 import type { AdminEmployee } from "@/admin/entities/employee/model/types";
+import { getMembership } from "@/lib/membership";
 
 export const dynamic = "force-dynamic";
 
@@ -88,15 +89,10 @@ export async function GET(
     const hasValidEmpExpiry = Boolean(latestEmployeeExpiry && new Date(latestEmployeeExpiry).getTime() > now);
 
     // Determine if company has an active Pro subscription:
-    const hasCompanyProPlan = Boolean(
-      p.subscription_plan === "pro" ||
-      p.subscription_plan === "starter" ||
-      p.subscription_plan === "enterprise" ||
-      p.subscription_plan === "lifetime" ||
-      (p.is_member === true && p.membership_expires_at && new Date(p.membership_expires_at).getTime() > now) ||
-      (p.membership_expires_at && new Date(p.membership_expires_at).getTime() > now) ||
-      hasValidEmpExpiry
-    );
+    // Same rule as the public profile page (lib/membership). A paid team
+    // member does NOT make the company Pro: set the company's own plan.
+    void hasValidEmpExpiry;
+    const hasCompanyProPlan = getMembership(p).isPaid;
 
     const plan: SubscriptionPlanType = hasCompanyProPlan ? "pro" : "free";
 

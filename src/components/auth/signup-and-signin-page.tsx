@@ -20,6 +20,7 @@ import {
 import { createClient } from "@/supabase/client";
 import { flushPendingSaves } from "@/features/saved-cards/services/saved-cards.service";
 import { showInstallAfterLogin } from "@/features/install-app/components/add-to-home-screen-popup";
+import { getSiteUrl } from "@/lib/site-url";
 
 /* ------------------------------------------------------------------ */
 /*  Hero: a floating "physical" NFC card — always dark, so it reads     */
@@ -239,8 +240,8 @@ function SignUpForm() {
             // link lands them in Saved Cards (via /onboarding?saved=1, an
             // already-allowed redirect that forwards straight on).
             emailRedirectTo: saveId
-              ? `${window.location.origin}/onboarding?saved=1`
-              : `${window.location.origin}${onboardingUrl}`,
+              ? `${getSiteUrl()}/onboarding?saved=1`
+              : `${getSiteUrl()}${onboardingUrl}`,
             // Stored on the account, so the card is saved even if the
             // confirmation email is opened in another browser or app.
             data: saveId ? { pending_save: saveId } : undefined,

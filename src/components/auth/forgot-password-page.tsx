@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/supabase/client";
+import { getSiteUrl } from "@/lib/site-url";
 import { ArrowLeft, Mail } from "lucide-react";
 
 export default function ForgotPasswordPage() {
@@ -10,6 +11,13 @@ export default function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+
+  // Arrived from an expired / already-used reset link.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("expired") === "1") {
+      setError("That reset link has expired or was already used. Enter your email to get a new one.");
+    }
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -20,16 +28,22 @@ export default function ForgotPasswordPage() {
 
     try {
       const { error: resetError } =
-        await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
+        await supabase.auth.resetPasswordForEmail(email.trim(), {
+          // Always the real site (never a vercel.app preview address).
+          redirectTo: `${getSiteUrl()}/auth/callback?next=/reset-password`,
         });
 
       if (resetError) throw resetError;
       setSent(true);
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Something went wrong.";
-      setError(message);
+      const message = err instanceof Error ? err.message : "";
+      setError(
+        typeof navigator !== "undefined" && navigator.onLine === false
+          ? "Can't reach Namma Info right now. Check your internet connection and try again."
+          : /rate limit|too many|429|security purposes/i.test(message)
+            ? "Too many requests. Please wait a minute before asking for another link."
+            : message || "Something went wrong. Please try again."
+      );
     } finally {
       setLoading(false);
     }
