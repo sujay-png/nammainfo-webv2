@@ -19,31 +19,29 @@ export async function GET(
     const { id } = params;
     const supabase = auth.adminSupabase;
 
-    // 1. Fetch profile
-    const { data: p, error: profileError } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", id)
-      .single();
+    // 1. Fetch profile and employees in parallel for instant response
+    const [profileRes, employeesRes] = await Promise.all([
+      supabase.from("profiles").select("*").eq("id", id).single(),
+      supabase
+        .from("employees")
+        .select("*")
+        .eq("owner_id", id)
+        .order("created_at", { ascending: true }),
+    ]);
 
-    if (profileError || !p) {
+    const p = profileRes.data;
+    if (profileRes.error || !p) {
       return NextResponse.json(
         { error: "Company not found" },
         { status: 404 }
       );
     }
 
-    // 2. Fetch employees for this company
-    const { data: rawEmployees, error: employeesError } = await supabase
-      .from("employees")
-      .select("*")
-      .eq("owner_id", id)
-      .order("created_at", { ascending: true });
-
-    if (employeesError) {
-      console.warn("[Admin API] Failed fetching employees:", employeesError.message);
+    if (employeesRes.error) {
+      console.warn("[Admin API] Failed fetching employees:", employeesRes.error.message);
     }
 
+    const rawEmployees = employeesRes.data;
     const employees: AdminEmployee[] = (rawEmployees || []).map((e: any) => ({
       id: e.id,
       ownerId: e.owner_id,
@@ -88,26 +86,32 @@ export async function GET(
     const now = Date.now();
     const hasValidEmpExpiry = Boolean(latestEmployeeExpiry && new Date(latestEmployeeExpiry).getTime() > now);
 
-    // Determine if company has an active Pro subscription:
-    // Same rule as the public profile page (lib/membership). A paid team
-    // member does NOT make the company Pro: set the company's own plan.
+    // Free Trial & Pro Determination (consistent with companies list endpoint)
     void hasValidEmpExpiry;
+    const isTrial = p.subscription_plan === "trial";
     const hasCompanyProPlan = getMembership(p).isPaid;
 
-    const plan: SubscriptionPlanType = hasCompanyProPlan ? "pro" : "free";
+    const plan: SubscriptionPlanType = isTrial
+      ? "trial"
+      : hasCompanyProPlan
+      ? "pro"
+      : "free";
 
-    // Primary card count: if someone has pro plan then 1 primary card, else 0
-    const primaryCardCount = plan === "pro" ? 1 : 0;
+    // Primary card count: if company is on Pro or Trial, 1 primary card
+    const primaryCardCount = plan === "pro" || plan === "trial" ? 1 : 0;
 
-    // Team cards in use: active premium team members within Pro company
-    const employeeCardsIssued = plan === "pro" ? premiumEmployees.length : 0;
+    // Team cards in use: active premium team members within Pro/Trial company
+    const employeeCardsIssued = plan === "pro" || plan === "trial" ? premiumEmployees.length : 0;
 
     const totalCardsIssued = primaryCardCount + employeeCardsIssued;
 
     let startedAt: string | null = null;
     let expiresAt: string | null = null;
 
-    if (plan === "pro") {
+    if (plan === "trial") {
+      startedAt = p.subscription_started_at || p.trial_approved_at || p.created_at;
+      expiresAt = p.membership_expires_at;
+    } else if (plan === "pro") {
       startedAt = p.subscription_started_at || earliestEmployeeStart || p.created_at;
       if (p.membership_expires_at) {
         expiresAt = p.membership_expires_at;
@@ -124,6 +128,7 @@ export async function GET(
       ownerName: p.owner_name || "Owner",
       email: p.email,
       phone: p.phone,
+      phoneNumber: p.phone,
       username: p.username,
       slug: p.slug || p.username || p.id,
       status: (p.status as AccountStatus) || "active",
@@ -138,6 +143,16 @@ export async function GET(
       avatarUrl: p.avatar_url,
       logoUrl: p.logo_url,
       employees,
+
+      // 100-Day Free Trial details
+      trialStatus: p.trial_status || "none",
+      trialCouponCode: p.trial_coupon_code || null,
+      trialRequestedAt: p.trial_requested_at || null,
+      trialApprovedAt: p.trial_approved_at || null,
+      trialExtensionDays: p.trial_extension_days || 0,
+      trialFollowUpMilestone: p.trial_follow_up_milestone || 0,
+      trialFollowUpStatus: (p.trial_follow_up_status as "unattended" | "attended") || "unattended",
+      trialFollowUpNotes: p.trial_follow_up_notes || "",
     };
 
     return NextResponse.json({ company });

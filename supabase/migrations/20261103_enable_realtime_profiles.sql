@@ -17,3 +17,4 @@ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.profiles;
   END IF;
 END $$;
+

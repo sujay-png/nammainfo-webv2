@@ -27,6 +27,7 @@ import {
   fetchCompanyDetails,
   updateCompanyValidity,
   updateEmployeeValidity,
+  invalidateCompanyDetailsCache,
 } from "@/admin/entities/company/api/company-api";
 import type {
   Company,
@@ -88,12 +89,12 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
       setEditStartDate(activePlan !== "free" ? formatDateInput(company.subscriptionStartedAt) : "");
       setEditExpiryDate(activePlan !== "free" ? formatDateInput(company.membershipExpiresAt) : "");
 
-      // Synchronously seed details from company props so UI renders immediately
+      // Synchronously seed details from company props with pre-loaded employees so UI renders immediately (0ms!)
       setDetails((prev) => {
-        if (prev && prev.id === company.id) return prev;
+        if (prev && prev.id === company.id && prev.employees && prev.employees.length > 0) return prev;
         return {
           ...company,
-          employees: [],
+          employees: (company as CompanyWithEmployees).employees || prev?.employees || [],
         };
       });
 
@@ -103,9 +104,18 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
       fetchCompanyDetails(company.id)
         .then((data) => {
           if (isCancelled) return;
-          setDetails(data);
-          // Only update edit form if user hasn't modified it yet
-          setEditPlan((prev) => (prev === company.subscriptionPlan ? (data.subscriptionPlan || "free") : prev));
+          setDetails((prev) => ({
+            ...data,
+            employees: (data.employees && data.employees.length > 0) ? data.employees : (prev?.employees || []),
+          }));
+          // Only sync plan if company.subscriptionPlan was genuinely different on server
+          if (data.subscriptionPlan && data.subscriptionPlan !== company.subscriptionPlan) {
+            setEditPlan(data.subscriptionPlan);
+            if (data.subscriptionPlan !== "free") {
+              setEditStartDate(formatDateInput(data.subscriptionStartedAt));
+              setEditExpiryDate(formatDateInput(data.membershipExpiresAt));
+            }
+          }
         })
         .catch((err) => {
           if (!isCancelled) console.error("Failed to load company details:", err);
@@ -215,17 +225,18 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
       const isFuture = finalExpiry ? new Date(finalExpiry).getTime() > Date.now() : true;
       const newStatus = current.status === "suspended" ? "suspended" : (editPlan === "free" || isFuture ? "active" : "expired");
 
+      const updatedEmployees = (current.employees || []).map((e) => ({
+        ...e,
+        // If company is set to free, team becomes free; if pro/trial, keep existing team allocation
+        isPremium: editPlan === "free" ? false : e.isPremium,
+        subscriptionStartedAt: editPlan === "free" ? null : (e.isPremium ? finalStart : e.subscriptionStartedAt),
+        subscriptionExpiresAt: editPlan === "free" ? null : (e.isPremium ? finalExpiry : e.subscriptionExpiresAt),
+      }));
+      const premiumCount = updatedEmployees.filter((e) => e.isPremium).length;
+      const primaryCount = editPlan === "free" ? 0 : 1;
+
       setDetails((prev) => {
         if (!prev) return null;
-        const updatedEmployees = (prev.employees || []).map((e) => ({
-          ...e,
-          // If company is set to free, team becomes free; if pro/trial, keep existing team allocation
-          isPremium: editPlan === "free" ? false : e.isPremium,
-          subscriptionStartedAt: editPlan === "free" ? null : (e.isPremium ? finalStart : e.subscriptionStartedAt),
-          subscriptionExpiresAt: editPlan === "free" ? null : (e.isPremium ? finalExpiry : e.subscriptionExpiresAt),
-        }));
-        const premiumCount = updatedEmployees.filter((e) => e.isPremium).length;
-        const primaryCount = editPlan === "free" ? 0 : 1;
         return {
           ...prev,
           status: newStatus,
@@ -241,7 +252,6 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
       setEditStartDate(finalStart ? formatDateInput(finalStart) : "");
       setEditExpiryDate(finalExpiry ? formatDateInput(finalExpiry) : "");
 
-      const primaryCount = editPlan === "free" ? 0 : 1;
       // Optimistically update company in parent table immediately (0ms delay)
       if (onUpdateCompany) {
         onUpdateCompany({
@@ -251,6 +261,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
           membershipExpiresAt: finalExpiry,
           status: newStatus,
           primaryCardCount: primaryCount,
+          employees: updatedEmployees,
         });
       }
 
@@ -287,26 +298,34 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
         subscriptionExpiresAt: expiry,
       });
 
+      const updatedEmployees = (current.employees || []).map((e) =>
+        e.id === employeeId
+          ? {
+              ...e,
+              isPremium,
+              subscriptionStartedAt: start,
+              subscriptionExpiresAt: expiry,
+            }
+          : e
+      );
+      const premiumCount = updatedEmployees.filter((e) => e.isPremium).length;
+      const primaryCount = current.subscriptionPlan !== "free" ? 1 : 0;
+
       setDetails((prev) => {
         if (!prev) return null;
-        const updatedEmployees = (prev.employees || []).map((e) =>
-          e.id === employeeId
-            ? {
-                ...e,
-                isPremium,
-                subscriptionStartedAt: start,
-                subscriptionExpiresAt: expiry,
-              }
-            : e
-        );
-        const premiumCount = updatedEmployees.filter((e) => e.isPremium).length;
-        const primaryCount = prev.subscriptionPlan !== "free" ? 1 : 0;
         return {
           ...prev,
           employees: updatedEmployees,
           totalCardsIssued: primaryCount + premiumCount,
         };
       });
+
+      if (onUpdateCompany) {
+        onUpdateCompany({
+          id: current.id,
+          employees: updatedEmployees,
+        });
+      }
 
       onRefresh?.({ silent: true });
     } catch (err: any) {

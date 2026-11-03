@@ -38,6 +38,7 @@ export interface Company {
   trialFollowUpNotes?: string | null;
   profileCompletionPercentage?: number;
   role?: "user" | "admin" | "designer" | null;
+  employees?: AdminEmployee[];
 }
 
 export interface CompanyWithEmployees extends Company {

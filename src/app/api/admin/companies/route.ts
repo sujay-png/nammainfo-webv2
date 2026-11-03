@@ -30,10 +30,11 @@ export async function GET(request: Request) {
       );
     }
 
-    // 2. Fetch all employees to aggregate assigned ID counts and active cards
+    // 2. Fetch all employees to aggregate assigned ID counts, active cards, and pre-load team members
     const { data: employees, error: employeesError } = await supabase
       .from("employees")
-      .select("id, owner_id, is_premium, is_active, subscription_started_at, subscription_expires_at");
+      .select("id, owner_id, name, designation, email, phone, slug, avatar_url, cover_url, is_active, is_premium, subscription_started_at, subscription_expires_at, status, created_at")
+      .order("created_at", { ascending: true });
 
     if (employeesError) {
       console.warn("[Admin API] Warning fetching employees:", employeesError.message);
@@ -43,10 +44,32 @@ export async function GET(request: Request) {
     const premiumEmployeeMap = new Map<string, number>();
     const employeeExpiryMap = new Map<string, string>();
     const employeeStartMap = new Map<string, string>();
+    const employeeListMap = new Map<string, any[]>();
     if (employees) {
       for (const emp of employees) {
         const count = employeeMap.get(emp.owner_id) || 0;
         employeeMap.set(emp.owner_id, count + 1);
+
+        const list = employeeListMap.get(emp.owner_id) || [];
+        list.push({
+          id: emp.id,
+          ownerId: emp.owner_id,
+          name: emp.name,
+          designation: emp.designation,
+          email: emp.email,
+          phone: emp.phone,
+          slug: emp.slug,
+          avatarUrl: emp.avatar_url,
+          coverUrl: emp.cover_url,
+          isActive: emp.is_active ?? true,
+          isPremium: Boolean(emp.is_premium),
+          subscriptionStartedAt: emp.subscription_started_at || emp.created_at,
+          subscriptionExpiresAt: emp.subscription_expires_at,
+          status: emp.status || (emp.is_active ? (emp.is_premium ? "active" : "unassigned") : "suspended"),
+          createdAt: emp.created_at,
+        });
+        employeeListMap.set(emp.owner_id, list);
+
         if (emp.is_premium) {
           const premCount = premiumEmployeeMap.get(emp.owner_id) || 0;
           premiumEmployeeMap.set(emp.owner_id, premCount + 1);
@@ -256,6 +279,7 @@ export async function GET(request: Request) {
           n?.trialFollowUpStatus ?? ((p.trial_follow_up_status as "unattended" | "attended") || "unattended"),
         trialFollowUpNotes: n?.trialFollowUpNotes ?? (p.trial_follow_up_notes || ""),
         profileCompletionPercentage: completion.percentage,
+        employees: employeeListMap.get(p.id) || [],
       };
     });
 

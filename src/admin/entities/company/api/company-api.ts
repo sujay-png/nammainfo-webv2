@@ -24,9 +24,28 @@ export async function fetchAdminCompanies(): Promise<CompaniesResponse> {
   return res.json();
 }
 
+const companyDetailsCache = new Map<string, { data: CompanyWithEmployees; timestamp: number }>();
+const CACHE_TTL_MS = 60_000; // 60 seconds
+
+export function invalidateCompanyDetailsCache(companyId?: string) {
+  if (companyId) {
+    companyDetailsCache.delete(companyId);
+  } else {
+    companyDetailsCache.clear();
+  }
+}
+
 export async function fetchCompanyDetails(
-  companyId: string
+  companyId: string,
+  bypassCache = false
 ): Promise<CompanyWithEmployees> {
+  if (!bypassCache) {
+    const cached = companyDetailsCache.get(companyId);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+      return cached.data;
+    }
+  }
+
   const res = await fetch(`/api/admin/companies/${companyId}`, {
     cache: "no-store",
     headers: { "Content-Type": "application/json" },
@@ -38,6 +57,7 @@ export async function fetchCompanyDetails(
   }
 
   const data = await res.json();
+  companyDetailsCache.set(companyId, { data: data.company, timestamp: Date.now() });
   return data.company;
 }
 
@@ -56,6 +76,7 @@ export async function toggleCompanySuspension(
     throw new Error(errorData.error || "Failed to toggle suspension status");
   }
 
+  invalidateCompanyDetailsCache(companyId);
   return res.json();
 }
 
@@ -70,6 +91,7 @@ export async function deleteCompany(companyId: string): Promise<{ success: boole
     throw new Error(errorData.error || "Failed to delete company");
   }
 
+  invalidateCompanyDetailsCache(companyId);
   return res.json();
 }
 
@@ -94,6 +116,7 @@ export async function updateCompanyValidity(
     throw new Error(errorData.error || "Failed to update validity and plan");
   }
 
+  invalidateCompanyDetailsCache(companyId);
   return res.json();
 }
 
@@ -117,6 +140,7 @@ export async function updateEmployeeValidity(
     throw new Error(errorData.error || "Failed to update employee");
   }
 
+  invalidateCompanyDetailsCache();
   return res.json();
 }
 
@@ -138,6 +162,7 @@ export async function updateCompanyFollowUp(
     throw new Error(errorData.error || "Failed to update follow-up");
   }
 
+  invalidateCompanyDetailsCache(companyId);
   return res.json();
 }
 
@@ -161,6 +186,7 @@ export async function bulkUpdateEmployees(
     throw new Error(errorData.error || "Failed to update employee plan");
   }
 
+  invalidateCompanyDetailsCache(companyId);
   return res.json();
 }
 
@@ -182,6 +208,7 @@ export async function approveFreeTrial(
     throw new Error(errorData.error || "Failed to approve Free Trial");
   }
 
+  invalidateCompanyDetailsCache(companyId);
   return res.json();
 }
 
@@ -200,6 +227,7 @@ export async function extendFreeTrial(
     throw new Error(errorData.error || "Failed to extend Free Trial");
   }
 
+  invalidateCompanyDetailsCache(companyId);
   return res.json();
 }
 
@@ -222,6 +250,7 @@ export async function updateTrialFollowUp(
     throw new Error(errorData.error || "Failed to update trial follow-up");
   }
 
+  invalidateCompanyDetailsCache(companyId);
   return res.json();
 }
 
@@ -240,5 +269,6 @@ export async function rejectFreeTrial(
     throw new Error(errorData.error || "Failed to reject Free Trial");
   }
 
+  invalidateCompanyDetailsCache(companyId);
   return res.json();
 }
