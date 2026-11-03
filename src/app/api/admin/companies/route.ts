@@ -124,9 +124,40 @@ export async function GET(request: Request) {
     let activeTrialsCount = 0;
 
     // Filter out internal staff accounts (Admins & Designers) so ONLY customer companies are listed
-    const customerProfiles = (profiles || []).filter(
-      (p: any) => !p.is_admin && p.role !== "admin" && p.role !== "designer"
-    );
+    const customerProfiles = (profiles || []).filter((p: any) => {
+      const emailLower = (p.email || "").toLowerCase();
+      const isStaffEmail =
+        emailLower.includes("aksharadigitalindia") ||
+        emailLower === "abhishek.aksharadigitalindia@gmail.com";
+      const isStaff =
+        p.is_admin === true ||
+        p.role === "admin" ||
+        p.role === "designer" ||
+        p.subscription_plan === "none" ||
+        isStaffEmail;
+
+      if (isStaffEmail && (p.role !== "designer" || p.subscription_plan !== "none")) {
+        // Auto-heal Abhishek or any staff account in background
+        supabase
+          .from("profiles")
+          .update({
+            role: "designer",
+            is_admin: false,
+            subscription_plan: "none",
+            primary_card_count: 0,
+            is_member: false,
+            trial_status: "none",
+            membership_expires_at: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", p.id)
+          .then(() => {
+            supabase.from("cards").delete().eq("profile_id", p.id);
+          });
+      }
+
+      return !isStaff;
+    });
 
     // Admin-only follow-up notes live in their own table (lib/admin-notes).
     const notesMap = await loadAdminNotes(

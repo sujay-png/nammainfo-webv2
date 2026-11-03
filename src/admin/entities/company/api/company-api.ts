@@ -10,7 +10,18 @@ export interface CompaniesResponse {
   stats: AdminStats;
 }
 
-export async function fetchAdminCompanies(): Promise<CompaniesResponse> {
+let companiesCache: { data: CompaniesResponse; timestamp: number } | null = null;
+const COMPANIES_CACHE_TTL_MS = 30_000; // 30 seconds in-memory cache
+
+export function invalidateCompaniesCache() {
+  companiesCache = null;
+}
+
+export async function fetchAdminCompanies(forceRefresh = false): Promise<CompaniesResponse> {
+  if (!forceRefresh && companiesCache && Date.now() - companiesCache.timestamp < COMPANIES_CACHE_TTL_MS) {
+    return companiesCache.data;
+  }
+
   const res = await fetch("/api/admin/companies", {
     cache: "no-store",
     headers: { "Content-Type": "application/json" },
@@ -21,7 +32,9 @@ export async function fetchAdminCompanies(): Promise<CompaniesResponse> {
     throw new Error(errorData.error || "Failed to load companies");
   }
 
-  return res.json();
+  const data: CompaniesResponse = await res.json();
+  companiesCache = { data, timestamp: Date.now() };
+  return data;
 }
 
 const companyDetailsCache = new Map<string, { data: CompanyWithEmployees; timestamp: number }>();
@@ -77,6 +90,7 @@ export async function toggleCompanySuspension(
   }
 
   invalidateCompanyDetailsCache(companyId);
+  invalidateCompaniesCache();
   return res.json();
 }
 
@@ -92,6 +106,7 @@ export async function deleteCompany(companyId: string): Promise<{ success: boole
   }
 
   invalidateCompanyDetailsCache(companyId);
+  invalidateCompaniesCache();
   return res.json();
 }
 
@@ -117,6 +132,7 @@ export async function updateCompanyValidity(
   }
 
   invalidateCompanyDetailsCache(companyId);
+  invalidateCompaniesCache();
   return res.json();
 }
 

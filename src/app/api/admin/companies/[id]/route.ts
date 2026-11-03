@@ -37,6 +37,13 @@ export async function GET(
       );
     }
 
+    if (p.is_admin || p.role === "admin" || p.role === "designer" || p.subscription_plan === "none") {
+      return NextResponse.json(
+        { error: "Staff accounts are operators, not customer companies." },
+        { status: 404 }
+      );
+    }
+
     if (employeesRes.error) {
       console.warn("[Admin API] Failed fetching employees:", employeesRes.error.message);
     }

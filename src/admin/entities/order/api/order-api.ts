@@ -5,7 +5,18 @@ export interface OrdersResponse {
   stats: OrderStats;
 }
 
-export async function fetchAdminOrders(): Promise<OrdersResponse> {
+let ordersCache: { data: OrdersResponse; timestamp: number } | null = null;
+const ORDERS_CACHE_TTL_MS = 30_000; // 30 seconds
+
+export function invalidateOrdersCache() {
+  ordersCache = null;
+}
+
+export async function fetchAdminOrders(forceRefresh = false): Promise<OrdersResponse> {
+  if (!forceRefresh && ordersCache && Date.now() - ordersCache.timestamp < ORDERS_CACHE_TTL_MS) {
+    return ordersCache.data;
+  }
+
   const res = await fetch("/api/admin/orders", {
     cache: "no-store",
     headers: { "Content-Type": "application/json" },
@@ -16,7 +27,9 @@ export async function fetchAdminOrders(): Promise<OrdersResponse> {
     throw new Error(errorData.error || "Failed to load orders");
   }
 
-  return res.json();
+  const data: OrdersResponse = await res.json();
+  ordersCache = { data, timestamp: Date.now() };
+  return data;
 }
 
 export async function updateAdminOrderStatus(
@@ -34,6 +47,7 @@ export async function updateAdminOrderStatus(
     throw new Error(errorData.error || "Failed to update order status");
   }
 
+  invalidateOrdersCache();
   return res.json();
 }
 
@@ -48,5 +62,6 @@ export async function deleteAdminOrder(orderId: string): Promise<boolean> {
     throw new Error(errorData.error || "Failed to delete order");
   }
 
+  invalidateOrdersCache();
   return true;
 }
