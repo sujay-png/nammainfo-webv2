@@ -142,7 +142,20 @@ CREATE TRIGGER on_profile_staff_change
   BEFORE UPDATE OF is_admin, role ON public.profiles
   FOR EACH ROW EXECUTE FUNCTION public.handle_profile_staff_change();
 
--- 3. Data cleanup: Fix any existing staff accounts that accidentally have customer cards or subscriptions
+-- 3. Ensure aksharadigitalindia@outlook.com is strictly PLATFORM ADMINISTRATOR
+UPDATE public.profiles
+SET
+  role = 'admin',
+  is_admin = true,
+  subscription_plan = 'none',
+  primary_card_count = 0,
+  is_member = false,
+  status = 'active',
+  owner_name = 'Platform Administrator',
+  business_name = 'Akshara Digital India'
+WHERE email = 'aksharadigitalindia@outlook.com';
+
+-- 4. Ensure Abhishek is CARD DESIGNER
 UPDATE public.profiles
 SET
   role = 'designer',
@@ -152,14 +165,16 @@ SET
   is_member = false,
   membership_expires_at = null,
   trial_status = 'none'
-WHERE email = 'abhishek.aksharadigitalindia@gmail.com'
-   OR email ILIKE '%aksharadigitalindia%';
+WHERE email IN (
+  'abhishek.aksharadigital@gmail.com',
+  'abhishek.aksharadigitalindia@gmail.com'
+);
 
+-- 5. Delete customer cards for all staff accounts
 DELETE FROM public.cards
 WHERE profile_id IN (
   SELECT id FROM public.profiles
   WHERE is_admin = true
      OR role IN ('admin', 'designer')
-     OR email = 'abhishek.aksharadigitalindia@gmail.com'
-     OR email ILIKE '%aksharadigitalindia%'
 );
+

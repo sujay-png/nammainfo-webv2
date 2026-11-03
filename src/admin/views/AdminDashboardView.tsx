@@ -114,7 +114,9 @@ export const AdminDashboardView: React.FC = () => {
           profile = profileWithRole;
         }
 
-        const isStaff = Boolean(profile?.is_admin || profile?.role === "admin" || profile?.role === "designer");
+        const isAdmin = Boolean(profile?.is_admin || profile?.role === "admin");
+        const isDesigner = !isAdmin && profile?.role === "designer";
+        const isStaff = isAdmin || isDesigner;
 
         if (!profile || !isStaff) {
           setUnauthorizedEmail(user.email || "Current User");
@@ -122,8 +124,7 @@ export const AdminDashboardView: React.FC = () => {
           return;
         }
 
-        const role = profile.role || (profile.is_admin ? "admin" : "user");
-        setUserRole(role === "designer" ? "designer" : "admin");
+        setUserRole(isDesigner ? "designer" : "admin");
         setAuthLoading(false);
       } catch (err) {
         console.error("Auth check failed:", err);

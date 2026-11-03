@@ -178,7 +178,7 @@ export async function requireStaffAuth(request?: Request): Promise<StaffAuthChec
     return {
       authorized: true,
       userId: user.id,
-      role: isDesigner ? "designer" : "admin",
+      role: !isAdmin && isDesigner ? "designer" : "admin",
       adminSupabase,
     };
   } catch (err: any) {
