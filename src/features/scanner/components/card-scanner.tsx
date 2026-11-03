@@ -13,7 +13,7 @@ import {
   Upload,
   ArrowRight,
 } from "lucide-react";
-import { Html5Qrcode, type CameraDevice } from "html5-qrcode";
+import { Html5Qrcode, Html5QrcodeSupportedFormats, type CameraDevice } from "html5-qrcode";
 
 export default function ScannerPage() {
   const router = useRouter();
@@ -29,6 +29,7 @@ export default function ScannerPage() {
 
   const qrScannerRef = useRef<Html5Qrcode | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isProcessingScanRef = useRef(false);
 
   useEffect(() => {
     // Check NFC support (Web NFC standard for Android)
@@ -62,8 +63,15 @@ export default function ScannerPage() {
     setStarting(true);
     setScanning(true);
 
-    // Give React time to render #qr-reader in the DOM
-    await new Promise((resolve) => setTimeout(resolve, 80));
+    // Ensure DOM container has rendered and has non-zero client dimensions
+    isProcessingScanRef.current = false;
+    let retries = 0;
+    while (retries < 20) {
+      const el = document.getElementById("qr-reader");
+      if (el && el.clientWidth > 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      retries++;
+    }
 
     // Check secure context (camera requires HTTPS or localhost)
     if (typeof window !== "undefined" && window.isSecureContext === false) {
@@ -83,7 +91,14 @@ export default function ScannerPage() {
       }
 
       // Create new Html5Qrcode instance attached to #qr-reader div
-      const scanner = new Html5Qrcode("qr-reader");
+      // Restrict exclusively to QR_CODE for fast detection, low CPU usage, and hardware acceleration
+      const scanner = new Html5Qrcode("qr-reader", {
+        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+        verbose: false,
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true,
+        },
+      });
       qrScannerRef.current = scanner;
 
       // Detect available video input devices
@@ -101,12 +116,14 @@ export default function ScannerPage() {
         ? { deviceId: { exact: cameraDeviceId } }
         : { facingMode: "environment" };
 
+      const scanConfig = {
+        fps: 10,
+      };
+
       try {
         await scanner.start(
           cameraConfig,
-          {
-            fps: 15,
-          },
+          scanConfig,
           (decodedText) => {
             handleScannedUrl(decodedText);
           },
@@ -118,9 +135,7 @@ export default function ScannerPage() {
         try {
           await scanner.start(
             { facingMode: "user" },
-            {
-              fps: 15,
-            },
+            scanConfig,
             (decodedText) => {
               handleScannedUrl(decodedText);
             },
@@ -131,9 +146,7 @@ export default function ScannerPage() {
           if (availableDevices && availableDevices.length > 0) {
             await scanner.start(
               availableDevices[0].id,
-              {
-                fps: 15,
-              },
+              scanConfig,
               (decodedText) => {
                 handleScannedUrl(decodedText);
               },
@@ -232,7 +245,10 @@ export default function ScannerPage() {
 
     try {
       // Use temporary scanner to parse image file
-      const tempScanner = new Html5Qrcode("qr-file-helper");
+      const tempScanner = new Html5Qrcode("qr-file-helper", {
+        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+        verbose: false,
+      });
       const decoded = await tempScanner.scanFile(file, false);
       tempScanner.clear();
       setStarting(false);
@@ -240,6 +256,10 @@ export default function ScannerPage() {
     } catch {
       setStarting(false);
       setError("No valid QR code could be found in that image. Please try another.");
+    } finally {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     }
   }
 
@@ -275,6 +295,9 @@ export default function ScannerPage() {
   }
 
   function handleScannedUrl(url: string) {
+    if (isProcessingScanRef.current) return;
+    isProcessingScanRef.current = true;
+
     stopScanner().catch(() => {});
     setNfcReading(false);
 
@@ -285,23 +308,50 @@ export default function ScannerPage() {
     } catch {}
 
     const clean = url.trim();
+    if (!clean) {
+      isProcessingScanRef.current = false;
+      return;
+    }
 
     try {
-      // If it's a full URL e.g. https://nammainfo.in/username or /c/card_123
-      const parsed = new URL(clean);
-      const path = parsed.pathname.replace(/^\//, "");
-      if (path) {
-        router.push(`/${path}`);
-        return;
+      let toParse = clean;
+      if (!/^https?:\/\//i.test(toParse) && (toParse.includes("/") || toParse.includes("."))) {
+        toParse = `https://${toParse}`;
+      }
+
+      if (/^https?:\/\//i.test(toParse)) {
+        const parsed = new URL(toParse);
+        const isCurrentSite =
+          typeof window !== "undefined" &&
+          (parsed.hostname === window.location.hostname ||
+            parsed.hostname.endsWith("nammainfo.in"));
+
+        if (isCurrentSite) {
+          const path = parsed.pathname.replace(/^\//, "");
+          if (path) {
+            router.push(`/${path}${parsed.search || ""}${parsed.hash || ""}`);
+            return;
+          }
+        } else {
+          // If external link, navigate directly
+          window.location.href = clean;
+          return;
+        }
       }
     } catch {
-      // Not a full URL — may be a slug directly like 'sujay' or 'c/card_123'
-      if (clean && !clean.includes(" ")) {
-        router.push(`/${clean}`);
+      // Fall through to slug handling
+    }
+
+    // Bare slug like 'sujay', 'c/card_123', or 'company/member'
+    if (clean && !clean.includes(" ") && !clean.startsWith("http")) {
+      const slug = clean.replace(/^\//, "");
+      if (slug) {
+        router.push(`/${slug}`);
         return;
       }
     }
 
+    isProcessingScanRef.current = false;
     setError("Could not recognize the scanned code as a valid Namma Info card link.");
   }
 
@@ -332,10 +382,18 @@ export default function ScannerPage() {
           scanning ? "block" : "hidden"
         }`}
       >
-        {/* Html5Qrcode video attaches into this container */}
+        {/* Starting indicator while camera stream connects */}
+        {starting && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/80 z-10 text-white min-h-[280px]">
+            <Loader2 size={24} className="animate-spin text-white/80" />
+            <span className="text-xs font-mono text-white/70">Starting camera…</span>
+          </div>
+        )}
+
+        {/* Html5Qrcode video attaches into this container with natural undistorted aspect ratio */}
         <div
           id="qr-reader"
-          className="w-full aspect-square overflow-hidden [&_video]:w-full [&_video]:h-full [&_video]:object-cover [&_#qr-shaded-region]:!hidden"
+          className="w-full overflow-hidden min-h-[280px] bg-black flex items-center justify-center [&_video]:!w-full [&_video]:!h-auto [&_video]:!block [&_video]:!m-0 [&_video]:!p-0 [&_#qr-shaded-region]:!hidden"
         />
 
         {/* Top Controls Bar */}
