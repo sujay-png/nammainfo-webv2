@@ -36,10 +36,22 @@ export async function middleware(request: NextRequest) {
   const user = data?.claims?.sub ? { id: data.claims.sub } : null;
 
   const claims = data?.claims as Record<string, any> | undefined;
-  const isAdmin = Boolean(
+  const role =
+    claims?.app_metadata?.role ||
+    claims?.user_metadata?.role ||
+    (claims?.is_admin ? "admin" : null);
+
+  let isAdmin = Boolean(
     claims?.is_admin === true ||
     claims?.app_metadata?.is_admin === true ||
-    claims?.app_metadata?.role === "admin"
+    role === "admin"
+  );
+
+  let isStaff = Boolean(
+    isAdmin ||
+    role === "designer" ||
+    claims?.app_metadata?.role === "designer" ||
+    claims?.user_metadata?.role === "designer"
   );
 
   // Subdomain routing: if request is on admin.* subdomain (e.g. admin.nammainfo.in or admin.localhost)
@@ -100,8 +112,23 @@ export async function middleware(request: NextRequest) {
   // -------------------------------------------------------------
   // Friendly aliases people type: nammainfo.in/login, /signin
   if (pathname === "/login" || pathname === "/signin") {
+    // Check staff role if user is signed in
+    if (user && !isStaff) {
+      const { data: staff } = await supabase
+        .from("profiles")
+        .select("is_admin, role")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (staff?.is_admin || staff?.role === "admin") {
+        isAdmin = true;
+        isStaff = true;
+      } else if (staff?.role === "designer") {
+        isStaff = true;
+      }
+    }
+
     const url = request.nextUrl.clone();
-    url.pathname = user ? "/dashboard" : "/signup";
+    url.pathname = user ? (isStaff ? "/admin" : "/dashboard") : "/signup";
     url.search = user ? "" : "?mode=signin";
     return NextResponse.redirect(url);
   }
@@ -110,44 +137,49 @@ export async function middleware(request: NextRequest) {
     pathname === "/admin" || pathname.startsWith("/admin/");
   const isLoginPage = pathname.startsWith("/admin/login");
 
+  // Verify staff status from database if not already determined from claims
+  if (user && !isStaff && (isAdminRoute || pathname.startsWith("/dashboard") || pathname.startsWith("/onboarding") || pathname === "/signup" || pathname === "/")) {
+    const { data: staff } = await supabase
+      .from("profiles")
+      .select("is_admin, role")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (staff?.is_admin || staff?.role === "admin") {
+      isAdmin = true;
+      isStaff = true;
+    } else if (staff?.role === "designer") {
+      isStaff = true;
+    }
+  }
+
   if (isAdminRoute && !isLoginPage) {
     if (!user) {
       const url = request.nextUrl.clone();
       url.pathname = "/admin/login";
       return NextResponse.redirect(url);
     }
-    // Signed-in customers don't belong in the admin console: send them to
-    // their dashboard. (Staff = admin or designer; checked in the database
-    // because designers have no admin claim in their login token.)
-    if (!isAdmin) {
-      const { data: staff } = await supabase
-        .from("profiles")
-        .select("is_admin, role")
-        .eq("id", user.id)
-        .maybeSingle();
-      const isStaff = Boolean(staff?.is_admin || staff?.role === "admin" || staff?.role === "designer");
-      if (!isStaff) {
-        const url = request.nextUrl.clone();
-        url.pathname = "/dashboard";
-        url.search = "";
-        return NextResponse.redirect(url);
-      }
+    // Signed-in customers don't belong in the admin console: send them to their dashboard
+    if (!isStaff) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard";
+      url.search = "";
+      return NextResponse.redirect(url);
     }
   }
 
-  // Redirect signed-in user from /admin/login to /admin
+  // Redirect signed-in user from /admin/login to appropriate view
   if (isLoginPage && user) {
     const url = request.nextUrl.clone();
-    url.pathname = "/admin";
+    url.pathname = isStaff ? "/admin" : "/dashboard";
     return NextResponse.redirect(url);
   }
 
-  // If an administrator accesses customer dashboard or onboarding, bounce them to /admin
+  // If a staff member (Admin or Designer) accesses customer dashboard or onboarding, bounce them to /admin
   if (
     (pathname.startsWith("/dashboard") ||
       pathname.startsWith("/onboarding")) &&
     user &&
-    isAdmin
+    isStaff
   ) {
     const url = request.nextUrl.clone();
     url.pathname = "/admin";
@@ -168,7 +200,7 @@ export async function middleware(request: NextRequest) {
     !isAdminSubdomain
   ) {
     const url = request.nextUrl.clone();
-    url.pathname = isAdmin ? "/admin" : "/dashboard";
+    url.pathname = isStaff ? "/admin" : "/dashboard";
     return NextResponse.redirect(url);
   }
 

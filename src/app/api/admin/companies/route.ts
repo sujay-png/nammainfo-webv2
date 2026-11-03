@@ -100,9 +100,9 @@ export async function GET(request: Request) {
     let pendingTrialsCount = 0;
     let activeTrialsCount = 0;
 
-    // Filter out platform administrator accounts so only customer companies are listed
+    // Filter out internal staff accounts (Admins & Designers) so ONLY customer companies are listed
     const customerProfiles = (profiles || []).filter(
-      (p: any) => !p.is_admin && p.role !== "admin"
+      (p: any) => !p.is_admin && p.role !== "admin" && p.role !== "designer"
     );
 
     // Admin-only follow-up notes live in their own table (lib/admin-notes).

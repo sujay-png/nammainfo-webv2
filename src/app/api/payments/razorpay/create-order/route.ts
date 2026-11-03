@@ -72,6 +72,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 });
     }
 
+    if (profile.is_admin || profile.role === "admin" || profile.role === "designer") {
+      return NextResponse.json(
+        { error: "Staff accounts cannot make subscription purchases" },
+        { status: 403 }
+      );
+    }
+
     const primaryCards = Number(profile.primary_card_count || 1);
 
     // Calculate accurate dynamic tier pricing

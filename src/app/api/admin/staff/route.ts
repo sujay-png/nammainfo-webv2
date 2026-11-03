@@ -79,6 +79,10 @@ export async function POST(request: Request) {
       email: email.trim().toLowerCase(),
       password,
       email_confirm: true,
+      app_metadata: {
+        role: assignedRole,
+        is_admin: assignedRole === "admin",
+      },
       user_metadata: {
         role: assignedRole,
         owner_name: displayName,
@@ -122,7 +126,9 @@ export async function POST(request: Request) {
           is_admin: assignedRole === "admin",
           role: assignedRole,
           status: "active",
-          subscription_plan: "pro",
+          subscription_plan: "none",
+          primary_card_count: 0,
+          is_member: false,
           updated_at: new Date().toISOString(),
         })
         .eq("id", userId);
@@ -139,7 +145,9 @@ export async function POST(request: Request) {
           is_admin: assignedRole === "admin",
           role: assignedRole,
           status: "active",
-          subscription_plan: "pro",
+          subscription_plan: "none",
+          primary_card_count: 0,
+          is_member: false,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         });
@@ -156,20 +164,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // 3. Ensure a card record exists for staff link resolution
-    const { data: existingCard } = await supabase
-      .from("cards")
-      .select("id")
-      .eq("profile_id", userId)
-      .maybeSingle();
-
-    if (!existingCard) {
-      await supabase.from("cards").insert({
-        profile_id: userId,
-        public_slug: staffSlug,
-        is_active: true,
-      });
-    }
+    // 3. Staff are operators, NOT customer accounts. Ensure no customer card is issued.
+    await supabase.from("cards").delete().eq("profile_id", userId);
 
     return NextResponse.json({
       success: true,
@@ -235,6 +231,7 @@ export async function PATCH(request: Request) {
         .update({
           role: newRole,
           is_admin: newRole === "admin",
+          subscription_plan: "none",
           updated_at: new Date().toISOString(),
         })
         .eq("id", userId);
@@ -243,6 +240,15 @@ export async function PATCH(request: Request) {
         console.error("[Staff API] Error updating role:", roleError);
         return NextResponse.json({ error: roleError.message }, { status: 500 });
       }
+
+      await supabase.auth.admin.updateUserById(userId, {
+        app_metadata: {
+          role: newRole,
+          is_admin: newRole === "admin",
+        },
+      });
+
+      await supabase.from("cards").delete().eq("profile_id", userId);
     }
 
     return NextResponse.json({
