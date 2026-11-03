@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { requireAdminAuth } from "@/admin/shared/lib/admin-auth";
 import { saveAdminNotes } from "@/admin/shared/lib/admin-notes";
 
@@ -91,6 +92,17 @@ export async function POST(request: Request) {
         .from("cards")
         .update({ is_active: true })
         .eq("id", existingCard.id);
+    }
+
+    // Purge Next.js ISR & route cache so public profile and user dashboard reflect immediately
+    try {
+      if (profile.slug) revalidatePath(`/${profile.slug}`);
+      if (profile.username) revalidatePath(`/${profile.username}`);
+      revalidatePath("/dashboard/home");
+      revalidatePath("/dashboard/settings");
+      revalidatePath("/dashboard/team");
+    } catch (revalErr) {
+      console.warn("[Admin Trial Approve] Failed to revalidate cache paths:", revalErr);
     }
 
     return NextResponse.json({

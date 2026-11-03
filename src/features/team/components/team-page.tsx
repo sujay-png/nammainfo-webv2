@@ -84,6 +84,19 @@ function OwnerTeamPage() {
 
   useEffect(() => {
     load();
+
+    const onVisibilityOrFocus = () => {
+      if (document.visibilityState === "visible") {
+        load();
+      }
+    };
+    window.addEventListener("focus", onVisibilityOrFocus);
+    document.addEventListener("visibilitychange", onVisibilityOrFocus);
+
+    return () => {
+      window.removeEventListener("focus", onVisibilityOrFocus);
+      document.removeEventListener("visibilitychange", onVisibilityOrFocus);
+    };
   }, [load]);
 
   async function addEmployee() {

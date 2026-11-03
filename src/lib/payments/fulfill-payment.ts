@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/supabase/admin";
 import { getRazorpayClient } from "@/lib/razorpay";
+import { revalidatePath } from "next/cache";
 
 /**
  * Applies a successful Razorpay payment to the customer's account.
@@ -125,7 +126,7 @@ export async function fulfillPayment(input: FulfillInput): Promise<FulfillResult
   const now = new Date();
   const { data: profile } = await admin
     .from("profiles")
-    .select("membership_expires_at, purchased_id_count")
+    .select("membership_expires_at, purchased_id_count, slug, username")
     .eq("id", userId)
     .single();
 
@@ -165,6 +166,16 @@ export async function fulfillPayment(input: FulfillInput): Promise<FulfillResult
       .from("profiles")
       .update({ purchased_id_count: Number(profile?.purchased_id_count ?? 0) + cardQuantity })
       .eq("id", userId);
+  }
+
+  try {
+    if (profile?.slug) revalidatePath(`/${profile.slug}`);
+    if (profile?.username) revalidatePath(`/${profile.username}`);
+    revalidatePath("/dashboard/home");
+    revalidatePath("/dashboard/settings");
+    revalidatePath("/dashboard/team");
+  } catch (revalErr) {
+    console.warn("[Fulfill Payment] Failed to revalidate cache paths:", revalErr);
   }
 
   return { ok: true, orderId: order.id, alreadyApplied: false, orderType };

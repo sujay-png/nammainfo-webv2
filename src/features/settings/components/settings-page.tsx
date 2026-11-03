@@ -48,19 +48,66 @@ function OwnerSettingsPage() {
   useEffect(() => setRunningAsApp(isRunningAsApp()), []);
 
   useEffect(() => {
-    (async () => {
+    let activeChannel: any = null;
+    let isMounted = true;
+
+    async function loadData(showLoading = false) {
+      if (showLoading) setLoading(true);
       const supabase = createClient();
       const user = await getCurrentUser();
-      if (!user) return;
+      if (!user || !isMounted) return;
 
       const [profRes, empRes] = await Promise.all([
         supabase.from("profiles").select("*").eq("id", user.id).single(),
         supabase.from("employees").select("id", { count: "exact", head: true }).eq("owner_id", user.id).eq("is_active", true),
       ]);
+
+      if (!isMounted) return;
       if (profRes.data) setProfile(profRes.data as unknown as Profile);
       setTeamCount(empRes.count || 0);
-      setLoading(false);
-    })();
+      if (isMounted) setLoading(false);
+
+      if (!activeChannel && user.id) {
+        activeChannel = supabase
+          .channel(`settings-profile-${user.id}`)
+          .on(
+            "postgres_changes",
+            {
+              event: "UPDATE",
+              schema: "public",
+              table: "profiles",
+              filter: `id=eq.${user.id}`,
+            },
+            (payload) => {
+              if (payload.new && isMounted) {
+                setProfile((prev) => (prev ? { ...prev, ...(payload.new as Profile) } : (payload.new as Profile)));
+              }
+            }
+          )
+          .subscribe();
+      }
+    }
+
+    loadData(true);
+
+    const onVisibilityOrFocus = () => {
+      if (document.visibilityState === "visible") {
+        loadData(false);
+      }
+    };
+    window.addEventListener("focus", onVisibilityOrFocus);
+    document.addEventListener("visibilitychange", onVisibilityOrFocus);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener("focus", onVisibilityOrFocus);
+      document.removeEventListener("visibilitychange", onVisibilityOrFocus);
+      if (activeChannel) {
+        const supabase = createClient();
+        supabase.removeChannel(activeChannel);
+      }
+    };
+
   }, []);
 
   async function handleThemeSelect(slug: string) {

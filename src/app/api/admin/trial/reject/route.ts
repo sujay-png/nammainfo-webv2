@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { requireAdminAuth } from "@/admin/shared/lib/admin-auth";
 import { saveAdminNotes } from "@/admin/shared/lib/admin-notes";
 
@@ -37,6 +38,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: updateErr.message }, { status: 500 });
     }
 
+    try {
+      revalidatePath("/dashboard/home");
+      revalidatePath("/dashboard/settings");
+    } catch (revalErr) {
+      console.warn("[Admin Trial Reject] Failed to revalidate cache paths:", revalErr);
+    }
+
     return NextResponse.json({ success: true });
   } catch (err: any) {
     console.error("[Admin Trial Reject] Unexpected error:", err);
@@ -46,4 +54,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

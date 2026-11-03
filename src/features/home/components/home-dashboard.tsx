@@ -473,10 +473,14 @@ function OwnerHomePage() {
   const [showTrialModal, setShowTrialModal] = useState(false);
 
   useEffect(() => {
-    (async () => {
+    let activeChannel: any = null;
+    let isMounted = true;
+
+    async function loadData(showLoading = false) {
+      if (showLoading) setLoading(true);
       const supabase = createClient();
       const user = await getCurrentUser();
-      if (!user) return;
+      if (!user || !isMounted) return;
 
       // Fetch all data in parallel
       const [profileRes, cardRes, reviewRes, employeeRes, connectionRes, reviewCountRes] =
@@ -505,12 +509,13 @@ function OwnerHomePage() {
             .select("*")
             .eq("user_id", user.id)
             .order("created_at", { ascending: false }),
-          // Total review count — fetched in parallel instead of after the rest.
           supabase
             .from("reviews")
             .select("id", { count: "exact", head: true })
             .eq("profile_id", user.id),
         ]);
+
+      if (!isMounted) return;
 
       if (profileRes.data) setProfile(profileRes.data as unknown as Profile);
       if (cardRes.data) {
@@ -534,17 +539,61 @@ function OwnerHomePage() {
             .select("id, owner_name, business_name, job_title, avatar_url, logo_url, username, slug")
             .in("id", targetIds);
 
-          const profMap = new Map((profs || []).map((p) => [p.id, p]));
-          enrichedConns = rawConns.map((c) => ({
-            ...c,
-            connected_profile: profMap.get(c.connected_user_id) || null,
-          }));
+          if (isMounted) {
+            const profMap = new Map((profs || []).map((p) => [p.id, p]));
+            enrichedConns = rawConns.map((c) => ({
+              ...c,
+              connected_profile: profMap.get(c.connected_user_id) || null,
+            }));
+          }
         }
-        setConnections(enrichedConns);
+        if (isMounted) setConnections(enrichedConns);
       }
 
-      setLoading(false);
-    })();
+      if (isMounted) setLoading(false);
+
+      // Setup real-time listener on active user's profile if not already listening
+      if (!activeChannel && user.id) {
+        activeChannel = supabase
+          .channel(`profile-live-${user.id}`)
+          .on(
+            "postgres_changes",
+            {
+              event: "UPDATE",
+              schema: "public",
+              table: "profiles",
+              filter: `id=eq.${user.id}`,
+            },
+            (payload) => {
+              if (payload.new && isMounted) {
+                setProfile((prev) => (prev ? { ...prev, ...(payload.new as Profile) } : (payload.new as Profile)));
+              }
+            }
+          )
+          .subscribe();
+      }
+    }
+
+    loadData(true);
+
+    // Auto-sync when user returns to app/tab
+    const onVisibilityOrFocus = () => {
+      if (document.visibilityState === "visible") {
+        loadData(false);
+      }
+    };
+    window.addEventListener("focus", onVisibilityOrFocus);
+    document.addEventListener("visibilitychange", onVisibilityOrFocus);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener("focus", onVisibilityOrFocus);
+      document.removeEventListener("visibilitychange", onVisibilityOrFocus);
+      if (activeChannel) {
+        const supabase = createClient();
+        supabase.removeChannel(activeChannel);
+      }
+    };
   }, []);
 
   /* Loading skeleton */

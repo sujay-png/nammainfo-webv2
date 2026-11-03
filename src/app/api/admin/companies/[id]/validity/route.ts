@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdminAuth } from "@/admin/shared/lib/admin-auth";
 
@@ -55,7 +56,7 @@ export async function POST(
     // Check current status so we never override manual admin suspensions
     const { data: currentProfile } = await supabase
       .from("profiles")
-      .select("status")
+      .select("status, slug, username")
       .eq("id", id)
       .single();
 
@@ -116,6 +117,17 @@ export async function POST(
         .update(empUpdates)
         .eq("owner_id", id)
         .eq("is_premium", true);
+    }
+
+    // Purge Next.js ISR & route cache so public profile and user dashboard reflect immediately
+    try {
+      if (currentProfile?.slug) revalidatePath(`/${currentProfile.slug}`);
+      if (currentProfile?.username) revalidatePath(`/${currentProfile.username}`);
+      revalidatePath("/dashboard/home");
+      revalidatePath("/dashboard/settings");
+      revalidatePath("/dashboard/team");
+    } catch (revalErr) {
+      console.warn("[Admin API] Failed to revalidate cache paths:", revalErr);
     }
 
     return NextResponse.json({ success: true, updates });

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { requireAdminAuth } from "@/admin/shared/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
 
     const { data: profile, error: fetchErr } = await supabase
       .from("profiles")
-      .select("id, status, membership_expires_at, trial_extension_days, subscription_plan")
+      .select("id, status, membership_expires_at, trial_extension_days, subscription_plan, slug, username")
       .eq("id", companyId)
       .single();
 
@@ -60,6 +61,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: updateErr.message }, { status: 500 });
     }
 
+    // Purge Next.js ISR & route cache so public profile and user dashboard reflect immediately
+    try {
+      if (profile.slug) revalidatePath(`/${profile.slug}`);
+      if (profile.username) revalidatePath(`/${profile.username}`);
+      revalidatePath("/dashboard/home");
+      revalidatePath("/dashboard/settings");
+      revalidatePath("/dashboard/team");
+    } catch (revalErr) {
+      console.warn("[Admin Trial Extend] Failed to revalidate cache paths:", revalErr);
+    }
+
     return NextResponse.json({
       success: true,
       newExpiry,
@@ -75,4 +87,3 @@ export async function POST(request: Request) {
     );
   }
 }
-
