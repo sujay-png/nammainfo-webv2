@@ -132,7 +132,6 @@ export async function GET(request: Request) {
         p.role === "designer" ||
         p.subscription_plan === "none" ||
         emailLower === "abhishek.aksharadigital@gmail.com" ||
-        emailLower === "abhishek.aksharadigitalindia@gmail.com" ||
         emailLower === "aksharadigitalindia@outlook.com";
 
       return !isStaff;
