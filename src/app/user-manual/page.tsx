@@ -39,7 +39,7 @@ export default function UserManualPage() {
         <div className={s.heroMeta}>
           <span>13 chapters · about 15 minutes</span>
           <span>For business owners and team members</span>
-          <span>Updated 1 Nov 2026</span>
+          <span>Updated 4 Nov 2026</span>
         </div>
         </div>
         <div className={s.heroArt} aria-hidden>

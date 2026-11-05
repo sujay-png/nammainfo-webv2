@@ -16,6 +16,7 @@ import {
   MapPin,
 } from "lucide-react";
 import { showInstallAfterLogin } from "@/features/install-app/components/add-to-home-screen-popup";
+import { formatIndianMobile, PHONE_ERROR } from "@/lib/phone";
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -25,6 +26,7 @@ export default function OnboardingPage() {
     null
   );
   const [checkingUsername, setCheckingUsername] = useState(false);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     owner_name: "",
@@ -81,9 +83,13 @@ export default function OnboardingPage() {
           return;
         }
 
-        if (user.email) {
-          setForm((f) => ({ ...f, email: user.email! }));
-        }
+        // Mobile number given at sign-up.
+        const signupPhone = (user.user_metadata as { phone?: string } | undefined)?.phone;
+        setForm((f) => ({
+          ...f,
+          email: user.email ?? f.email,
+          phone: f.phone || signupPhone || "",
+        }));
       }
     })();
   }, [router]);
@@ -115,6 +121,11 @@ export default function OnboardingPage() {
   }
 
   async function handleSubmit() {
+    if (!formatIndianMobile(form.phone)) {
+      setStep(2);
+      setPhoneError(PHONE_ERROR);
+      return;
+    }
     setLoading(true);
 
     try {
@@ -152,7 +163,7 @@ export default function OnboardingPage() {
           owner_name: form.owner_name.trim(),
           business_name: form.business_name.trim() || null,
           job_title: form.job_title.trim() || null,
-          phone: form.phone.trim() || null,
+          phone: formatIndianMobile(form.phone),
           email: form.email.trim() || null,
           website: form.website.trim() || null,
           address: form.address.trim() || null,
@@ -274,13 +285,20 @@ export default function OnboardingPage() {
             </p>
 
             <div className="space-y-3">
-              <InputField
-                icon={<Phone size={16} />}
-                placeholder="Phone number"
-                value={form.phone}
-                onChange={(v) => updateField("phone", v)}
-                type="tel"
-              />
+              <div>
+                <InputField
+                  icon={<Phone size={16} />}
+                  placeholder="Mobile number *"
+                  value={form.phone}
+                  onChange={(v) => {
+                    updateField("phone", v);
+                    if (phoneError) setPhoneError(null);
+                  }}
+                  type="tel"
+                  required
+                />
+                {phoneError && <p className="mt-1.5 px-1 text-xs text-red-500">{phoneError}</p>}
+              </div>
               <InputField
                 icon={<Globe size={16} />}
                 placeholder="Website (optional)"
@@ -316,7 +334,13 @@ export default function OnboardingPage() {
                 Back
               </button>
               <button
-                onClick={() => setStep(3)}
+                onClick={() => {
+                  if (!formatIndianMobile(form.phone)) {
+                    setPhoneError(PHONE_ERROR);
+                    return;
+                  }
+                  setStep(3);
+                }}
                 className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-ink-950 py-3.5 text-sm font-semibold text-white transition hover:bg-ink-800"
               >
                 Continue

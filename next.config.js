@@ -10,6 +10,17 @@ const nextConfig = {
       },
     ],
   },
+  // Browser auth/database calls go through our own domain, because some
+  // networks block *.supabase.co (see src/supabase/client.ts).
+  async rewrites() {
+    const supabase = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/$/, "");
+    if (!supabase) return [];
+    return [
+      { source: "/sb/auth/v1/:path*", destination: `${supabase}/auth/v1/:path*` },
+      { source: "/sb/rest/v1/:path*", destination: `${supabase}/rest/v1/:path*` },
+      { source: "/sb/functions/v1/:path*", destination: `${supabase}/functions/v1/:path*` },
+    ];
+  },
   async headers() {
     return [
       {

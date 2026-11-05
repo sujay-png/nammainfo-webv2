@@ -29,7 +29,9 @@ export const userManualToc: TocEntry[] = [
     { id: "profile-about", title: "Step 3: About your business" },
     { id: "profile-services", title: "Step 4: Services and products" },
     { id: "profile-more", title: "Step 5: Social, gallery, payments, brochure" },
-    { id: "profile-reviews-link", title: "Step 6: Link Google reviews" },
+    { id: "profile-testimonials", title: "Step 6: Testimonials" },
+    { id: "profile-clients", title: "Step 7: Our clients" },
+    { id: "profile-reviews-link", title: "Step 8: Link Google reviews" },
     { id: "profile-complete", title: "Check your profile is complete" },
   ] },
   { id: "go-live", title: "Make your page live", children: [
@@ -129,13 +131,13 @@ export default function UserManualContent() {
           <Steps>
             <Step title="Open nammainfo.in">On your phone or computer, tap <strong>Get your card</strong>.</Step>
             <Step title="Choose Create account">Make sure <strong>Create account</strong> is selected at the top.</Step>
-            <Step title="Enter your email and a password">Use at least 6 characters. The coloured bar under the password shows how strong it is. Tap the eye icon to see what you typed.</Step>
+            <Step title="Enter your email, mobile number and a password">Your <strong>mobile number</strong> is required: customers call and WhatsApp you on it. Type the 10 digits; +91 is added for you. The password needs at least 6 characters. The coloured bar under the password shows how strong it is. Tap the eye icon to see what you typed.</Step>
             <Step title="Tap Create my card">If you see <strong>Check your email</strong>, open the email from Namma Info and tap the link inside. This proves the email address is yours.</Step>
           </Steps>
           <Screens
             shots={[
               { src: img("landing"), title: "nammainfo.in", caption: "Tap Get your card to start." },
-              { src: img("signup"), title: "Create account", caption: "Email, password, then Create my card." },
+              { src: img("signup"), title: "Create account", caption: "Email and password, then Create my card. (The mobile number box now sits between them.)" },
             ]}
           />
           <Callout kind="tip">
@@ -182,7 +184,8 @@ export default function UserManualContent() {
                 <tr><td>That email and password don&apos;t match our records</td><td>The email or password is wrong</td><td>Check for typing mistakes, or use Forgot password</td></tr>
                 <tr><td>An account with that email already exists</td><td>You already signed up with this email</td><td>Tap <strong>Sign in</strong> instead</td></tr>
                 <tr><td>Please confirm your email first</td><td>You haven&apos;t tapped the link in the welcome email</td><td>Open the email, tap the link, then sign in</td></tr>
-                <tr><td>Can&apos;t reach Namma Info right now</td><td>Your phone is offline or the signal is weak</td><td>Connect to Wi-Fi or mobile data and try again</td></tr>
+                <tr><td>Enter a valid 10-digit mobile number</td><td>The mobile number is missing or has a typo</td><td>Type your 10-digit number, for example 98765 43210</td></tr>
+                <tr><td>Couldn&apos;t connect to Namma Info</td><td>Your phone is offline, or your Wi-Fi or office network is blocking us</td><td>Try again; if it keeps happening, switch to mobile data</td></tr>
                 <tr><td>Too many attempts</td><td>Several tries in a short time</td><td>Wait one minute, then try again</td></tr>
               </tbody>
             </table>
@@ -217,7 +220,7 @@ export default function UserManualContent() {
             <Step>On the Profile screen, tap the <strong>pencil</strong> next to your name.</Step>
             <Step title="Fill in Edit Profile">
               <strong>Your Name</strong>, <strong>Business Name</strong>, <strong>Job Title</strong> (for example Proprietor),{" "}
-              <strong>Phone</strong>, <strong>Email</strong> and <strong>Website</strong>.
+              <strong>Mobile number</strong> (required), <strong>Email</strong> and <strong>Website</strong>.
             </Step>
             <Step title="Choose your link">
               In <strong>Username (vanity URL)</strong>, type the name for your page, for example <em>shenoyhardware</em>. Your
@@ -293,7 +296,42 @@ export default function UserManualContent() {
           </div>
         </Sub>
 
-        <Sub id="profile-reviews-link" title="Step 6: Link Google reviews">
+        <Sub id="profile-testimonials" title="Step 6: Testimonials">
+          <p>Show what happy customers say about you. Each testimonial appears as a card on your page that visitors can swipe through.</p>
+          <Steps>
+            <Step>Tap the pencil on <strong>Testimonials</strong>.</Step>
+            <Step title="Fill in the testimonial">
+              The person&apos;s <strong>Name</strong> (required), their <strong>Role or company</strong> (optional), a star rating, and{" "}
+              <strong>What they said</strong> (required, up to 500 characters).
+            </Step>
+            <Step title="Add their photo (optional)">
+              Tap the round <strong>camera</strong> and choose any photo. Namma Info crops it to a circle-friendly square and shrinks it
+              automatically, so even a large phone photo uploads in a second. Without a photo, their initials are shown.
+            </Step>
+            <Step>Tap <strong>Add testimonial</strong> for more (up to 20), then <strong>Save changes</strong>.</Step>
+          </Steps>
+          <Callout kind="tip">
+            <p>Use real words from real customers, with their permission. A short, specific quote (&ldquo;Matched our wall colour exactly, delivered the same day&rdquo;) is more convincing than a long general one.</p>
+          </Callout>
+        </Sub>
+
+        <Sub id="profile-clients" title="Step 7: Our clients">
+          <p>Show the businesses you&apos;ve worked with as a row of logos. This section is optional.</p>
+          <Steps>
+            <Step>Tap the pencil on <strong>Our Clients</strong>.</Step>
+            <Step title="Add a client">
+              Type the <strong>Client name</strong> (required). Tap the <strong>Logo</strong> box to add their logo (optional); it&apos;s resized
+              automatically and transparent logos stay transparent.
+            </Step>
+            <Step title="Add their website (optional)">
+              For example <em>acme.com</em>. When visitors tap the logo, the client&apos;s website opens in a new tab. Leave it empty and the
+              logo is just shown.
+            </Step>
+            <Step>Tap <strong>Add client</strong> for more (up to 50), then <strong>Save changes</strong>.</Step>
+          </Steps>
+        </Sub>
+
+        <Sub id="profile-reviews-link" title="Step 8: Link Google reviews">
           <Steps>
             <Step>Open the <strong>Reviews</strong> section and tap <strong>Link Google Reviews</strong>.</Step>
             <Step>
@@ -395,7 +433,7 @@ export default function UserManualContent() {
             <li><strong>Your photo, name, title and business</strong>, with badges such as years in business and clients served.</li>
             <li><strong>Add to Contacts</strong>: saves your name, business, phone, email, website and photo to their phone in one step.</li>
             <li><strong>Call</strong>, <strong>WhatsApp</strong>, <strong>Email</strong>, <strong>Share</strong> and <strong>Get Directions</strong>.</li>
-            <li>Sections they can open: <strong>About Us</strong>, <strong>Services</strong>, <strong>Products</strong>, gallery, brochure, <strong>Write a Google Review</strong> and payment details.</li>
+            <li>Sections they can open: <strong>About Us</strong>, <strong>Services</strong>, <strong>Products</strong>, gallery, <strong>Testimonials</strong>, <strong>Our Clients</strong> (tap a logo to open that client&apos;s website), brochure, <strong>Write a Google Review</strong> and payment details. Empty sections are hidden.</li>
           </ul>
           <Screens
             shots={[
@@ -674,7 +712,8 @@ export default function UserManualContent() {
               <tr><td>Phone, email, website, address and Maps link</td><td>Business card photos visitors uploaded</td></tr>
               <tr><td>About, services, products, gallery, brochure</td><td>Your notes and categories on contacts</td></tr>
               <tr><td>Bank and UPI details, if you add them</td><td>Your plan, orders and payments</td></tr>
-              <tr><td>Social links</td><td>Your password</td></tr>
+              <tr><td>Testimonials and client logos</td><td>Your password</td></tr>
+              <tr><td>Social links</td><td></td></tr>
             </tbody>
           </table>
         </div>
@@ -714,5 +753,7 @@ const FAQ: { q: string; a: React.ReactNode }[] = [
   { q: "My changes aren't showing on my page.", a: <p>Wait about a minute and refresh. Public pages update shortly after you save.</p> },
   { q: "Someone opened my card but isn't in my contacts.", a: <p>Visitors can skip sharing their details. Only people who fill in the form, or scan their card, appear in Contacts.</p> },
   { q: "I didn't get the confirmation or password-reset email.", a: <p>Check your spam or promotions folder, wait a few minutes, then ask for a new email. If it still doesn&apos;t arrive, contact the team.</p> },
+  { q: "Why is the app asking for my mobile number?", a: <p>A mobile number is now required on every account, because customers call and WhatsApp you from your card. If your account was made before this, you&apos;ll be asked for it once when you open the dashboard. Type your 10-digit number and tap <strong>Save and continue</strong>; you can change it later in <strong>Profile → Edit Profile</strong>.</p> },
+  { q: "Can I change the order of my testimonials or clients?", a: <p>Not yet. They appear in the order you added them. To move one to the end, remove it and add it again.</p> },
   { q: "I paid but my plan still shows Free.", a: <p>Refresh Home. If it still shows Free after a few minutes, contact the team with your Razorpay payment ID from your receipt.</p> },
 ];

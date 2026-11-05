@@ -10,6 +10,11 @@ import { createClient } from "@/supabase/client";
 import { getCurrentUser } from "@/supabase/current-user";
 import type { Profile, Review } from "@/supabase/database-types";
 import { initials } from "@/lib/utils";
+import { formatIndianMobile, PHONE_ERROR } from "@/lib/phone";
+import TestimonialsEditor from "@/features/testimonials/components/testimonials-editor";
+import ClientsEditor from "@/features/clients/components/clients-editor";
+import { cleanTestimonials, type Testimonial } from "@/features/testimonials/types";
+import { cleanClients, type ClientItem } from "@/features/clients/types";
 import dynamic from "next/dynamic";
 
 const CropModal = dynamic(() => import("@/components/ui/image-crop-modal"), {
@@ -44,6 +49,8 @@ import {
   FileText,
   Upload,
   ChevronDown,
+  Quote,
+  Building2,
 } from "lucide-react";
 
 type EditSection =
@@ -53,6 +60,8 @@ type EditSection =
   | "social"
   | "services"
   | "gallery"
+  | "testimonials"
+  | "clients"
   | "banking"
   | "brochure";
 
@@ -180,6 +189,7 @@ function OwnerProfilePage() {
   }
 
   const [typeError, setTypeError] = useState(false);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
 
   async function saveProfile() {
     if (!profile) return;
@@ -189,6 +199,16 @@ function OwnerProfilePage() {
       setTypeError(true);
       return;
     }
+    // A valid mobile number is required (customers call/WhatsApp it).
+    let phoneToSave = editForm.phone ?? null;
+    if (editing === "basic") {
+      phoneToSave = formatIndianMobile(editForm.phone);
+      if (!phoneToSave) {
+        setPhoneError(PHONE_ERROR);
+        return;
+      }
+      setPhoneError(null);
+    }
     setSaving(true);
     const supabase = createClient();
 
@@ -196,7 +216,7 @@ function OwnerProfilePage() {
         owner_name: editForm.owner_name ?? null,
         business_name: editForm.business_name ?? null,
         job_title: editForm.job_title ?? null,
-        phone: editForm.phone ?? null,
+        phone: phoneToSave,
         email: editForm.email ?? null,
         website: editForm.website ?? null,
         bio: editForm.bio ?? null,
@@ -233,7 +253,7 @@ function OwnerProfilePage() {
       .eq("id", profile.id);
 
     if (!error) {
-      setProfile({ ...profile, ...editForm } as Profile);
+      setProfile({ ...profile, ...editForm, phone: phoneToSave } as Profile);
       setEditing(null);
     }
     setSaving(false);
@@ -810,6 +830,64 @@ function OwnerProfilePage() {
         )}
       </Section>
 
+      {/* Testimonials (needs migration 20261104_testimonials_clients_phone.sql) */}
+      {"testimonials" in profile && (() => {
+        const list = cleanTestimonials((profile as Profile & { testimonials?: unknown }).testimonials);
+        return (
+          <Section title="Testimonials" icon={<Quote size={16} />} onEdit={() => startEdit("testimonials")}>
+            {list.length > 0 ? (
+              <ul className="space-y-2">
+                {list.slice(0, 3).map((t) => (
+                  <li key={t.id} className="flex items-start gap-2.5">
+                    {t.photo_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={t.photo_url} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" />
+                    ) : (
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ink-100 text-[11px] font-semibold text-ink-500">
+                        {initials(t.name)}
+                      </span>
+                    )}
+                    <span className="min-w-0 text-sm">
+                      <span className="font-medium">{t.name}</span>
+                      <span className="line-clamp-2 text-ink-500">{t.quote}</span>
+                    </span>
+                  </li>
+                ))}
+                {list.length > 3 && <li className="text-xs text-ink-400">+{list.length - 3} more</li>}
+              </ul>
+            ) : (
+              <p className="text-sm text-ink-400">Add what your customers say about you</p>
+            )}
+          </Section>
+        );
+      })()}
+
+      {/* Our Clients (same migration) */}
+      {"clients" in profile && (() => {
+        const list = cleanClients((profile as Profile & { clients?: unknown }).clients);
+        return (
+          <Section title="Our Clients" icon={<Building2 size={16} />} onEdit={() => startEdit("clients")}>
+            {list.length > 0 ? (
+              <div className="grid grid-cols-4 gap-1.5">
+                {list.slice(0, 8).map((c) => (
+                  <div key={c.id} className="flex h-12 items-center justify-center rounded-lg border border-ink-100 bg-white p-1.5">
+                    {c.logo_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={c.logo_url} alt={c.name} className="max-h-full max-w-full object-contain" />
+                    ) : (
+                      <span className="line-clamp-2 text-center text-[10px] font-medium text-ink-600">{c.name}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-ink-400">Show the businesses you&apos;ve worked with</p>
+            )}
+            {list.length > 8 && <p className="mt-2 text-xs text-ink-400">+{list.length - 8} more clients</p>}
+          </Section>
+        );
+      })()}
+
       {/* Reviews & Google Maps */}
       <Section title="Reviews" icon={<Star size={16} />}>
         {/* Google Maps connection */}
@@ -1075,12 +1153,20 @@ function OwnerProfilePage() {
             }
             prefix="nammainfo.in/"
           />
-          <InputField
-            label="Phone"
-            value={editForm.phone ?? ""}
-            onChange={(v) => setEditForm({ ...editForm, phone: v })}
-            type="tel"
-          />
+          <div>
+            <InputField
+              label="Mobile number"
+              required
+              placeholder="98765 43210"
+              value={editForm.phone ?? ""}
+              onChange={(v) => {
+                setEditForm({ ...editForm, phone: v });
+                if (phoneError) setPhoneError(null);
+              }}
+              type="tel"
+            />
+            {phoneError && <p className="mt-1 text-xs text-red-600">{phoneError}</p>}
+          </div>
           <InputField
             label="Email"
             value={editForm.email ?? ""}
@@ -1311,6 +1397,36 @@ function OwnerProfilePage() {
               </label>
             </div>
           </div>
+        </EditSheet>
+      )}
+
+      {/* Testimonials Edit */}
+      {editing === "testimonials" && (
+        <EditSheet title="Testimonials" onClose={() => setEditing(null)}>
+          <TestimonialsEditor
+            profileId={profile.id}
+            initial={cleanTestimonials((profile as Profile & { testimonials?: unknown }).testimonials)}
+            onCancel={() => setEditing(null)}
+            onSaved={(items: Testimonial[]) => {
+              setProfile({ ...profile, testimonials: items } as Profile);
+              setEditing(null);
+            }}
+          />
+        </EditSheet>
+      )}
+
+      {/* Clients Edit */}
+      {editing === "clients" && (
+        <EditSheet title="Our Clients" onClose={() => setEditing(null)}>
+          <ClientsEditor
+            profileId={profile.id}
+            initial={cleanClients((profile as Profile & { clients?: unknown }).clients)}
+            onCancel={() => setEditing(null)}
+            onSaved={(items: ClientItem[]) => {
+              setProfile({ ...profile, clients: items } as Profile);
+              setEditing(null);
+            }}
+          />
         </EditSheet>
       )}
 

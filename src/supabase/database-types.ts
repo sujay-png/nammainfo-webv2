@@ -71,6 +71,10 @@ export interface Profile {
   /** retailer | wholesaler | distributor | manufacturer | service_provider | agency */
   business_type?: string | null;
   products: ServiceItem[];
+  /** Customer testimonials (migration 20261104). See features/testimonials/types.ts */
+  testimonials?: import("@/features/testimonials/types").Testimonial[];
+  /** Clients with optional logo + website (migration 20261104). See features/clients/types.ts */
+  clients?: import("@/features/clients/types").ClientItem[];
   theme: string;
   is_admin?: boolean;
   role?: "user" | "admin" | "designer" | null;

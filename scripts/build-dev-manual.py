@@ -65,7 +65,7 @@ for part in parts:
     toc.append({"id": sid, "title": re.sub(r"`", "", title), "children": children})
 
 ts = (
-    "/* Generated from the Namma Info Developer Guide by build_dev.py. Edit the guide,\n"
+    "/* Generated from the Namma Info Developer Guide by scripts/build-dev-manual.py from docs/developer-guide.md. Edit the guide,\n"
     "   then regenerate, rather than editing this file by hand. */\n\n"
     "export interface ManualSection { id: string; title: string; html: string }\n"
     "export interface TocEntry { id: string; title: string; children?: TocEntry[] }\n\n"

@@ -16,11 +16,13 @@ import {
   Share2,
   MailCheck,
   BookmarkPlus,
+  Phone,
 } from "lucide-react";
 import { createClient } from "@/supabase/client";
 import { flushPendingSaves } from "@/features/saved-cards/services/saved-cards.service";
 import { showInstallAfterLogin } from "@/features/install-app/components/add-to-home-screen-popup";
 import { getSiteUrl } from "@/lib/site-url";
+import { formatIndianMobile, PHONE_ERROR } from "@/lib/phone";
 
 /* ------------------------------------------------------------------ */
 /*  Hero: a floating "physical" NFC card — always dark, so it reads     */
@@ -174,7 +176,7 @@ function friendlyAuthError(err: unknown): string {
     name === "AuthRetryableFetchError" ||
     /failed to fetch|network ?error|load failed|fetch failed|networkerror/i.test(raw)
   ) {
-    return "Can't reach Namma Info right now. Check your internet connection and try again.";
+    return "Couldn't connect to Namma Info. Please try again. If it keeps happening, your Wi-Fi or office network may be blocking us: try mobile data.";
   }
   if (/already registered|already exists/i.test(raw)) {
     return "An account with that email already exists. Try signing in instead.";
@@ -200,6 +202,7 @@ function SignUpForm() {
   const ref = searchParams.get("ref"); // the card slug that sent them here
 
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [mode, setMode] = useState<"signup" | "signin">(
@@ -232,6 +235,13 @@ function SignUpForm() {
 
     try {
       if (mode === "signup") {
+        // Mobile number is required for every new account.
+        const mobile = formatIndianMobile(phone);
+        if (!mobile) {
+          setError(PHONE_ERROR);
+          setLoading(false);
+          return;
+        }
         const { data, error: signUpError } = await supabase.auth.signUp({
           email: email.trim(),
           password,
@@ -244,7 +254,8 @@ function SignUpForm() {
               : `${getSiteUrl()}${onboardingUrl}`,
             // Stored on the account, so the card is saved even if the
             // confirmation email is opened in another browser or app.
-            data: saveId ? { pending_save: saveId } : undefined,
+            // The signup trigger copies "phone" into profiles.phone.
+            data: saveId ? { pending_save: saveId, phone: mobile } : { phone: mobile },
           },
         });
         if (signUpError) throw signUpError;
@@ -385,7 +396,7 @@ function SignUpForm() {
             </h1>
             <p className="mt-1 text-sm text-[var(--muted-foreground)]">
               {saveId
-                ? `Just your email and a password — ${saveName} goes straight into your Saved Cards.`
+                ? `Just your email, mobile number and a password — ${saveName} goes straight into your Saved Cards.`
                 : isSignup
                   ? "Free to start. Set up in under a minute."
                   : "Sign in to manage your card and see who tapped it."}
@@ -413,6 +424,22 @@ function SignUpForm() {
                 className={inputClass}
               />
             </Field>
+
+            {isSignup && (
+              <Field label="Mobile number" icon={<Phone size={18} strokeWidth={1.7} />}>
+                <span className="pl-3 text-[15px] text-[var(--muted-foreground)]">+91</span>
+                <input
+                  type="tel"
+                  required
+                  autoComplete="tel-national"
+                  inputMode="numeric"
+                  placeholder="98765 43210"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className={`${inputClass} pl-2`}
+                />
+              </Field>
+            )}
 
             <div>
               <Field

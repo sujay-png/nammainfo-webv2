@@ -92,6 +92,9 @@ supabase/migrations/        SQL migrations, run by hand in the Supabase SQL Edit
 | `save-contact` | "Add to Contacts" (vCard) for Android and iPhone | `lib/vcard.ts`, `lib/save-contact.ts` |
 | `saved-cards` | Auto-save cards you open; Saved tab (cards + contacts) | `services/saved-cards.service.ts`, `components/auto-save-card.tsx`, `components/saved-cards-and-contacts.tsx` |
 | `contacts` | Visitor "share your details" popup and business-card photo upload | `components/visitor-details-popup.tsx`, `lib/compress-card-photo.ts`, `services/business-card-upload.service.ts` |
+| `testimonials` | Customer testimonials with optional author photo: editor and public carousel | `types.ts`, `components/testimonials-editor.tsx`, `components/public-testimonials.tsx` |
+| `clients` | "Our Clients" logos with optional website links | `types.ts`, `components/clients-editor.tsx`, `components/public-clients.tsx` |
+| `phone-required` | One-time "Add your mobile number" popup for older accounts | `components/phone-required-popup.tsx` |
 | `team` | Team members and their logins | `components/team-page.tsx`, `components/employee-login-access.tsx` |
 | `employee-dashboard` | What a staff login sees | `components/employee-home.tsx`, `employee-profile.tsx`, `employee-settings.tsx` |
 | `home` | Owner's Home screen: stats, plan status, profile completion | `components/home-dashboard.tsx` |
@@ -173,18 +176,49 @@ Login is Supabase Auth with email and password. The session lives in cookies (vi
 
 | File | Function | Use it for |
 | --- | --- | --- |
-| `src/supabase/client.ts` | `createClient()` | Client components. Anon key + the user's session; RLS applies |
+| `src/supabase/client.ts` | `createClient()` | Client components. Anon key + the user's session; RLS applies. Auth and database calls go through `/sb` (see below) |
 | `src/supabase/server.ts` | `createClient()` | Server components and API routes acting **as the signed-in user** |
 | `src/supabase/server.ts` | `createPublicClient()` / `createCachedPublicClient(30)` | Public pages: anon, no session. The cached one goes through Next's data cache for 30 s |
 | `src/supabase/admin.ts` | `createAdminClient()` | **Server only.** Service role, bypasses RLS. Payments, staff logins, trial apply, card-photo upload links, admin APIs |
 
 ### Sign-up
 
-1. `src/components/auth/signup-and-signin-page.tsx` calls `supabase.auth.signUp()`. Email links point at `getSiteUrl()` (`src/lib/site-url.ts`), which always returns nammainfo.in, never a Vercel preview.
-2. In the database, the `on_auth_user_created` trigger runs `handle_new_user()`. It creates a `profiles` row and a `cards` row with a starter slug like `user1a2b3c4d`. Slugs must match `^[a-z0-9]{4,32}$`; the function retries if one is taken.
-3. The user lands on `/onboarding` (`src/features/onboarding/components/onboarding-wizard.tsx`). The 3 steps update `profiles` and set `cards.public_slug` to the chosen username.
+1. `src/components/auth/signup-and-signin-page.tsx` asks for email, **mobile number** and password, then calls `supabase.auth.signUp()` with the number in `options.data.phone` (account metadata). Email links point at `getSiteUrl()` (`src/lib/site-url.ts`), which always returns nammainfo.in, never a Vercel preview.
+2. In the database, the `on_auth_user_created` trigger runs `handle_new_user()`. It creates a `profiles` row (copying the sign-up `phone` into `profiles.phone` since migration `20261104`) and a `cards` row with a starter slug like `user1a2b3c4d`. Slugs must match `^[a-z0-9]{4,32}$`; the function retries if one is taken.
+3. The user lands on `/onboarding` (`src/features/onboarding/components/onboarding-wizard.tsx`). The 3 steps update `profiles` and set `cards.public_slug` to the chosen username. Step 2 is pre-filled with the sign-up number and won't continue without a valid one.
 
-Errors are turned into plain messages by `friendlyAuthError()` in the same file (offline, wrong password, unconfirmed email, rate limits).
+Errors are turned into plain messages by `friendlyAuthError()` in the same file (can't connect, wrong password, unconfirmed email, rate limits).
+
+### Mobile number is required
+
+Every owner account must have a valid Indian mobile number, because customers call and WhatsApp it from the card. It is enforced in four places, all using `src/lib/phone.ts`:
+
+| Where | File | What happens |
+| --- | --- | --- |
+| Sign-up form | `src/components/auth/signup-and-signin-page.tsx` | Required field with +91; invalid numbers are rejected before `signUp()` |
+| Setup step 2 | `src/features/onboarding/components/onboarding-wizard.tsx` | Pre-filled from sign-up; Continue and Launch both check it |
+| Edit Profile | `src/features/profile/components/profile-editor.tsx` | "Mobile number" can't be cleared or saved invalid |
+| Older accounts | `src/components/layout/dashboard-shell.tsx` + `src/features/phone-required/components/phone-required-popup.tsx` | If `profiles.phone` is empty: copied from sign-up metadata if present, otherwise a one-time popup that can't be dismissed. Not shown to staff logins |
+
+```ts
+// src/lib/phone.ts — accepts "98765 43210", "+91-98765-43210", "098765 43210"
+export function indianMobileDigits(input) {
+  let d = (input ?? "").replace(/\D/g, "");
+  if (d.length === 12 && d.startsWith("91")) d = d.slice(2);
+  else if (d.length === 11 && d.startsWith("0")) d = d.slice(1);
+  return /^[6-9]\d{9}$/.test(d) ? d : null;
+}
+// formatIndianMobile() stores one consistent form: "+91 98765 43210"
+```
+
+### Networks that block Supabase (the `/sb` route)
+
+Some office firewalls and Indian ISPs block `*.supabase.co`. Users on those networks saw "can't connect" while their internet worked. So in the browser, `src/supabase/client.ts` passes a custom `fetch` to `createBrowserClient()` that sends **auth, rest and functions** calls to `https://nammainfo.in/sb/...` instead; `next.config.js` `rewrites()` forwards `/sb/auth/v1/*`, `/sb/rest/v1/*` and `/sb/functions/v1/*` to the real Supabase URL.
+
+- The client is still created with the real Supabase URL, so the session cookie name (`sb-<ref>-auth-token`) and public storage URLs don't change.
+- **Storage** (photo uploads and downloads) still goes direct, to keep large files off Vercel. On a blocking network, images may not load even though sign-in works.
+- Server code (route handlers, middleware, server components) talks to Supabase directly; only browsers needed the detour.
+- Turn it off with `NEXT_PUBLIC_SUPABASE_PROXY=off`.
 
 ### Middleware (`src/middleware.ts`)
 
@@ -294,6 +328,7 @@ The same pattern guards `employees` (billing fields; adding a member needs a fre
 | `20261029_free_trial_and_milestones.sql` | Trial columns |
 | `20261030_designer_role_and_staff.sql` | `role` column, `is_staff()`, staff read policies |
 | `20261030_security_lockdown.sql` | Guard triggers, `profile_admin_notes`, unique payment ids, `primary_card_count` |
+| `20261104_testimonials_clients_phone.sql` | `profiles.testimonials` and `profiles.clients` (jsonb arrays with size checks); `handle_new_user()` copies the sign-up phone into `profiles.phone` |
 
 > **Known gap:** profiles are readable column-by-column by anyone, including email, phone, GST and bank details. That's intended for public cards, but the long-term fix is a public view with only display columns.
 
@@ -469,6 +504,68 @@ where owner_id = p_owner_id
 - Photos are shown through signed URLs that expire after one hour.
 - `submit_contact()` normalises numbers ("+91 98450 12345" and "098450 12345" both become `9845012345`), merges repeat visitors by phone or email, and caps new contacts at 60 per business per 10 minutes.
 - The `contacts_guard` trigger lets the owner fix the name, number and email, but not who the contact belongs to or its photo paths.
+
+## Testimonials and clients
+
+Two optional profile sections an owner fills in from **Profile → Testimonials** and **Profile → Our Clients**. Both are stored as jsonb arrays on `profiles` (migration `20261104_testimonials_clients_phone.sql`), so the public page gets them with its existing `select("*")` and no extra query.
+
+| Piece | File | Job |
+| --- | --- | --- |
+| Data shapes and clean-up | `src/features/testimonials/types.ts`, `src/features/clients/types.ts` | `Testimonial`, `ClientItem`, limits, `cleanTestimonials()`, `cleanClients()`, `normalizeWebsite()` |
+| Editors | `src/features/testimonials/components/testimonials-editor.tsx`, `src/features/clients/components/clients-editor.tsx` | Edit-sheet bodies used by the profile editor; upload images, validate, save the array |
+| Public sections | `src/features/testimonials/components/public-testimonials.tsx`, `src/features/clients/components/public-clients.tsx` | Swipeable quote cards; logo grid with links |
+| Image processing | `src/lib/images/process-image.ts` | Shrinks photos in the browser before upload |
+| Upload and delete | `src/lib/images/profile-media.ts` | `uploadProfileImage()`, `deleteProfileImage()` for the `profile-media` bucket |
+| Wiring | `src/features/profile/components/profile-editor.tsx`, `src/features/public-profile/components/public-profile-view.tsx` | Sections appear only when the columns exist (`"testimonials" in profile`) |
+
+```ts
+// src/features/testimonials/types.ts
+interface Testimonial { id: string; name: string; role?: string; quote: string; rating?: number; photo_url?: string }
+// src/features/clients/types.ts
+interface ClientItem { id: string; name: string; logo_url?: string; website?: string }
+```
+
+### Image processing: why it's built this way
+
+Photos from phones are 3 to 5 MB; a testimonial avatar needs 320 px. So every image is processed **in the browser, before upload**, which costs nothing on the server and keeps storage tiny:
+
+| Preset | Used for | What it does | Typical size |
+| --- | --- | --- | --- |
+| `AVATAR_IMAGE` | Testimonial author photo | Centre-cropped square, 320 px, WebP | 2 to 40 KB |
+| `LOGO_IMAGE` | Client logo | Whole logo fitted inside 480 × 240, **transparency kept**, WebP | 4 to 60 KB |
+
+```ts
+// src/lib/images/process-image.ts (excerpt)
+let blob = await toBlob(canvas, "image/webp", 0.82);
+if (!webp) { /* old Safari: JPEG on a white background instead */ }
+while (blob.size > opts.targetBytes && quality > 0.5) {
+  quality -= 0.08;                       // step quality down only as needed
+  blob = await toBlob(canvas, "image/webp", quality);
+}
+```
+
+- Camera rotation is respected (`createImageBitmap(..., { imageOrientation: "from-image" })`).
+- Non-images and files over 15 MB are refused with a plain message (`ImageProcessError`).
+- Files go to `profile-media/<profileId>/testimonials/…` or `…/clients/…` with a random name and a one-year cache header.
+
+### Saving and cleaning up
+
+1. Picking a photo uploads it straight away (spinner on the thumbnail) and keeps the URL in the editor's draft.
+2. **Save** validates (testimonial: name and quote required, quote ≤ 500 characters; client: name required, website optional), trims everything and writes the whole array to `profiles.testimonials` / `profiles.clients`.
+3. After a successful save, photos that are no longer used (replaced or removed) are deleted. **Cancel** deletes photos uploaded in that session. Deletes are best effort.
+4. Websites are normalised by `normalizeWebsite()`: `acme.com` becomes `https://acme.com/`; anything that isn't an http(s) address is rejected, so no `javascript:` links reach the page. Public links open with `target="_blank" rel="noopener noreferrer nofollow"`.
+
+### Limits in the database
+
+```sql
+-- 20261104_testimonials_clients_phone.sql
+check (jsonb_typeof(testimonials) = 'array'
+       and jsonb_array_length(testimonials) <= 20
+       and pg_column_size(testimonials) <= 32768);
+-- clients: array, at most 50 items, at most 32 KB
+```
+
+The browser can write these columns (they belong to the owner and carry no money or permissions), so the checks stop oversized or malformed data, and `cleanTestimonials()` / `cleanClients()` re-check the shape before anything is rendered.
 
 ## Google review generator
 
@@ -762,6 +859,8 @@ Namma Info is a website that can be added to the home screen and opens full-scre
 - **Secrets:** `SUPABASE_SERVICE_ROLE_KEY`, `RAZORPAY_KEY_SECRET` and `RAZORPAY_WEBHOOK_SECRET` are server-only: never prefix them with `NEXT_PUBLIC_` or import them in a `"use client"` file. `.env.local` stays out of git.
 - **Design rules** (from `AGENTS.md`): no sparkle icons, neon colours or glow effects; use the theme variables (`var(--primary)` etc.); `rounded-[5px]` corners; one call to action per idea.
 - **Feel:** save optimistically, show results instantly, write friendly errors in plain English (see `friendlyAuthError()` in the sign-in page).
+- **Images:** never upload a raw photo. Run it through `processImage()` (`src/lib/images/process-image.ts`) with a preset first.
+- **Keep the manuals current:** every change that users or developers would notice updates `src/features/manuals/content/user-manual.tsx` (the `/user-manual` page) and `docs/developer-guide.md`, then regenerates the `/developers-manual` content with `python3 scripts/build-dev-manual.py docs/developer-guide.md src/features/manuals/content/developers-manual-content.ts`.
 
 ### Running and checking
 
@@ -788,3 +887,6 @@ Useful scripts in `scripts/`: `seed-test-accounts.js` creates test accounts; `ap
 | Supabase's built-in email sender | Low daily limit; email templates can't be edited | Set up custom SMTP (e.g. Resend or Brevo) in Supabase |
 | `create-order` uses `any` and older cookie setup | Type safety | Switch to `createClient()` from `src/supabase/server.ts` |
 | Security migration must be run once | Until then payments and admin notes use fallbacks | Run `20261030_security_lockdown.sql` |
+| `avatars` / `profile-media` storage policies | Any signed-in user can update or delete any file in these buckets | Restrict update/delete to the user's own folder (`(storage.foldername(name))[1] = auth.uid()::text`), after checking team-photo paths |
+| Images still load from `supabase.co` | On networks that block Supabase, photos may not show even though sign-in works | Proxy public storage URLs too, or use a Supabase custom domain |
+| Testimonials and clients can't be reordered | Order is the order they were added | Add up/down buttons in the editors |

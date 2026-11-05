@@ -39,7 +39,7 @@ export default function ForgotPasswordPage() {
       const message = err instanceof Error ? err.message : "";
       setError(
         typeof navigator !== "undefined" && navigator.onLine === false
-          ? "Can't reach Namma Info right now. Check your internet connection and try again."
+          ? "Couldn't connect to Namma Info. Please try again. If it keeps happening, your Wi-Fi or office network may be blocking us: try mobile data."
           : /rate limit|too many|429|security purposes/i.test(message)
             ? "Too many requests. Please wait a minute before asking for another link."
             : message || "Something went wrong. Please try again."

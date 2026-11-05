@@ -17,6 +17,8 @@ import { useTheme } from "@/hooks/use-theme";
 import InstallAppPrompt from "@/features/install-app/components/add-to-home-screen-popup";
 import { AccountProvider } from "@/components/providers/account-provider";
 import RequireBusinessType from "@/features/business-type/components/business-type-required-popup";
+import RequirePhone from "@/features/phone-required/components/phone-required-popup";
+import { formatIndianMobile } from "@/lib/phone";
 import { flushPendingSaves } from "@/features/saved-cards/services/saved-cards.service";
 
 const tabs = [
@@ -37,6 +39,7 @@ export default function DashboardShell({
   const { colorTheme, setColorTheme } = useTheme();
   const [isStandalone, setIsStandalone] = useState(false);
   const [needsTypeFor, setNeedsTypeFor] = useState<string | null>(null);
+  const [needsPhoneFor, setNeedsPhoneFor] = useState<string | null>(null);
 
   useEffect(() => {
     // Detect if running in standalone PWA / Add to Home Screen mode
@@ -104,7 +107,7 @@ export default function DashboardShell({
         .eq("id", user.id)
         .single();
 
-      const row = data as { theme?: string; business_name?: string | null; business_type?: string | null } | null;
+      const row = data as { theme?: string; business_name?: string | null; business_type?: string | null; phone?: string | null } | null;
       const saved = row?.theme;
       if (saved && saved !== colorTheme) {
         setColorTheme(saved);
@@ -115,6 +118,17 @@ export default function DashboardShell({
       // until the business_type column exists.)
       if (row && "business_type" in row && !row.business_type && row.business_name?.trim()) {
         setNeedsTypeFor(user.id);
+      }
+
+      // Mobile number is required. Use the one given at sign-up if the
+      // profile doesn't have it yet; otherwise ask once.
+      if (row && !row.phone?.trim()) {
+        const fromSignup = formatIndianMobile((user.user_metadata as { phone?: string } | undefined)?.phone);
+        if (fromSignup) {
+          await supabase.from("profiles").update({ phone: fromSignup } as Record<string, unknown>).eq("id", user.id);
+        } else {
+          setNeedsPhoneFor(user.id);
+        }
       }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -141,7 +155,15 @@ export default function DashboardShell({
       </main>
 
       {/* "Add to home screen" — owners only (dashboard), never on public profiles */}
-      {needsTypeFor ? (
+      {needsPhoneFor ? (
+        <RequirePhone
+          userId={needsPhoneFor}
+          onDone={() => {
+            setNeedsPhoneFor(null);
+            router.refresh();
+          }}
+        />
+      ) : needsTypeFor ? (
         <RequireBusinessType
           userId={needsTypeFor}
           onDone={() => {

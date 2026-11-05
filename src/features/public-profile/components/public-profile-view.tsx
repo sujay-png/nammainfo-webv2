@@ -44,7 +44,13 @@ import {
   BookUser,
   Navigation,
   X,
+  Quote,
+  Building2,
 } from "lucide-react";
+import PublicTestimonials from "@/features/testimonials/components/public-testimonials";
+import PublicClients from "@/features/clients/components/public-clients";
+import { cleanTestimonials } from "@/features/testimonials/types";
+import { cleanClients } from "@/features/clients/types";
 
 /**
  * Ensure a URL string has a protocol prefix, so it opens as an absolute URL
@@ -757,6 +763,8 @@ export default function PublicProfileView({
   const servicesList = (profile.services as { name: string; description?: string; price?: string; emoji?: string; category?: string }[]) ?? [];
   const productsList = (profile.products as { name: string; image_url?: string; price?: string; emoji?: string; category?: string }[]) ?? [];
   const galleryList = (profile.gallery as { url: string; category?: string; caption?: string }[]) ?? [];
+  const testimonialList = cleanTestimonials((profile as { testimonials?: unknown }).testimonials);
+  const clientList = cleanClients((profile as { clients?: unknown }).clients);
   const bankAccounts = (profile.bank_accounts as { bank_name?: string; account_holder?: string; account_number?: string; ifsc?: string; upi_id?: string; qr_url?: string }[]) ?? [];
 
   /* Dynamic label for services/products section */
@@ -1006,6 +1014,20 @@ export default function PublicProfileView({
             badge={galleryList.length}
           >
             <PublicGallery gallery={galleryList} allGallery={galleryList} onImageTap={(idx) => setLightboxIndex(idx)} />
+          </CollapsibleSection>
+        )}
+
+        {/* ── Testimonials ── */}
+        {testimonialList.length > 0 && (
+          <CollapsibleSection title="Testimonials" icon={<Quote size={15} />} badge={testimonialList.length}>
+            <PublicTestimonials items={testimonialList} />
+          </CollapsibleSection>
+        )}
+
+        {/* ── Our Clients ── */}
+        {clientList.length > 0 && (
+          <CollapsibleSection title="Our Clients" icon={<Building2 size={15} />} badge={clientList.length}>
+            <PublicClients items={clientList} />
           </CollapsibleSection>
         )}
 
