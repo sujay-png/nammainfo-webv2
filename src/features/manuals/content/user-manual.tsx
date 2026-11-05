@@ -237,6 +237,18 @@ export default function UserManualContent() {
             <Step>Tap the <strong>camera</strong> at the top right of the dark banner to add a wide cover photo, for example your shop front.</Step>
             <Step title="Crop and apply">Drag the photo to position it, use the slider to zoom, then tap <strong>Apply</strong>. Photos can be up to 5 MB (JPG or PNG).</Step>
           </Steps>
+          <div className={s.tableWrap}>
+            <table>
+              <thead><tr><th>Photo</th><th>Best size</th><th>Shape</th></tr></thead>
+              <tbody>
+                <tr><td>Cover photo</td><td><strong>1920 × 1080 px</strong> (at least 1200 × 675 px)</td><td>Wide, 16:9 landscape</td></tr>
+                <tr><td>Logo / your photo</td><td><strong>400 × 400 px</strong> or larger</td><td>Square</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <Callout kind="tip">
+            <p>The size is also shown on the cover itself and in the crop window, so you don&apos;t need to remember it. A photo of a different shape still works: you choose which part to keep when you crop. Keep important things (your shop name, faces) near the middle, because the edges may be hidden on small phones.</p>
+          </Callout>
           <Screens
             shots={[
               { src: img("crop-cover"), title: "Crop Cover Photo", caption: "Drag and zoom, then Apply." },
@@ -273,7 +285,7 @@ export default function UserManualContent() {
           <Steps>
             <Step>Tap the pencil on <strong>Services &amp; Products</strong>.</Step>
             <Step>Tap <strong>Add service</strong> for work you do (for example <em>Colour matching</em>), or <strong>Add product</strong> for things you sell (for example <em>Interior wall paint</em>).</Step>
-            <Step>For each one add a name, a one-line description, an optional price, and an optional photo and category. Categories (for example <em>Paints</em>, <em>Hardware</em>) group items on your page.</Step>
+            <Step>For each one add a name, a one-line description, an optional price, and an optional photo and category. Photos show on your page for both services and products. Categories (for example <em>Paints</em>, <em>Hardware</em>) group items on your page.</Step>
             <Step>Tap <strong>Save changes</strong>.</Step>
           </Steps>
           <Screens shots={[{ src: img("edit-services"), title: "Services & Products", caption: "Each item has a name, description, price and category." }]} />
@@ -527,7 +539,7 @@ export default function UserManualContent() {
 
         <Sub id="reviews-customer" title="What your customer does">
           <Steps>
-            <Step>On your page, they open <strong>Write a Google Review</strong> and see a few ready-made reviews. If your services have categories, they can pick a category first.</Step>
+            <Step>On your page, they open <strong>Write a Google Review</strong> and see a few ready-made reviews. Tabs above them let the customer pick what they bought: each service or product category, or simply <strong>Services</strong> or <strong>Products</strong>. The reviews then talk about that item.</Step>
             <Step>They tap the review they like. It&apos;s copied, and a box explains the next step.</Step>
             <Step>They tap the button to open Google, paste the review, choose the stars and post.</Step>
             <Step>If none fit, they tap the refresh button for new suggestions.</Step>

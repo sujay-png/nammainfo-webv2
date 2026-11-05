@@ -342,6 +342,21 @@ A public page is a **server component cached for 30 seconds** (ISR). Most visits
 | `/<slug>/<member>` | `src/app/[slug]/[employee]/page.tsx` | A team member's page |
 | `/c/<cardId>` | `src/app/c/[cardId]/page.tsx` | Old card links, kept working |
 
+### Services and products on the page
+
+`ServicesTabs` renders the Services and Products grids. Both show the item's `image_url` when it has one (square photo on the card, larger photo in the service details popup); without a photo, services show their emoji and products a placeholder. Services used to ignore `image_url`, so photos owners added to services never appeared.
+
+### Photo sizes
+
+All photo crops go through `src/components/ui/image-crop-modal.tsx`. It shows the recommended size under the title (`sizeHint()`), worked out from the crop shape, so every screen that uses it (owner profile, team page, staff profile) tells people the same thing:
+
+| Photo | Crop shape | Saved at | We recommend |
+| --- | --- | --- | --- |
+| Cover | 16:9 | 1200 × 675 | 1920 × 1080 (at least 1200 × 675) |
+| Logo / profile photo | Square | 400 × 400 | At least 400 × 400 |
+
+The owner's profile also shows the cover size on the cover itself.
+
 ### How `/<slug>` is resolved
 
 `resolveSlug()` in `src/app/[slug]/page.tsx` tries the **username** first, then a **card** by `public_slug` (or by `id` when the slug is a UUID). It's wrapped in React `cache()`, so `generateMetadata` (page title, Open Graph image) and the page share one set of queries per request.
@@ -575,7 +590,7 @@ The biggest friction in asking for a Google review is the blank text box: custom
 
 | Piece | Where | Job |
 | --- | --- | --- |
-| Generator | `generateReviewSuggestions()` in `src/features/public-profile/components/public-profile-view.tsx` | Builds 4 reviews for the business, or for one service category |
+| Generator | `generateReviewSuggestions()` in `src/features/public-profile/components/public-profile-view.tsx` | Builds 4 reviews for the business, or for one tab (a service or product category, or all services / all products) |
 | Angle | `reviewRole()`, `rolePacks()` (same file) | Picks retailer, manufacturer, wholesaler, distributor, service, agency, freelancer or neutral wording |
 | Clean-up | `tidy()`, `shortBizName()`, `placeName()`, `descSentence()` | Removes dashes, "Pvt Ltd", vague areas like "All India"; reuses the owner's own description |
 | Copy + guide | `copyText()`, `ReviewCopiedSheet` (same file) | Clipboard with a fallback for in-app browsers; a sheet showing "now paste it on Google" |
@@ -609,7 +624,21 @@ Google and readers both notice identical reviews, especially when a shop hands o
 - Within one batch, `pickFreshIdx()` never reuses a sentence.
 - The first two sentences (what Google shows in previews) form a **signature** such as `retailer:o3m7`. When a review is copied, `rememberCopiedReview()` saves its signature in `localStorage` (`nammainfo:usedReviewOpeners:<profileId>`, last 300). Future suggestions on that phone skip those combinations.
 - Business names, sentence order, lead-ins ("Five stars.") and the number of details are randomised.
-- **Refresh** generates a new set; each service category has its own tab of suggestions.
+- **Refresh** generates a new set for the current tab.
+
+### Review tabs: services and products
+
+`buildReviewTabs()` (same file) decides the tabs shown above the suggestions, besides **All**. Each tab carries a `ReviewFilter` (`{ kind?, category?, uncategorised? }`) that `generateReviewSuggestions(profile, 4, filter)` applies:
+
+| Profile has | Tabs |
+| --- | --- |
+| Service categories | One tab per service category |
+| Product categories | One tab per product category |
+| Services and products, neither categorised | **Services**, **Products** |
+| Categorised services plus some without a category | The category tabs plus **Services** (only the uncategorised ones) |
+| Only one kind, no categories | No tabs; **All** covers it |
+
+Before this, tabs were built from service categories only, so products never got their own reviews.
 
 ### Adding or changing sentences
 

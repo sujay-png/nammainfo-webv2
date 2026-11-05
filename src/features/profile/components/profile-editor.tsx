@@ -492,8 +492,8 @@ function OwnerProfilePage() {
               }}
             />
           </label>
-          <span className="absolute bottom-2 right-3 rounded-full bg-ink-950/50 px-2 py-0.5 text-[9px] text-white/70 backdrop-blur-sm">
-            Max 5 MB · JPG, PNG
+          <span className="absolute bottom-2 right-3 rounded-full bg-ink-950/50 px-2 py-0.5 text-[9px] text-white/80 backdrop-blur-sm">
+            Cover: 1920 × 1080 px (16:9) · Max 5 MB · JPG, PNG
           </span>
         </div>
 
@@ -527,7 +527,7 @@ function OwnerProfilePage() {
               />
             </label>
           </div>
-          <p className="mt-1 text-[9px] text-ink-400">Max 5 MB</p>
+          <p className="mt-1 text-[9px] text-ink-400">Square, 400 × 400 px+ · Max 5 MB</p>
         </div>
       </div>
 

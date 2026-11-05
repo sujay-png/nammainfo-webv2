@@ -72,6 +72,17 @@ interface CropModalProps {
   onConfirm: (blob: Blob) => void;
 }
 
+/** Recommended photo size, shown under the title so people pick the right image. */
+function sizeHint(aspect: number, out?: { width: number; height: number }) {
+  if (Math.abs(aspect - 16 / 9) < 0.01) {
+    return `Best size: 1920 × 1080 px (16:9, landscape). At least ${out?.width ?? 1200} × ${out?.height ?? 675} px. Max 5 MB.`;
+  }
+  if (aspect === 1) {
+    return `Best size: square, at least ${out?.width ?? 400} × ${out?.height ?? 400} px. Max 5 MB.`;
+  }
+  return "Drag to position, pinch or use the slider to zoom.";
+}
+
 export default function CropModal({
   imageSrc,
   aspect,
@@ -108,7 +119,10 @@ export default function CropModal({
       <div className="relative flex w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-[var(--card)] shadow-xl mx-4">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
-          <h3 className="font-headline text-base font-semibold">{title}</h3>
+          <div>
+            <h3 className="font-headline text-base font-semibold">{title}</h3>
+            <p className="mt-0.5 text-[11px] text-[var(--muted-foreground)]">{sizeHint(aspect, outputSize)}</p>
+          </div>
           <button
             onClick={onCancel}
             className="rounded-full p-1.5 hover:bg-[var(--muted)]"

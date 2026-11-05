@@ -524,11 +524,43 @@ function rolePacks(owner: string | null): Record<ReviewRole, RolePack> {
   };
 }
 
+type ReviewFilter = { kind?: ReviewItem["kind"]; category?: string; uncategorised?: boolean };
+
+/** Review tabs shown above the suggestions (besides "All"). */
+function buildReviewTabs(profile: Profile): { label: string; filter: ReviewFilter }[] {
+  const list = (items: unknown, kind: ReviewItem["kind"]) =>
+    (((items as ReviewItem[]) ?? []).filter((it) => it?.name?.trim())).map((it) => ({ ...it, kind }));
+  const services = list(profile.services, "service");
+  const products = list(profile.products, "product");
+  const tabs: { label: string; filter: ReviewFilter }[] = [];
+  const seen = new Set<string>(["All"]);
+  const add = (label: string, filter: ReviewFilter) => {
+    if (seen.has(label)) return;
+    seen.add(label);
+    tabs.push({ label, filter });
+  };
+  for (const [items, kind, plain] of [
+    [services, "service", "Services"],
+    [products, "product", "Products"],
+  ] as const) {
+    const cats = Array.from(new Set(items.map((i) => i.category?.trim()).filter(Boolean))) as string[];
+    cats.forEach((cat) => add(cat, { kind, category: cat }));
+    const hasUncategorised = items.some((i) => !i.category?.trim());
+    // A plain tab when items have no category, or when both kinds exist and
+    // this kind has no category tabs of its own.
+    if (items.length && (hasUncategorised || cats.length === 0) && (services.length > 0 && products.length > 0 || cats.length > 0)) {
+      add(plain, { kind, uncategorised: cats.length > 0 });
+    }
+  }
+  return tabs;
+}
+
 function generateReviewSuggestions(
   profile: Profile,
   count: number = 4,
-  category?: string
+  filter?: ReviewFilter
 ): string[] {
+  const category = filter?.category;
   const fullName = profile.business_name || profile.owner_name || "this business";
   const shortName = shortBizName(fullName);
   const owner = profile.owner_name && profile.business_name ? profile.owner_name.split(" ")[0] : null;
@@ -541,10 +573,13 @@ function generateReviewSuggestions(
   const services = ((profile.services as ReviewItem[]) ?? []).map((s) => ({ ...s, kind: "service" as const }));
   const products = ((profile.products as ReviewItem[]) ?? []).map((p) => ({ ...p, kind: "product" as const }));
   let items: ReviewItem[] = [...services, ...products].filter((it) => it?.name?.trim());
+  if (filter?.kind) items = items.filter((it) => it.kind === filter.kind);
   if (category) items = items.filter((it) => it.category?.trim() === category);
+  if (filter?.uncategorised) items = items.filter((it) => !it.category?.trim());
   if (items.length === 0) {
     const productish = ["retailer", "manufacturer", "wholesaler", "distributor"].includes(businessType ?? "");
-    items = [{ name: category || (productish ? "their products" : "their service"), kind: productish ? "product" : "service" }];
+    const kind = filter?.kind ?? (productish ? "product" : "service");
+    items = [{ name: category || (kind === "product" ? "their products" : "their service"), kind }];
   }
 
   const packs = rolePacks(owner);
@@ -684,6 +719,7 @@ export default function PublicProfileView({
     price?: string;
     emoji?: string;
     category?: string;
+    image_url?: string;
   } | null>(null);
 
   const [profileUrl, setProfileUrl] = useState(() => {
@@ -705,19 +741,19 @@ export default function PublicProfileView({
     setProfileUrl(url);
   }, [profile.username, card]);
 
-  /* Build service categories for review tabs */
-  const reviewCategories = useMemo(() => {
-    const svcs = (profile.services as { name: string; category?: string }[]) ?? [];
-    return Array.from(new Set(svcs.map(s => s.category?.trim()).filter(Boolean))) as string[];
-  }, [profile.services]);
+  /* Review tabs: service categories and product categories. Items with no
+     category get a plain "Services" / "Products" tab, so products always
+     have their own reviews too. */
+  const reviewTabs = useMemo(() => buildReviewTabs(profile), [profile]);
+  const reviewCategories = useMemo(() => reviewTabs.map((t) => t.label), [reviewTabs]);
 
   useEffect(() => {
     const initial: Record<string, string[]> = { All: generateReviewSuggestions(profile) };
-    reviewCategories.forEach((cat) => {
-      initial[cat] = generateReviewSuggestions(profile, 4, cat);
+    reviewTabs.forEach((t) => {
+      initial[t.label] = generateReviewSuggestions(profile, 4, t.filter);
     });
     setReviewSuggestionsMap(initial);
-  }, [profile, reviewCategories]);
+  }, [profile, reviewTabs]);
 
   const reviewSuggestions = reviewSuggestionsMap[activeReviewTab] ?? [];
 
@@ -728,10 +764,10 @@ export default function PublicProfileView({
 
   function refreshSuggestions(tab?: string) {
     const key = tab ?? activeReviewTab;
-    const cat = key === "All" ? undefined : key;
+    const filter = key === "All" ? undefined : reviewTabs.find((t) => t.label === key)?.filter;
     setReviewSuggestionsMap((prev) => ({
       ...prev,
-      [key]: generateReviewSuggestions(profile, 4, cat),
+      [key]: generateReviewSuggestions(profile, 4, filter),
     }));
   }
 
@@ -760,7 +796,7 @@ export default function PublicProfileView({
 
   /* Cast arrays once */
   const socialLinks = (profile.social_links as { platform: string; url: string }[]) ?? [];
-  const servicesList = (profile.services as { name: string; description?: string; price?: string; emoji?: string; category?: string }[]) ?? [];
+  const servicesList = (profile.services as { name: string; description?: string; price?: string; emoji?: string; category?: string; image_url?: string }[]) ?? [];
   const productsList = (profile.products as { name: string; image_url?: string; price?: string; emoji?: string; category?: string }[]) ?? [];
   const galleryList = (profile.gallery as { url: string; category?: string; caption?: string }[]) ?? [];
   const testimonialList = cleanTestimonials((profile as { testimonials?: unknown }).testimonials);
@@ -1374,11 +1410,18 @@ export default function PublicProfileView({
             style={themeVars as React.CSSProperties}
             onClick={(e) => e.stopPropagation()}
           >
+            {servicePopup.image_url && (
+              <div className="relative mb-4 aspect-[4/3] w-full overflow-hidden rounded-2xl bg-[var(--accent)]">
+                <Image src={servicePopup.image_url} alt={servicePopup.name} fill sizes="(max-width: 512px) 100vw, 512px" className="object-cover" />
+              </div>
+            )}
             <div className="mb-4 flex items-start justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--accent)] text-2xl">
-                  {servicePopup.emoji || "⚡"}
-                </div>
+                {!servicePopup.image_url && (
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--accent)] text-2xl">
+                    {servicePopup.emoji || "⚡"}
+                  </div>
+                )}
                 <div>
                   <h3 className="font-headline text-lg font-bold text-[var(--foreground)]">
                     {servicePopup.name}
@@ -1617,12 +1660,12 @@ function ServicesTabs({
   hasProducts,
   onServiceTap,
 }: {
-  servicesList: { name: string; description?: string; price?: string; emoji?: string; category?: string }[];
+  servicesList: { name: string; description?: string; price?: string; emoji?: string; category?: string; image_url?: string }[];
   productsList: { name: string; image_url?: string; price?: string; emoji?: string; category?: string }[];
   servicesLabel: string;
   hasServices: boolean;
   hasProducts: boolean;
-  onServiceTap: (s: { name: string; description?: string; price?: string; emoji?: string; category?: string }) => void;
+  onServiceTap: (s: { name: string; description?: string; price?: string; emoji?: string; category?: string; image_url?: string }) => void;
 }) {
   /* Build category tabs from services */
   const categories = useMemo(() => {
@@ -1782,24 +1825,33 @@ function ServiceCard({
   service,
   onTap,
 }: {
-  service: { name: string; description?: string; price?: string; emoji?: string; category?: string };
+  service: { name: string; description?: string; price?: string; emoji?: string; category?: string; image_url?: string };
   onTap: (s: typeof service) => void;
 }) {
   return (
     <button
       onClick={() => onTap(service)}
-      className="rounded-xl border border-[var(--border)] p-3 text-left transition hover:shadow-card active:scale-[0.98]"
+      className="overflow-hidden rounded-xl border border-[var(--border)] text-left transition hover:shadow-card active:scale-[0.98]"
     >
-      <div className="mb-1.5 flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent)] text-base">
-        {service.emoji || "⚡"}
+      {service.image_url && (
+        <div className="relative aspect-square w-full">
+          <Image src={service.image_url} alt={service.name} fill sizes="(max-width: 512px) 50vw, 240px" className="object-cover" loading="lazy" />
+        </div>
+      )}
+      <div className={service.image_url ? "p-2.5" : "p-3"}>
+        {!service.image_url && (
+          <div className="mb-1.5 flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent)] text-base">
+            {service.emoji || "⚡"}
+          </div>
+        )}
+        <p className="text-xs font-semibold text-[var(--foreground)]">{service.name}</p>
+        {service.description && (
+          <p className="mt-0.5 line-clamp-2 text-[10px] text-[var(--muted-foreground)]">{service.description}</p>
+        )}
+        {service.price && (
+          <p className="mt-1 font-mono text-[10px] font-semibold text-[var(--muted-foreground)]">{service.price}</p>
+        )}
       </div>
-      <p className="text-xs font-semibold text-[var(--foreground)]">{service.name}</p>
-      {service.description && (
-        <p className="mt-0.5 line-clamp-2 text-[10px] text-[var(--muted-foreground)]">{service.description}</p>
-      )}
-      {service.price && (
-        <p className="mt-1 font-mono text-[10px] font-semibold text-[var(--muted-foreground)]">{service.price}</p>
-      )}
     </button>
   );
 }
