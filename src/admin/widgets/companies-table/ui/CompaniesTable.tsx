@@ -12,6 +12,7 @@ import type { Company } from "@/admin/entities/company/model/types";
 interface CompaniesTableProps {
   companies: Company[];
   loading: boolean;
+  viewedCompanyIds?: Set<string>;
   onSelectCompany: (company: Company) => void;
   onDeleteCompany: (company: Company, e: React.MouseEvent) => void;
 }
@@ -19,6 +20,7 @@ interface CompaniesTableProps {
 export const CompaniesTable: React.FC<CompaniesTableProps> = ({
   companies,
   loading,
+  viewedCompanyIds,
   onSelectCompany,
   onDeleteCompany,
 }) => {
@@ -67,6 +69,7 @@ export const CompaniesTable: React.FC<CompaniesTableProps> = ({
           </thead>
           <tbody className="divide-y divide-[var(--border)]">
             {companies.map((company) => {
+              const isUnread = Boolean(viewedCompanyIds && !viewedCompanyIds.has(company.id));
               const validity = getDaysRemaining(company.membershipExpiresAt, company.subscriptionPlan);
               const isExpired =
                 (company.subscriptionPlan === "pro" || company.subscriptionPlan === "trial") &&
@@ -77,10 +80,20 @@ export const CompaniesTable: React.FC<CompaniesTableProps> = ({
                 <tr
                   key={company.id}
                   onClick={() => onSelectCompany(company)}
-                  className="cursor-pointer transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800/50"
+                  className={`cursor-pointer transition-colors ${
+                    isUnread
+                      ? "bg-neutral-100/90 dark:bg-neutral-800/40 hover:bg-neutral-200/80 dark:hover:bg-neutral-800/70"
+                      : "hover:bg-neutral-100 dark:hover:bg-neutral-800/50"
+                  }`}
                 >
                   {/* Company & Owner */}
-                  <td className="px-5 py-3.5">
+                  <td className="px-5 py-3.5 relative">
+                    {isUnread && (
+                      <span
+                        className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r bg-[var(--primary)]"
+                        title="New account"
+                      />
+                    )}
                     <div className="flex items-center gap-3">
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[5px] bg-[var(--accent)] font-headline text-xs font-bold text-[var(--foreground)] border border-[var(--border)]">
                         {company.avatarUrl ? (
@@ -95,7 +108,13 @@ export const CompaniesTable: React.FC<CompaniesTableProps> = ({
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <p className="truncate font-semibold text-[var(--foreground)]">
+                          <p
+                            className={`truncate ${
+                              isUnread
+                                ? "font-bold text-[var(--foreground)]"
+                                : "font-semibold text-[var(--foreground)]"
+                            }`}
+                          >
                             {company.businessName}
                           </p>
                           {company.username && (
@@ -218,6 +237,7 @@ export const CompaniesTable: React.FC<CompaniesTableProps> = ({
       {/* Mobile Card List View */}
       <div className="divide-y divide-[var(--border)] lg:hidden">
         {companies.map((company) => {
+          const isUnread = Boolean(viewedCompanyIds && !viewedCompanyIds.has(company.id));
           const validity = getDaysRemaining(company.membershipExpiresAt, company.subscriptionPlan);
           const isExpired =
             (company.subscriptionPlan === "pro" || company.subscriptionPlan === "trial") &&
@@ -228,7 +248,11 @@ export const CompaniesTable: React.FC<CompaniesTableProps> = ({
             <div
               key={company.id}
               onClick={() => onSelectCompany(company)}
-              className="p-3.5 transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800/50 cursor-pointer space-y-2.5"
+              className={`p-3.5 transition-colors cursor-pointer space-y-2.5 ${
+                isUnread
+                  ? "border-l-[3px] border-l-[var(--primary)] bg-neutral-100/90 dark:bg-neutral-800/40 hover:bg-neutral-200/80 dark:hover:bg-neutral-800/70"
+                  : "hover:bg-neutral-100 dark:hover:bg-neutral-800/50"
+              }`}
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-2.5 min-w-0">
@@ -236,7 +260,13 @@ export const CompaniesTable: React.FC<CompaniesTableProps> = ({
                     {company.businessName.charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0">
-                    <p className="font-semibold text-xs text-[var(--foreground)] truncate">
+                    <p
+                      className={`text-xs truncate ${
+                        isUnread
+                          ? "font-bold text-[var(--foreground)]"
+                          : "font-semibold text-[var(--foreground)]"
+                      }`}
+                    >
                       {company.businessName}
                     </p>
                     <p className="text-[11px] text-[var(--muted-foreground)] truncate">

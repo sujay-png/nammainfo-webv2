@@ -30,6 +30,10 @@ import type {
   CompanyFilters,
 } from "@/admin/entities/company/model/types";
 
+const VIEWED_STORAGE_KEY = "nammainfo_admin_viewed_companies";
+// Highlight new accounts created in the last 5 days until viewed
+const RECENT_CUTOFF_MS = 5 * 24 * 60 * 60 * 1000;
+
 export const AdminDashboardView: React.FC = () => {
   const router = useRouter();
   const [authLoading, setAuthLoading] = useState(true);
@@ -72,6 +76,38 @@ export const AdminDashboardView: React.FC = () => {
   const [userRole, setUserRole] = useState<"admin" | "designer">("admin");
 
   const [unauthorizedEmail, setUnauthorizedEmail] = useState<string | null>(null);
+
+  // Track company IDs that have been viewed by admin (email-style read tracking)
+  const [viewedCompanyIds, setViewedCompanyIds] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const raw = localStorage.getItem(VIEWED_STORAGE_KEY);
+      if (raw) return new Set(JSON.parse(raw));
+    } catch (e) {
+      console.warn("Failed to read viewed companies from localStorage:", e);
+    }
+    return new Set();
+  });
+
+  // Seed older accounts on first run so they don't all look unread
+  useEffect(() => {
+    if (typeof window === "undefined" || companies.length === 0) return;
+    try {
+      const raw = localStorage.getItem(VIEWED_STORAGE_KEY);
+      if (!raw) {
+        const now = Date.now();
+        // Mark accounts older than 5 days as already viewed
+        const olderIds = companies
+          .filter((c) => now - new Date(c.createdAt).getTime() > RECENT_CUTOFF_MS)
+          .map((c) => c.id);
+        const initialSet = new Set(olderIds);
+        setViewedCompanyIds(initialSet);
+        localStorage.setItem(VIEWED_STORAGE_KEY, JSON.stringify(Array.from(initialSet)));
+      }
+    } catch (e) {
+      console.warn("Failed to initialize viewed companies:", e);
+    }
+  }, [companies]);
 
   // Strict Client-Side Admin / Designer Auth Verification
   const getLoginUrl = useCallback(() => {
@@ -229,8 +265,20 @@ export const AdminDashboardView: React.FC = () => {
     []
   );
 
-  // Open detail modal
+  // Open detail modal and mark company as viewed (removes highlight like an unread mail)
   const handleSelectCompany = (company: Company) => {
+    if (!viewedCompanyIds.has(company.id)) {
+      setViewedCompanyIds((prev) => {
+        const next = new Set(prev);
+        next.add(company.id);
+        try {
+          localStorage.setItem(VIEWED_STORAGE_KEY, JSON.stringify(Array.from(next)));
+        } catch (e) {
+          console.warn("Failed to save viewed companies:", e);
+        }
+        return next;
+      });
+    }
     setSelectedCompany(company);
     setIsDetailOpen(true);
   };
@@ -397,6 +445,7 @@ export const AdminDashboardView: React.FC = () => {
                 <CompaniesTable
                   companies={filteredCompanies}
                   loading={loading}
+                  viewedCompanyIds={viewedCompanyIds}
                   onSelectCompany={handleSelectCompany}
                   onDeleteCompany={handleDeleteRequest}
                 />
