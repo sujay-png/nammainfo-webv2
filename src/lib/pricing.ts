@@ -13,16 +13,38 @@ export function getCardUnitPrice(totalCards: number): number {
   return 1999;
 }
 
-export function calculateInitialProCost(): {
+export function calculateInitialProCost(cardQuantity = 1): {
+  cardQuantity: number;
+  unitPrice: number;
+  totalAmount: number;
+  extraCards: number;
+  extraCost: number;
+} {
+  const qty = Math.max(1, Number(cardQuantity) || 1);
+  const basePrice = 1999;
+  const extraCards = qty - 1;
+  const extraCost = extraCards * 500;
+  const totalAmount = basePrice + extraCost;
+  return {
+    cardQuantity: qty,
+    unitPrice: Math.round(totalAmount / qty),
+    totalAmount,
+    extraCards,
+    extraCost,
+  };
+}
+
+export function calculatePrimaryCardAddonCost(additionalCards = 1): {
   cardQuantity: number;
   unitPrice: number;
   totalAmount: number;
 } {
-  const unitPrice = getCardUnitPrice(1);
+  const qty = Math.max(1, Number(additionalCards) || 1);
+  const unitPrice = 500;
   return {
-    cardQuantity: 1,
+    cardQuantity: qty,
     unitPrice,
-    totalAmount: unitPrice,
+    totalAmount: qty * unitPrice,
   };
 }
 

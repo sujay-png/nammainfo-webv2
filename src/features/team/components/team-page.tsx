@@ -272,15 +272,21 @@ function OwnerTeamPage() {
   }
 
   // Primary card is the business owner's card
+  const isTrial = profile?.subscription_plan === "trial";
   const isMember = Boolean(
     profile?.subscription_plan === "pro" ||
     profile?.subscription_plan === "lifetime" ||
+    isTrial ||
     profile?.is_member
   );
   const primaryCards = Number(profile?.primary_card_count ?? (isMember ? 1 : 0));
 
-  // Employee quota is strictly the slots purchased for team members
-  const quota = isMember ? Number(profile?.purchased_id_count || 0) : 0;
+  // Employee quota is the slots purchased for team members; Free Trial accounts get at least 5 slots
+  const quota = isTrial
+    ? Math.max(5, Number(profile?.purchased_id_count || 0))
+    : isMember
+    ? Number(profile?.purchased_id_count || 0)
+    : 0;
   const availableSlots = Math.max(0, quota - employees.length);
   const totalCards = primaryCards + employees.length;
   const renewalCost = calculateRenewalCost(primaryCards, employees.length);
@@ -386,8 +392,8 @@ function OwnerTeamPage() {
             {availableSlots > 0
               ? `${availableSlots} slot${availableSlots === 1 ? "" : "s"} ready to assign`
               : quota === 0
-              ? "0 paid employee slots — purchase cards below to add members"
-              : "All paid employee slots currently assigned"}
+              ? "0 employee slots — purchase cards below to add members"
+              : "All employee slots currently assigned"}
           </span>
           <button
             onClick={() => setShowBuyTeamModal(true)}

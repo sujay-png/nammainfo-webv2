@@ -46,6 +46,7 @@ export async function POST(request: Request) {
       is_member: true,
       status: "active",
       primary_card_count: 1,
+      purchased_id_count: 5,
       subscription_started_at: now.toISOString(),
       membership_expires_at: expiresAt,
       trial_status: "approved",
