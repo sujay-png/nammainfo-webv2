@@ -113,13 +113,13 @@ export async function POST(req: Request) {
         cardQuantity: Number(cardQuantity),
       };
     } else if (orderType === "renewal") {
-      const { count: activeTeamCount } = await supabase
+      const { count: teamCount } = await supabase
         .from("employees")
         .select("id", { count: "exact", head: true })
         .eq("owner_id", user.id)
-        .eq("is_active", true);
+        .neq("status", "cancelled");
 
-      const res = calculateRenewalCost(primaryCards, activeTeamCount || 0);
+      const res = calculateRenewalCost(primaryCards, teamCount || 0);
       calculation = {
         unitPrice: res.unitPrice,
         totalAmount: res.totalAmount,

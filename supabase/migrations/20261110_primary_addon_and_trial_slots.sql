@@ -1,16 +1,18 @@
--- Migration: Primary Card Addon & Free Trial Team Slots
+-- Migration: Primary Card Addon & Unlimited Free Trial Team Members
 -- Date: 2026-11-10
 -- Description:
 --   1. Expands orders.order_type check constraint to permit 'primary_card_addon'.
---   2. Updates employees_protect_billing() to allow Free Trial accounts up to 5 team member slots.
---   3. Sets default purchased_id_count to 5 for any existing trial profiles.
+--   2. Updates employees_protect_billing() so Free Trial accounts can add unlimited team members
+--      during their trial without slot restrictions.
+--   3. When trial ends or when upgrading, the account upgrades to Pro with annual renewal
+--      covering the primary card and all team members.
 
 -- 1. Orders table check constraint update
 ALTER TABLE public.orders DROP CONSTRAINT IF EXISTS orders_order_type_check;
 ALTER TABLE public.orders ADD CONSTRAINT orders_order_type_check 
   CHECK (order_type IN ('pro_initial', 'team_addon', 'renewal', 'primary_card_addon'));
 
--- 2. Update employee billing trigger for trial slot parity
+-- 2. Update employee billing trigger for trial parity
 CREATE OR REPLACE FUNCTION public.employees_protect_billing()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -41,7 +43,7 @@ BEGIN
     RETURN new;
   END IF;
 
-  -- INSERT by the owner: needs a free paid slot; billing fields follow the owner's plan.
+  -- INSERT by the owner
   SELECT subscription_plan, is_member, membership_expires_at,
          subscription_started_at, coalesce(purchased_id_count, 0) AS slots
     INTO v_owner
@@ -52,12 +54,12 @@ BEGIN
 
   SELECT count(*) INTO v_used FROM public.employees WHERE owner_id = new.owner_id;
 
-  -- Free trial accounts are granted at least 5 team member slots to test team features
+  -- Free trial accounts have unlimited team member additions during trial
   IF v_owner.subscription_plan = 'trial' THEN
-    v_owner.slots := greatest(v_owner.slots, 5);
-  END IF;
-
-  IF NOT v_paid OR v_used >= v_owner.slots THEN
+    -- Allowed! Trial accounts can add all their team members freely.
+    -- On trial completion, they upgrade to Pro with renewal covering all cards.
+    NULL;
+  ELSIF NOT v_paid OR v_used >= v_owner.slots THEN
     RAISE EXCEPTION 'No free team slots. Buy more team cards to add another member.'
       USING errcode = 'P0001';
   END IF;
@@ -69,8 +71,3 @@ BEGIN
   RETURN new;
 END;
 $$;
-
--- 3. Ensure any existing trial profiles have at least 5 slots
-UPDATE public.profiles
-SET purchased_id_count = greatest(coalesce(purchased_id_count, 0), 5)
-WHERE subscription_plan = 'trial';

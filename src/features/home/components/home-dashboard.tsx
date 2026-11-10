@@ -396,33 +396,50 @@ function ValidityCard({
 
         <div className="p-2.5 rounded-[5px] bg-[var(--accent)]/40 border border-[var(--border)]">
           <span className="block font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
-            {isTrial ? "Trial Card" : "Issued Cards"}
+            {isTrial ? "Trial Cards" : "Issued Cards"}
           </span>
           <span className="block font-mono text-xs font-semibold text-[var(--foreground)] mt-0.5">
-            {isTrial
-              ? "1 Active Primary"
-              : `${totalCards} Total (${primaryCards} Primary${employeesCount > 0 ? ` + ${employeesCount} Team` : ""})`}
+            {totalCards} Total ({primaryCards} Primary{employeesCount > 0 ? ` + ${employeesCount} Team` : ""})
           </span>
         </div>
 
         <div className="col-span-2 sm:col-span-1 p-2.5 rounded-[5px] bg-[var(--accent)]/40 border border-[var(--border)]">
           <span className="block font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
-            {isTrial ? "Plan Type" : "Annual Renewal"}
+            {isTrial ? "Annual Pro Upgrade" : "Annual Renewal"}
           </span>
           <span className="block font-mono text-xs font-semibold text-[var(--foreground)] mt-0.5">
-            {isTrial ? "100-Day Free Trial" : `₹${renewalCost.totalAmount.toLocaleString("en-IN")}/yr`}
+            ₹{renewalCost.totalAmount.toLocaleString("en-IN")}/yr
           </span>
         </div>
       </div>
 
       {/* Trial Action: Upgrade to Pro */}
       {isTrial ? (
-        <div className="pt-2 border-t border-[var(--border)]">
+        <div className="pt-2 border-t border-[var(--border)] space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-[var(--muted-foreground)]">
+              {expired
+                ? "Trial concluded. Upgrade to maintain vanity profile & cards."
+                : endingSoon
+                ? "Trial ending soon. Upgrade now for uninterrupted 365-day access."
+                : `Active trial. Upgrade anytime (${totalCards} ${totalCards === 1 ? "card" : "cards"} covered).`}
+            </span>
+            <span className="font-mono font-bold text-[var(--foreground)]">
+              ₹{renewalCost.totalAmount.toLocaleString("en-IN")}
+            </span>
+          </div>
+
           <button
-            onClick={onOpenUpgrade}
+            onClick={() => {
+              if (employeesCount > 0) {
+                onOpenRenewal();
+              } else {
+                onOpenUpgrade();
+              }
+            }}
             className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
           >
-            <span>Upgrade to Pro Plan</span>
+            <span>Upgrade to Pro Plan ({totalCards} {totalCards === 1 ? "Card" : "Cards"})</span>
             <ArrowRight size={14} />
           </button>
         </div>
