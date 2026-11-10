@@ -18,7 +18,7 @@ import { revalidatePath } from "next/cache";
  *   customers can no longer change plan fields themselves.
  */
 
-export type OrderType = "pro_initial" | "team_addon" | "renewal";
+export type OrderType = "pro_initial" | "team_addon" | "renewal" | "primary_card_addon";
 
 export interface FulfillInput {
   razorpayOrderId: string;
@@ -37,7 +37,7 @@ export type FulfillResult =
   | { ok: false; status: number; error: string };
 
 const YEAR_MS = 365 * 24 * 60 * 60 * 1000;
-const ORDER_TYPES: OrderType[] = ["pro_initial", "team_addon", "renewal"];
+const ORDER_TYPES: OrderType[] = ["pro_initial", "team_addon", "renewal", "primary_card_addon"];
 
 export async function fulfillPayment(input: FulfillInput): Promise<FulfillResult> {
   const razorpay = getRazorpayClient();
@@ -126,7 +126,7 @@ export async function fulfillPayment(input: FulfillInput): Promise<FulfillResult
   const now = new Date();
   const { data: profile } = await admin
     .from("profiles")
-    .select("membership_expires_at, purchased_id_count, slug, username")
+    .select("membership_expires_at, purchased_id_count, primary_card_count, slug, username")
     .eq("id", userId)
     .single();
 
@@ -134,7 +134,7 @@ export async function fulfillPayment(input: FulfillInput): Promise<FulfillResult
     const expires = new Date(now.getTime() + YEAR_MS).toISOString();
     const upgrade: Record<string, unknown> = {
       subscription_plan: "pro",
-      primary_card_count: 1,
+      primary_card_count: Math.max(1, cardQuantity),
       subscription_started_at: now.toISOString(),
       membership_expires_at: expires,
       is_member: true,
@@ -165,6 +165,12 @@ export async function fulfillPayment(input: FulfillInput): Promise<FulfillResult
     await admin
       .from("profiles")
       .update({ purchased_id_count: Number(profile?.purchased_id_count ?? 0) + cardQuantity })
+      .eq("id", userId);
+  } else if (orderType === "primary_card_addon") {
+    const currentPrimary = Number(profile?.primary_card_count ?? 1);
+    await admin
+      .from("profiles")
+      .update({ primary_card_count: currentPrimary + cardQuantity })
       .eq("id", userId);
   }
 

@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { getRazorpayClient } from "@/lib/razorpay";
 import {
   calculateInitialProCost,
+  calculatePrimaryCardAddonCost,
   calculateTeamAddonCost,
   calculateRenewalCost,
 } from "@/lib/pricing";
@@ -85,7 +86,19 @@ export async function POST(req: Request) {
     let calculation: { unitPrice: number; totalAmount: number; cardQuantity: number };
 
     if (orderType === "pro_initial") {
-      calculation = calculateInitialProCost();
+      const res = calculateInitialProCost(Number(cardQuantity) || 1);
+      calculation = {
+        unitPrice: res.unitPrice,
+        totalAmount: res.totalAmount,
+        cardQuantity: res.cardQuantity,
+      };
+    } else if (orderType === "primary_card_addon") {
+      const res = calculatePrimaryCardAddonCost(Number(cardQuantity) || 1);
+      calculation = {
+        unitPrice: res.unitPrice,
+        totalAmount: res.totalAmount,
+        cardQuantity: res.cardQuantity,
+      };
     } else if (orderType === "team_addon") {
       const { count: teamCount } = await supabase
         .from("employees")
