@@ -356,7 +356,7 @@ function OwnerTeamPage() {
               onClick={() => setShowRenewalModal(true)}
               className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shadow-sm transition"
             >
-              {isTrial ? "Upgrade All Cards to Pro" : "Renew All Cards"}
+              {isTrial ? "Upgrade to Pro" : "Renew Subscription"}
             </button>
           </div>
         </div>

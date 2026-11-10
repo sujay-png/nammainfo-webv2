@@ -422,7 +422,7 @@ function ValidityCard({
                 ? "Trial concluded. Upgrade to maintain vanity profile & cards."
                 : endingSoon
                 ? "Trial ending soon. Upgrade now for uninterrupted 365-day access."
-                : `Active trial. Upgrade anytime (${totalCards} ${totalCards === 1 ? "card" : "cards"} covered).`}
+                : "Active trial. Upgrade to Pro anytime."}
             </span>
             <span className="font-mono font-bold text-[var(--foreground)]">
               ₹{renewalCost.totalAmount.toLocaleString("en-IN")}
@@ -439,7 +439,7 @@ function ValidityCard({
             }}
             className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
           >
-            <span>Upgrade to Pro Plan ({totalCards} {totalCards === 1 ? "Card" : "Cards"})</span>
+            <span>Upgrade to Pro</span>
             <ArrowRight size={14} />
           </button>
         </div>

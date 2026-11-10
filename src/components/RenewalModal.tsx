@@ -184,7 +184,7 @@ export default function RenewalModal({
               <span>{isTrial ? "Pro Plan Upgrade" : "Annual Organization Renewal"}</span>
             </div>
             <h2 className="font-headline text-xl sm:text-2xl font-bold text-[var(--foreground)]">
-              {isTrial ? "Upgrade All Organization Cards" : "Renew All Organization Cards"}
+              {isTrial ? "Upgrade to Pro" : "Renew Subscription"}
             </h2>
             <p className="text-xs text-[var(--muted-foreground)]">
               {isTrial
