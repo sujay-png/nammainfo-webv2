@@ -178,6 +178,11 @@ function friendlyAuthError(err: unknown): string {
   ) {
     return "Couldn't connect to Namma Info. Please try again. If it keeps happening, your Wi-Fi or office network may be blocking us: try mobile data.";
   }
+  if (
+    /unexpected token|not valid json|<!doctype|doctype|syntaxerror|json\.parse/i.test(raw)
+  ) {
+    return "Unable to reach the service right now. Please check your connection or try again in a moment.";
+  }
   if (/already registered|already exists/i.test(raw)) {
     return "An account with that email already exists. Try signing in instead.";
   }
@@ -192,6 +197,13 @@ function friendlyAuthError(err: unknown): string {
   }
   if (/password should be at least|weak password/i.test(raw)) {
     return "Please choose a stronger password (at least 6 characters).";
+  }
+  if (/500|502|503|504|server error|bad gateway|service unavailable/i.test(raw)) {
+    return "The service is temporarily unavailable. Please try again in a moment.";
+  }
+  // Sanitize: never leak raw HTML, stack traces or JSON syntax errors to user
+  if (raw.includes("<") || raw.includes(">") || raw.includes("{") || raw.includes("}") || raw.length > 120) {
+    return "Something went wrong while signing in. Please try again.";
   }
   return raw || "Something went wrong. Please try again.";
 }

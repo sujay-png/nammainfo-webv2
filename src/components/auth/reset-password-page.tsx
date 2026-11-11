@@ -45,13 +45,17 @@ export default function ResetPasswordPage() {
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Something went wrong.";
-      setError(
-        message.includes("same password")
-          ? "New password must be different from your current password."
-          : /session missing|not authenticated|jwt/i.test(message)
-            ? "This reset link has expired. Go back to Forgot password and request a new one."
-            : message
-      );
+      if (message.includes("same password")) {
+        setError("New password must be different from your current password.");
+      } else if (/session missing|not authenticated|jwt/i.test(message)) {
+        setError("This reset link has expired. Go back to Forgot password and request a new one.");
+      } else if (/unexpected token|not valid json|<!doctype|doctype|syntaxerror|failed to fetch|network/i.test(message)) {
+        setError("Unable to reach the service right now. Please check your connection and try again.");
+      } else if (message.includes("<") || message.includes(">") || message.length > 120) {
+        setError("Something went wrong while updating password. Please try again.");
+      } else {
+        setError(message);
+      }
     } finally {
       setLoading(false);
     }
