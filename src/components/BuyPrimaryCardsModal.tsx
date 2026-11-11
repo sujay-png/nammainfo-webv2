@@ -223,7 +223,7 @@ export default function BuyPrimaryCardsModal({
             Order Additional Primary NFC Cards
           </h2>
           <p className="text-xs text-[var(--muted-foreground)]">
-            Get additional engraved NFC cards for your primary business profile at ₹500 each with free doorstep delivery.
+            Get additional engraved NFC cards for your primary business profile at ₹{unitPrice} each with free doorstep delivery.
           </p>
         </div>
 
@@ -245,7 +245,7 @@ export default function BuyPrimaryCardsModal({
                       Number of Cards
                     </span>
                     <span className="text-[11px] text-[var(--muted-foreground)]">
-                      ₹500 per additional physical card
+                      ₹{unitPrice} per additional physical card
                     </span>
                   </div>
                   <div className="flex items-center gap-2 border border-[var(--border)] rounded-[5px] bg-[var(--card)] px-2.5 py-1">
@@ -276,7 +276,7 @@ export default function BuyPrimaryCardsModal({
                 <div className="border-t border-[var(--border)] pt-2.5 space-y-1.5 text-xs">
                   <div className="flex items-center justify-between text-[var(--muted-foreground)]">
                     <span>Card Rate:</span>
-                    <span className="font-mono text-[var(--foreground)]">₹500 / card</span>
+                    <span className="font-mono text-[var(--foreground)]">₹{unitPrice} / card</span>
                   </div>
                   <div className="flex items-center justify-between text-[var(--muted-foreground)]">
                     <span>Shipping & Handling:</span>
@@ -399,7 +399,7 @@ export default function BuyPrimaryCardsModal({
 
               <div className="flex items-center gap-2 text-[11px] text-[var(--muted-foreground)]">
                 <ShieldCheck size={15} className="text-emerald-500 shrink-0" />
-                <span>Secured by Razorpay • 100% Safe Payment</span>
+                <span>100% Secure & Encrypted Payment</span>
               </div>
 
               <div className="flex items-center justify-between pt-2">
@@ -426,7 +426,7 @@ export default function BuyPrimaryCardsModal({
                   ) : (
                     <>
                       <CreditCard size={15} />
-                      <span>Pay ₹{totalAmount.toLocaleString("en-IN")} via Razorpay</span>
+                      <span>Pay ₹{totalAmount.toLocaleString("en-IN")}</span>
                     </>
                   )}
                 </button>

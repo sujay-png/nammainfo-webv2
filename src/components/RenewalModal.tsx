@@ -231,10 +231,10 @@ export default function RenewalModal({
 
             <div className="flex items-center justify-between border-b border-[var(--border)] pb-2.5">
               <div className="flex items-center gap-1.5">
-                <span className="text-[var(--muted-foreground)]">Volume Pricing Tier</span>
-                {cost.unitPrice < 1999 && (
-                  <span className="bg-emerald-500/10 text-emerald-600 font-mono text-[9px] px-1.5 py-0.5 rounded-[4px] font-bold border border-emerald-500/20">
-                    Volume Discount Applied
+                <span className="text-[var(--muted-foreground)]">Pricing Tier</span>
+                {totalCards >= 5 && (
+                  <span className="rounded-[4px] border border-[var(--border)] bg-[var(--card)] px-1.5 py-0.5 font-mono text-[9px] font-semibold text-[var(--foreground)]">
+                    Volume Tier ({totalCards >= 25 ? "25+ Cards" : "5+ Cards"})
                   </span>
                 )}
               </div>
@@ -262,9 +262,10 @@ export default function RenewalModal({
             </div>
           </div>
 
+
           <div className="flex items-center gap-2 text-[11px] text-[var(--muted-foreground)]">
             <ShieldCheck size={16} className="text-emerald-500 shrink-0" />
-            <span>Secured by Razorpay • Unified annual expiration synchronized across organization</span>
+            <span>100% Secure Payment • Unified annual expiration synchronized across organization</span>
           </div>
 
           {/* CTA Button */}
@@ -284,7 +285,7 @@ export default function RenewalModal({
                 <span>
                   {isTrial
                     ? `Upgrade to Pro (₹${cost.totalAmount.toLocaleString("en-IN")})`
-                    : `Pay ₹${cost.totalAmount.toLocaleString("en-IN")} via Razorpay`}
+                    : `Pay ₹${cost.totalAmount.toLocaleString("en-IN")}`}
                 </span>
               </>
             )}

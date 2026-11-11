@@ -297,24 +297,25 @@ function OwnerTeamPage() {
   return (
     <div className="mx-auto max-w-lg px-4 py-5 space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
           <Link
             href="/dashboard/settings"
-            className="rounded-xl border border-[var(--border)] p-2 transition hover:bg-[var(--accent)]"
+            className="shrink-0 rounded-[5px] border border-[var(--border)] p-2 transition hover:bg-[var(--accent)] text-[var(--foreground)]"
+            aria-label="Back to Settings"
           >
             <ArrowLeft size={16} />
           </Link>
-          <div>
-            <h1 className="font-headline text-xl font-semibold">
+          <div className="min-w-0 flex-1">
+            <h1 className="font-headline text-lg sm:text-xl font-bold tracking-tight text-[var(--foreground)] truncate">
               Team / Employees
             </h1>
-            <p className="font-mono text-[11px] text-[var(--muted-foreground)]">
+            <p className="font-mono text-[11px] text-[var(--muted-foreground)] truncate">
               {totalCards} Total Cards ({primaryCards} Primary + {employees.length} Team)
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="shrink-0">
           <button
             onClick={() => {
               if (isTrial || availableSlots > 0) {
@@ -323,9 +324,9 @@ function OwnerTeamPage() {
                 setShowBuyTeamModal(true);
               }
             }}
-            className="flex items-center gap-1.5 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 active:scale-[0.98] px-3.5 py-2 text-xs font-semibold shadow-sm transition-all cursor-pointer"
+            className="shrink-0 whitespace-nowrap inline-flex items-center justify-center gap-1.5 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 active:scale-[0.98] px-3 py-2 text-xs font-semibold shadow-sm transition-all cursor-pointer"
           >
-            <Plus size={14} />
+            <Plus size={14} strokeWidth={2.2} />
             <span>Add Member</span>
           </button>
         </div>
@@ -400,7 +401,7 @@ function OwnerTeamPage() {
           {!isTrial && (
             <button
               onClick={() => setShowBuyTeamModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--accent)] hover:bg-[var(--accent)]/80 text-[var(--foreground)] text-xs font-semibold transition cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-[5px] border border-[var(--border)] bg-[var(--accent)] hover:bg-[var(--accent)]/80 text-[var(--foreground)] text-xs font-semibold transition cursor-pointer"
             >
               <CreditCard size={13} />
               <span>Buy More Team Cards</span>

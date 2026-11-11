@@ -973,7 +973,7 @@ export default function UpgradeToProModal({
 
             <div className="flex items-center gap-2 text-[11px] text-[var(--muted-foreground)]">
               <ShieldCheck size={16} className="text-emerald-500 shrink-0" />
-              <span>Secured by Razorpay • 100% Safe & Secure Payment</span>
+              <span>100% Safe & Secure Payment</span>
             </div>
 
             <div className="flex items-center justify-between pt-2">
