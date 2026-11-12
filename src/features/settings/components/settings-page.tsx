@@ -29,6 +29,7 @@ import {
   Palette,
   Check,
   Package,
+  MapPin,
 } from "lucide-react";
 import UpgradeToProModal from "@/components/UpgradeToProModal";
 import RenewalModal from "@/components/RenewalModal";
@@ -193,6 +194,12 @@ function OwnerSettingsPage() {
           label="Team / Employees"
           sublabel="Manage your organization team members"
           onClick={() => router.push("/dashboard/team")}
+        />
+        <SettingsItem
+          icon={<MapPin size={18} />}
+          label="Branches"
+          sublabel="Offices in other cities, each with its own link"
+          onClick={() => router.push("/dashboard/branches")}
         />
         <SettingsItem
           icon={<Package size={18} />}

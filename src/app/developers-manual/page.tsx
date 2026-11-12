@@ -42,7 +42,7 @@ export default function DevelopersManualPage() {
         </p>
         <div className={s.heroMeta}>
           <span>Next.js 14 · TypeScript · Supabase · Razorpay</span>
-          <span>Updated 5 Nov 2026</span>
+          <span>Updated 12 Nov 2026</span>
           <span>
             For customers, see the <Link href="/user-manual" style={{ color: "inherit" }}>user manual</Link>
           </span>

@@ -96,6 +96,7 @@ supabase/migrations/        SQL migrations, run by hand in the Supabase SQL Edit
 | `clients` | "Our Clients" logos with optional website links | `types.ts`, `components/clients-editor.tsx`, `components/public-clients.tsx` |
 | `phone-required` | One-time "Add your mobile number" popup for older accounts | `components/phone-required-popup.tsx` |
 | `team` | Team members and their logins | `components/team-page.tsx`, `components/employee-login-access.tsx` |
+| `branches` | One profile, many locations: branch editor, public branch pages, link helpers | `types.ts`, `lib/apply-branch.ts`, `lib/paths.ts`, `services/public-pages.service.tsx`, `services/branches.service.ts`, `components/branches-page.tsx`, `components/branch-editor.tsx` |
 | `employee-dashboard` | What a staff login sees | `components/employee-home.tsx`, `employee-profile.tsx`, `employee-settings.tsx` |
 | `home` | Owner's Home screen: stats, plan status, profile completion | `components/home-dashboard.tsx` |
 | `scanner` | Scan a card by camera, NFC, screenshot or typed link | `components/card-scanner.tsx` |
@@ -266,9 +267,10 @@ The browser talks to Supabase directly with the public anon key. So **the databa
 | --- | --- | --- |
 | `profiles` | One row per account: business details, username, plan fields, trial fields, `is_admin` / `role` | Anyone reads (public pages). Owner updates own row, **except protected fields** (trigger). Admins: all |
 | `cards` | A card per profile: `public_slug`, `is_active`, `tap_count` | Anyone reads. Taps only via `record_card_tap()` |
-| `employees` | Team members of a business; `user_id` + `login_enabled` for staff logins; `is_premium`, expiry | Anyone reads (public team pages). Owner manages, **except billing fields and paid-slot limit** (trigger). Staff can only change their own photos |
+| `employees` | Team members of a business; `user_id` + `login_enabled` for staff logins; `is_premium`, expiry; `branch_id` (NULL = main office) | Anyone reads (public team pages). Owner manages, **except billing fields and paid-slot limit** (trigger). Staff can only change their own photos |
+| `branches` | A business's other locations: `slug`, `name` and **override** columns (NULL = use the main profile) | Anyone reads active ones; owner reads all of theirs and manages them (paid plans, max 50, via `branches_guard`). Staff read; admins all |
 | `connections` | Saved cards: `user_id` saved `connected_user_id` | Own rows. Writes via `save_card()` / `unsave_card()` |
-| `contacts` | Visitors who shared their details; card photo paths; category, note | Owner sees all; staff see their own card's. Writes via `submit_contact()`; owners edit name, phone, email, category, note |
+| `contacts` | Visitors who shared their details; card photo paths; category, note; `branch_id` (set automatically) | Owner sees all; staff see their own card's. Writes via `submit_contact()` / `submit_branch_contact()`; owners edit name, phone, email, category, note |
 | `card_upload_tickets` | One-time upload permissions for card photos | Server only (no policies) |
 | `reviews` | In-app reviews (rating + comment) | Public insert via `/api/reviews`; public read |
 | `posts` | Feed posts (early feature) | Owner |
@@ -285,6 +287,7 @@ Storage buckets: `avatars` (profile, logo, cover, gallery, team photos; public) 
 | `record_card_tap(p_card_id, p_profile_id)` | Adds 1 to `cards.tap_count` (the anon key can't update `cards`) |
 | `save_card(p_owner_id)` / `unsave_card(...)` | Adds or removes a saved card for the signed-in user |
 | `submit_contact(...)` | Records a visitor's details (dedupes by phone/email, normalises Indian numbers, rate-limits, checks card-photo tickets) |
+| `submit_branch_contact(p_branch_id, ...)` | Same, from a branch page: checks the branch, puts its id in a transaction-local setting, calls `submit_contact()`. The `contacts_set_branch` trigger stores it |
 | `my_employee_record()`, `update_my_employee_photo(...)`, `team_saved_cards()` | Staff dashboard reads and photo updates |
 | `is_admin()`, `is_staff()`, `is_designer()` | Role checks used inside policies |
 
@@ -329,6 +332,7 @@ The same pattern guards `employees` (billing fields; adding a member needs a fre
 | `20261030_designer_role_and_staff.sql` | `role` column, `is_staff()`, staff read policies |
 | `20261030_security_lockdown.sql` | Guard triggers, `profile_admin_notes`, unique payment ids, `primary_card_count` |
 | `20261104_testimonials_clients_phone.sql` | `profiles.testimonials` and `profiles.clients` (jsonb arrays with size checks); `handle_new_user()` copies the sign-up phone into `profiles.phone` |
+| `20261112_branches.sql` | `branches` table + RLS + `branches_guard`; `employees.branch_id` + `employees_branch_guard`; unique `(owner_id, slug)` for employees (skipped with a notice if duplicates exist); `contacts.branch_id` + `contacts_set_branch`; `submit_branch_contact()` |
 
 > **Known gap:** profiles are readable column-by-column by anyone, including email, phone, GST and bank details. That's intended for public cards, but the long-term fix is a public view with only display columns.
 
@@ -339,7 +343,8 @@ A public page is a **server component cached for 30 seconds** (ISR). Most visits
 | URL | File | Shows |
 | --- | --- | --- |
 | `/<slug>` | `src/app/[slug]/page.tsx` | A business page. `slug` is a username, a card `public_slug` or a card id |
-| `/<slug>/<member>` | `src/app/[slug]/[employee]/page.tsx` | A team member's page |
+| `/<slug>/<x>` | `src/app/[slug]/[employee]/page.tsx` | A **branch** page if `x` is a branch link, otherwise a team member's page (redirects to the branch URL if they're in a branch) |
+| `/<slug>/<branch>/<member>` | `src/app/[slug]/[employee]/[member]/page.tsx` | A team member of a branch (the `[employee]` folder holds the branch link here) |
 | `/c/<cardId>` | `src/app/c/[cardId]/page.tsx` | Old card links, kept working |
 
 ### Services and products on the page
@@ -359,10 +364,10 @@ The owner's profile also shows the cover size on the cover itself.
 
 ### How `/<slug>` is resolved
 
-`resolveSlug()` in `src/app/[slug]/page.tsx` tries the **username** first, then a **card** by `public_slug` (or by `id` when the slug is a UUID). It's wrapped in React `cache()`, so `generateMetadata` (page title, Open Graph image) and the page share one set of queries per request.
+`resolveOwner()` in `src/features/branches/services/public-pages.service.tsx` (shared by all three public routes) tries the **username** first, then a **card** by `public_slug` (or by `id` when the slug is a UUID). It's wrapped in React `cache()`, so `generateMetadata` (page title, Open Graph image) and the page share one set of queries per request.
 
 ```ts
-const resolveSlug = cache(async (slug: string) => {
+export const resolveOwner = cache(async (slug: string) => {
   const supabase = createCachedPublicClient();   // anon key, 30 s data cache
   const { data: byUsername } = await supabase
     .from("profiles").select("*").eq("username", slug).maybeSingle();
@@ -379,13 +384,16 @@ The page then loads the active card, the latest 10 reviews and active team membe
 
 ### Who gets a live page
 
-Before rendering, the page asks the shared membership rule (`src/lib/membership.ts`, see *Plans and payments*):
+Before rendering, every public route (main, branch and team member) calls `membershipGate(profile)` from the same service file, which applies the shared membership rule (`src/lib/membership.ts`, see *Plans and payments*):
 
 ```ts
-const membership = getMembership(profile);
-if (membership.isSuspended) return <GatedProfileView profile={profile} reason="suspended" />;
-if (membership.isFree)      return <GatedProfileView profile={profile} reason="free" />;
-if (membership.isExpired)   return <GatedProfileView profile={profile} reason="expired" />;
+export function membershipGate(profile: Profile) {
+  const m = getMembership(profile);
+  if (m.isSuspended) return <GatedProfileView profile={profile} reason="suspended" />;
+  if (m.isFree)      return <GatedProfileView profile={profile} reason="free" />;
+  if (m.isExpired)   return <GatedProfileView profile={profile} reason="expired" />;
+  return null; // page may show
+}
 ```
 
 `GatedProfileView` (`src/components/GatedProfileView.tsx`) shows the business name and photo with a short reason and a sign-in button for the owner.
@@ -401,7 +409,7 @@ Because the page is cached, server code doesn't run once per visitor. So taps ar
 
 `public-profile-view.tsx` (about 2,100 lines) renders the header, contact buttons, About, services and products, gallery, brochure, bank details, team, reviews and review suggestions. It also mounts the visitor details popup (`VisitorDetailsGate`), the auto-save for saved cards and the save-before-leaving prompt. It is the biggest file in the app and the first candidate for splitting into smaller components.
 
-> **Known gap:** team-member pages (`/[slug]/[employee]`) don't apply the membership rule yet, so a member's page can stay visible when the business's plan has ended.
+Team-member and branch pages are gated too (they weren't before branches were added).
 
 ## Save contact (vCard)
 
@@ -644,6 +652,77 @@ Before this, tabs were built from service categories only, so products never got
 
 Edit the arrays inside `rolePacks()`. Each entry is a function of `b` (business name) and `s` (the product or service). Keep sentences short, specific and in plain Indian English, avoid dashes (`tidy()` replaces them anyway), and never claim something the role can't do.
 
+## Branches
+
+A business with offices in several cities keeps **one profile** and adds branches. Each branch has its own link, photos, contact details, directions, Google review link, optionally its own services and products, and its own team members. Everything else is shared from the main profile.
+
+| URL | Shows |
+| --- | --- |
+| `nammainfo.in/abc` | Main profile |
+| `nammainfo.in/abc/mangaluru` | Branch |
+| `nammainfo.in/abc/mangaluru/sujay` | Team member of that branch |
+| `nammainfo.in/abc/sujay` | Same member: redirects to the line above (old printed cards keep working) |
+
+| Piece | File | Job |
+| --- | --- | --- |
+| Database | `supabase/migrations/20261112_branches.sql` | Table, RLS, guards, contact tagging |
+| Types and slug rules | `src/features/branches/types.ts` | `Branch`, `toSlug()`, `uniqueSlug()`, `branchErrorMessage()` |
+| Merge | `src/features/branches/lib/apply-branch.ts` | `applyBranch(profile, branch)` → a `Profile` |
+| Links | `src/features/branches/lib/paths.ts` | `branchPath()`, `employeePath()`: the only place URLs are built |
+| Public loaders | `src/features/branches/services/public-pages.service.tsx` | `resolveOwner`, `getBranches`, `findBranch`, `findEmployee`, `loadPageData`, `membershipGate` (all `cache()`d) |
+| Owner CRUD | `src/features/branches/services/branches.service.ts` | List, create, update, delete, reorder |
+| Dashboard | `src/app/(dashboard)/dashboard/branches/page.tsx` → `components/branches-page.tsx`, `branch-editor.tsx`, `branch-items-editor.tsx` | Settings → Branches |
+| Public list | `components/public-branches.tsx` | "Our Branches" on every public page |
+
+### Why it's built this way: overrides, not copies
+
+A branch row stores **only what differs**. Every override column is nullable and NULL means "use the main profile". `applyBranch()` merges a branch into the owner's `Profile`, and the result is passed to the existing `PublicProfileView`, `EmployeeProfileView` and vCard builder unchanged. So:
+
+- No second copy of about, gallery, testimonials, bank details, theme… to drift out of date. Editing the main profile updates every branch on the next page refresh.
+- No branch-specific code inside the 2,000-line page component, apart from the branch chip, the "Our Branches" list, the share URL and the vCard / contact branch id.
+- Review suggestions on a branch page come from the branch's services and products automatically, because they are built from the merged profile.
+
+```ts
+// Location is one group: if the branch sets any of address / city / pincode / Maps link,
+// all four come from the branch, so we never mix the branch address with head-office directions.
+const ownLocation = [branch.address, branch.city, branch.pincode, branch.maps_url].some(has);
+return {
+  ...profile,
+  phone: has(branch.phone) ? branch.phone : profile.phone,
+  address: ownLocation ? branch.address : profile.address,
+  maps_url: ownLocation ? branch.maps_url : profile.maps_url,
+  services: Array.isArray(branch.services) ? branch.services : profile.services, // NULL = main list
+  // cover_url, logo_url, email, google_place_id, contact person → owner_name / job_title,
+  // WhatsApp → replaces the WhatsApp social link
+};
+```
+
+`services` / `products` are `NULL` (same as main) or a jsonb array (this branch's own list, even if empty). The editor's "Custom for this branch" copies the main list as a starting point.
+
+### One link namespace per business
+
+Branch links and team-member links both live at `/<business>/<x>`, so they must never collide:
+
+- `branches_guard` refuses a branch slug used by one of the owner's employees; `employees_branch_guard` refuses an employee slug used by one of the owner's branches, and an employee `branch_id` from another business.
+- `employees (owner_id, slug)` is unique (created only if old data has no duplicates; the migration prints a notice otherwise).
+- The Team page picks a free link with `uniqueSlug()` (`sujay`, `sujay-2`, …) and **no longer changes the link when a member is renamed**, so printed cards keep working.
+
+The `[employee]` route checks branches first, then employees. The `[member]` route redirects to the member's current link if they moved branch or the branch was hidden, instead of showing a 404. Redirects can't loop: the legacy route only redirects to an **active** branch, and the member route only redirects to the member's actual branch or the legacy link.
+
+### Contacts from a branch
+
+A visitor on a branch page is saved with `submit_branch_contact()`. It sets `nammainfo.branch_id` with `set_config(..., true)` (transaction-local) and calls the existing `submit_contact()`, so the dedupe, rate limits and photo-ticket checks aren't duplicated. The `contacts_set_branch` BEFORE INSERT trigger reads it, or takes the branch of the employee whose card it was. If the migration hasn't run, the popup falls back to `submit_contact()`. The Contacts screen has branch chips and shows the branch on each row.
+
+### Rules in the database
+
+`branches_guard` (not `SECURITY DEFINER`, so `is_customer_request()` sees the caller): paid plans only (same rule as `getMembership().isPaid`), at most 50 branches, the owner can't be changed, slug and name trimmed, `updated_at` set. Shape checks cap `services` / `products` at 100 items and 64 KB each. Branch photos go to `profile-media/<owner id>/branches/` through `processImage()` (cover ≤ 1600 × 900, ~220 KB; photo 400 × 400, ~60 KB; item photos ≤ 1000 px, ~120 KB).
+
+### Not built yet
+
+- Taps and reviews are counted for the whole business, not per branch.
+- Bank details, gallery, testimonials and clients can't differ per branch.
+- The admin console doesn't list branches yet (admins can read the table).
+
 ## Team cards and employee logins
 
 A paid business can give each staff member their own card at `nammainfo.in/<business>/<employee>`. Optionally the employee also gets their own login, to see the contacts their card collects.
@@ -655,7 +734,7 @@ A paid business can give each staff member their own card at `nammainfo.in/<busi
 | Login API | `src/app/api/team/access/route.ts` | Server: creates and manages employee accounts with the service-role key |
 | Who's signed in | `src/components/providers/account-provider.tsx` | Gives `role: "owner" \| "employee"` and the employee record (`my_employee_record()`) |
 | Page gate | `src/components/auth/owner-or-employee-gate.tsx` | Shows the owner or employee version of a dashboard page; owners-only pages send employees to Home |
-| Public employee card | `src/app/[slug]/[employee]/page.tsx`, `src/features/public-profile/components/employee-profile-view.tsx` | The employee's card, inside the business's branding |
+| Public employee card | `src/app/[slug]/[employee]/page.tsx`, `src/app/[slug]/[employee]/[member]/page.tsx`, `src/features/public-profile/components/employee-profile-view.tsx` | The employee's card, inside the business's branding (and branch details, for a branch member) |
 | Pricing | `src/lib/pricing.ts` | Volume pricing for team cards |
 
 ### Slots: paying for team members

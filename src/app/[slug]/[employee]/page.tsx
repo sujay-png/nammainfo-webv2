@@ -1,104 +1,114 @@
-import { notFound } from "next/navigation";
-import { createCachedPublicClient as createPublicClient } from "@/supabase/server";
+import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
-import type { Profile, Employee, Review, Card } from "@/supabase/database-types";
+import PublicProfileView from "@/features/public-profile/components/public-profile-view";
 import EmployeeProfileView from "@/features/public-profile/components/employee-profile-view";
+import { applyBranch } from "@/features/branches/lib/apply-branch";
+import { employeePath } from "@/features/branches/lib/paths";
+import {
+  findBranch,
+  findEmployee,
+  getBranches,
+  loadPageData,
+  membershipGate,
+  publicHandle,
+  resolveOwner,
+} from "@/features/branches/services/public-pages.service";
+
+/**
+ * /<business>/<x> is either a BRANCH (nammainfo.in/abc/mangaluru) or a
+ * TEAM MEMBER (nammainfo.in/abc/sujay). The database keeps the two link
+ * sets apart per business, so at most one matches. Branches are checked
+ * first.
+ *
+ * A team member who now belongs to a branch is redirected to
+ * /<business>/<branch>/<member>, so cards printed before branches existed
+ * keep working.
+ */
 
 // ISR: revalidate every 30 seconds
 export const revalidate = 30;
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ slug: string; employee: string }>;
-}): Promise<Metadata> {
-  const { slug, employee: empSlug } = await params;
-  const supabase = createPublicClient();
+type Params = Promise<{ slug: string; employee: string }>;
 
-  const { data: owner } = await supabase
-    .from("profiles")
-    .select("id, business_name")
-    .eq("username", slug)
-    .maybeSingle();
-  if (!owner) return { title: "Not Found" };
+export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
+  const { slug, employee: seg } = await params;
+  const result = await resolveOwner(slug);
+  if (!result) return { title: "Not Found" };
+  const owner = result.profile;
+  const business = owner.business_name ?? "Namma Info";
 
-  const { data: emp } = await supabase
-    .from("employees")
-    .select("name, designation")
-    .eq("owner_id", (owner as { id: string }).id)
-    .eq("slug", empSlug)
-    .eq("is_active", true)
-    .maybeSingle();
+  const branch = await findBranch(owner.id, seg);
+  if (branch) {
+    const p = applyBranch(owner, branch);
+    return {
+      title: `${business} · ${branch.name}`,
+      description:
+        owner.bio ?? `${business}, ${branch.name}. Call, WhatsApp or get directions on Namma Info.`,
+      openGraph: {
+        title: `${business} · ${branch.name}`,
+        images: p.cover_url || p.logo_url ? [(p.cover_url || p.logo_url) as string] : undefined,
+      },
+    };
+  }
+
+  const emp = await findEmployee(owner.id, seg);
   if (!emp) return { title: "Not Found" };
-
-  const e = emp as { name: string; designation: string };
-  const o = owner as { business_name: string | null };
   return {
-    title: `${e.name} · ${o.business_name ?? "Namma Info"}`,
-    description: `${e.designation} at ${o.business_name ?? "Namma Info"}`,
+    title: `${emp.name} · ${business}`,
+    description: `${emp.designation} at ${business}`,
   };
 }
 
-export default async function EmployeePage({
-  params,
-}: {
-  params: Promise<{ slug: string; employee: string }>;
-}) {
-  const { slug, employee: empSlug } = await params;
-  const supabase = createPublicClient();
+export default async function BranchOrEmployeePage({ params }: { params: Params }) {
+  const { slug, employee: seg } = await params;
+  const result = await resolveOwner(slug);
+  if (!result) notFound();
+  const owner = result.profile;
+  const handle = publicHandle(owner, slug);
 
-  // Get the owner profile by username
-  const { data: ownerData } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("username", slug)
-    .maybeSingle();
+  const [branch, employee, branches] = await Promise.all([
+    findBranch(owner.id, seg),
+    findEmployee(owner.id, seg),
+    getBranches(owner.id),
+  ]);
 
-  if (!ownerData) notFound();
-  const owner = ownerData as unknown as Profile;
+  // ---- Branch page -------------------------------------------------
+  if (branch) {
+    const gate = membershipGate(owner);
+    if (gate) return gate;
+    const { card, reviews, employees } = await loadPageData(owner.id, result.card);
+    return (
+      <PublicProfileView
+        profile={applyBranch(owner, branch)}
+        card={card}
+        reviews={reviews}
+        employees={employees.filter((e) => e.branch_id === branch.id)}
+        branch={branch}
+        branches={branches}
+        handle={handle}
+      />
+    );
+  }
 
-  // Get the employee
-  const { data: empData } = await supabase
-    .from("employees")
-    .select("*")
-    .eq("owner_id", owner.id)
-    .eq("slug", empSlug)
-    .eq("is_active", true)
-    .maybeSingle();
+  // ---- Team member -------------------------------------------------
+  if (!employee) notFound();
 
-  if (!empData) notFound();
-  const employee = empData as unknown as Employee;
+  const ownBranch = employee.branch_id ? branches.find((b) => b.id === employee.branch_id) : null;
+  if (ownBranch) redirect(employeePath(handle, employee.slug, ownBranch.slug));
 
-  // Fetch card, reviews, and all employees in parallel
-  const [{ data: cardData }, { data: reviewsData }, { data: employeesData }] =
-    await Promise.all([
-      supabase
-        .from("cards")
-        .select("*")
-        .eq("profile_id", owner.id)
-        .eq("is_active", true)
-        .maybeSingle(),
-      supabase
-        .from("reviews")
-        .select("*")
-        .eq("profile_id", owner.id)
-        .order("created_at", { ascending: false })
-        .limit(10),
-      supabase
-        .from("employees")
-        .select("*")
-        .eq("owner_id", owner.id)
-        .eq("is_active", true)
-        .order("created_at"),
-    ]);
+  const gate = membershipGate(owner);
+  if (gate) return gate;
 
+  const { card, reviews, employees } = await loadPageData(owner.id, result.card);
   return (
     <EmployeeProfileView
       employee={employee}
       owner={owner}
-      card={cardData as Card | null}
-      reviews={(reviewsData as unknown as Review[]) ?? []}
-      employees={(employeesData as unknown as Employee[]) ?? []}
+      card={card}
+      reviews={reviews}
+      employees={employees}
+      branches={branches}
+      handle={handle}
     />
   );
 }

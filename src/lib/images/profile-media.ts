@@ -8,7 +8,7 @@ import { processImage, type ProcessOptions } from "./process-image";
  */
 export async function uploadProfileImage(
   profileId: string,
-  folder: "testimonials" | "clients",
+  folder: "testimonials" | "clients" | "branches",
   file: File,
   opts: ProcessOptions
 ): Promise<string> {

@@ -34,13 +34,18 @@ import {
   Clock,
   Sparkles,
   ShieldCheck,
+  MapPin,
 } from "lucide-react";
 import Link from "next/link";
 import EmployeeLoginAccess, { removeEmployeeLogin } from "@/features/team/components/employee-login-access";
+import { listMyBranches } from "@/features/branches/services/branches.service";
+import { uniqueSlug, type Branch } from "@/features/branches/types";
+import { absolute, displayLink, employeePath } from "@/features/branches/lib/paths";
 
 function OwnerTeamPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -53,6 +58,7 @@ function OwnerTeamPage() {
     designation: "",
     email: "",
     phone: "",
+    branch_id: "",
   });
 
   // Crop modal state
@@ -68,17 +74,19 @@ function OwnerTeamPage() {
     const user = await getCurrentUser();
     if (!user) return;
 
-    const [{ data: p }, { data: emps }] = await Promise.all([
+    const [{ data: p }, { data: emps }, br] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", user.id).single(),
       supabase
         .from("employees")
         .select("*")
         .eq("owner_id", user.id)
         .order("created_at"),
+      listMyBranches(user.id),
     ]);
 
     if (p) setProfile(p as unknown as Profile);
     if (emps) setEmployees(emps as unknown as Employee[]);
+    if (br.ok) setBranches(br.data);
     setLoading(false);
   }, []);
 
@@ -109,10 +117,12 @@ function OwnerTeamPage() {
     setSaving(true);
     const supabase = createClient();
 
-    const slug = newEmp.name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "");
+    // A free link in this business: team members and branches share
+    // nammainfo.in/<you>/<link>, so "sujay" becomes "sujay-2" if taken.
+    const slug = uniqueSlug(newEmp.name, [
+      ...employees.map((e) => e.slug),
+      ...branches.map((b) => b.slug),
+    ]);
 
     const { error } = await supabase.from("employees").insert({
       owner_id: profile.id,
@@ -121,6 +131,7 @@ function OwnerTeamPage() {
       email: newEmp.email || null,
       phone: newEmp.phone || null,
       slug,
+      ...(newEmp.branch_id ? { branch_id: newEmp.branch_id } : {}),
       is_premium: true,
       status: "active",
       subscription_started_at: profile.subscription_started_at || new Date().toISOString(),
@@ -128,7 +139,7 @@ function OwnerTeamPage() {
     });
 
     if (!error) {
-      setNewEmp({ name: "", designation: "", email: "", phone: "" });
+      setNewEmp({ name: "", designation: "", email: "", phone: "", branch_id: "" });
       setShowAdd(false);
       load();
     } else if (/team slots/i.test(error.message)) {
@@ -147,11 +158,9 @@ function OwnerTeamPage() {
     setSaving(true);
     const supabase = createClient();
 
-    const slug = editingEmp.name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "");
-
+    // The card link (slug) is NOT changed on rename: printed cards and
+    // QR codes keep working. Moving to a branch changes the link to
+    // /<you>/<branch>/<slug>; the old link redirects there.
     const { error } = await supabase
       .from("employees")
       .update({
@@ -159,13 +168,15 @@ function OwnerTeamPage() {
         designation: editingEmp.designation,
         email: editingEmp.email || null,
         phone: editingEmp.phone || null,
-        slug,
+        ...(branches.length > 0 || editingEmp.branch_id ? { branch_id: editingEmp.branch_id || null } : {}),
       })
       .eq("id", editingEmp.id);
 
     if (!error) {
       setEditingEmp(null);
       load();
+    } else {
+      alert(`Couldn't save: ${error.message}`);
     }
     setSaving(false);
   }
@@ -257,6 +268,17 @@ function OwnerTeamPage() {
       )
     );
     setPhotoUploading(null);
+  }
+
+  /** The member's branch, if it is shown (hidden branches fall back to the main office link). */
+  function branchOf(emp: Employee) {
+    return emp.branch_id ? branches.find((b) => b.id === emp.branch_id) ?? null : null;
+  }
+
+  function empPath(emp: Employee) {
+    if (!profile?.username) return null;
+    const b = branchOf(emp);
+    return employeePath(profile.username, emp.slug, b?.is_active ? b.slug : null);
   }
 
   if (loading) {
@@ -483,6 +505,11 @@ function OwnerTeamPage() {
                       <p className="font-mono text-[10px] text-[var(--muted-foreground)]">
                         {emp.designation}
                       </p>
+                      {branchOf(emp) && (
+                        <p className="mt-1 inline-flex items-center gap-1 rounded-full bg-[var(--accent)] px-2 py-0.5 text-[10px] font-semibold">
+                          <MapPin size={9} /> {branchOf(emp)!.name}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
@@ -520,15 +547,11 @@ function OwnerTeamPage() {
                 {/* Profile URL */}
                 {profile?.username && (
                   <div className="mt-2 flex items-center justify-between rounded-lg bg-[var(--accent)] px-3 py-1.5">
-                    <span className="font-mono text-[10px] text-[var(--muted-foreground)]">
-                      nammainfo.in/{profile.username}/{emp.slug}
+                    <span className="truncate font-mono text-[10px] text-[var(--muted-foreground)]">
+                      {displayLink(empPath(emp)!)}
                     </span>
                     <button
-                      onClick={() =>
-                        navigator.clipboard.writeText(
-                          `https://nammainfo.in/${profile.username}/${emp.slug}`
-                        )
-                      }
+                      onClick={() => navigator.clipboard.writeText(absolute(empPath(emp)!))}
                       className="p-1 text-[var(--muted-foreground)]"
                     >
                       <Copy size={10} />
@@ -614,6 +637,13 @@ function OwnerTeamPage() {
                 onChange={(v) => setNewEmp({ ...newEmp, phone: v })}
                 type="tel"
               />
+              {branches.length > 0 && (
+                <BranchSelect
+                  branches={branches}
+                  value={newEmp.branch_id}
+                  onChange={(v) => setNewEmp({ ...newEmp, branch_id: v })}
+                />
+              )}
               <button
                 onClick={addEmployee}
                 disabled={saving || !newEmp.name || !newEmp.designation}
@@ -679,6 +709,13 @@ function OwnerTeamPage() {
                 }
                 type="tel"
               />
+              {(branches.length > 0 || editingEmp.branch_id) && (
+                <BranchSelect
+                  branches={branches}
+                  value={editingEmp.branch_id ?? ""}
+                  onChange={(v) => setEditingEmp({ ...editingEmp, branch_id: v || null })}
+                />
+              )}
               <button
                 onClick={updateEmployee}
                 disabled={saving || !editingEmp.name || !editingEmp.designation}
@@ -803,6 +840,41 @@ function Field({
         required={required}
         className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-sm outline-none transition"
       />
+    </div>
+  );
+}
+
+/** "Works at": main office or one of the branches. */
+function BranchSelect({
+  branches,
+  value,
+  onChange,
+}: {
+  branches: Branch[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div>
+      <label className="mb-1 block font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
+        Works at
+      </label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-sm outline-none transition"
+      >
+        <option value="">Main office</option>
+        {branches.map((b) => (
+          <option key={b.id} value={b.id}>
+            {b.name}
+            {b.is_active ? "" : " (hidden)"}
+          </option>
+        ))}
+      </select>
+      <p className="mt-1 text-[10px] text-[var(--muted-foreground)]">
+        Their card shows this branch&apos;s address, phone and services.
+      </p>
     </div>
   );
 }

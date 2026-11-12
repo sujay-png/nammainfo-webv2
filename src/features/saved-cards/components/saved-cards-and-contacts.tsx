@@ -11,6 +11,8 @@ import { formatDistanceToNow } from "@/lib/utils";
 import Avatar from "@/components/ui/avatar";
 import Sheet, { ui } from "@/components/ui/sheet";
 import { deleteCardPhotos, getCardPhotoUrls } from "@/features/contacts/services/business-card-upload.service";
+import { listMyBranches } from "@/features/branches/services/branches.service";
+import type { Branch } from "@/features/branches/types";
 
 /* ------------------------------------------------------------------ */
 /*  Saved: two tabs                                                     */
@@ -40,6 +42,8 @@ function SavedInner() {
   const [search, setSearch] = useState("");
   const [who, setWho] = useState<string>("all"); // all | me | <employee id>
   const [team, setTeam] = useState<TeamMember[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [branchFilter, setBranchFilter] = useState<string>("all"); // all | main | <branch id>
 
   const [cards, setCards] = useState<SavedItem[]>([]);
   const [cardsLoading, setCardsLoading] = useState(true);
@@ -100,6 +104,12 @@ function SavedInner() {
     };
   }, [accountLoading, userId, isOwner]);
 
+  /* ---------- branches (owners only), for the contacts branch filter ---------- */
+  useEffect(() => {
+    if (accountLoading || !userId || !isOwner) return;
+    listMyBranches(userId).then((r) => r.ok && setBranches(r.data));
+  }, [accountLoading, userId, isOwner]);
+
   /* ---------- load contacts (RLS returns only what this person may see) ---------- */
   useEffect(() => {
     if (accountLoading || !userId) return;
@@ -131,11 +141,14 @@ function SavedInner() {
   const whoContacts = useMemo(
     () =>
       contacts.filter((c) => {
+        if (isOwner && branchFilter !== "all") {
+          if (branchFilter === "main" ? c.branch_id : c.branch_id !== branchFilter) return false;
+        }
         if (!isOwner || who === "all") return true;
         if (who === "me") return !c.employee_id;
         return c.employee_id === who;
       }),
-    [contacts, who, isOwner]
+    [contacts, who, isOwner, branchFilter]
   );
   const categories = useMemo(() => {
     const set = new Set<string>(whoContacts.map((c) => c.category));
@@ -177,6 +190,8 @@ function SavedInner() {
   }
 
   const showWho = isOwner && team.length > 0;
+  const showBranches = isOwner && tab === "contacts" && branches.length > 0;
+  const branchName = (id: string | null | undefined) => (id ? branches.find((b) => b.id === id)?.name ?? null : null);
   const myCardCount = cards.filter((c) => !c.saved_by).length;
 
   return (
@@ -225,8 +240,19 @@ function SavedInner() {
       </div>
 
       {/* Filters */}
-      {(showWho || (tab === "contacts" && categories.length > 2)) && (
+      {(showWho || showBranches || (tab === "contacts" && categories.length > 2)) && (
         <div className="mb-4 space-y-2">
+          {showBranches && (
+            <FilterRow>
+              <Chip active={branchFilter === "all"} onClick={() => setBranchFilter("all")}>All branches</Chip>
+              <Chip active={branchFilter === "main"} onClick={() => setBranchFilter("main")}>Main office</Chip>
+              {branches.map((b) => (
+                <Chip key={b.id} active={branchFilter === b.id} onClick={() => setBranchFilter(b.id)}>
+                  {b.name}
+                </Chip>
+              ))}
+            </FilterRow>
+          )}
           {showWho && (
             <FilterRow>
               <Chip active={who === "all"} onClick={() => setWho("all")}>Everyone</Chip>
@@ -323,6 +349,7 @@ function SavedInner() {
                     <Dot category={c.category} />
                     <span className="text-[var(--foreground)]">{c.category}</span>
                     {isOwner && c.employee_id && <span>· via {teamName(c.employee_id).split(" ")[0]}</span>}
+                    {isOwner && branchName(c.branch_id) && <span className="truncate">· {branchName(c.branch_id)}</span>}
                     {c.visits > 1 && <span>· {c.visits} visits</span>}
                   </p>
                 </div>

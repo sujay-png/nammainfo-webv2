@@ -62,6 +62,13 @@ export const userManualToc: TocEntry[] = [
     { id: "team-add", title: "Adding a team member" },
     { id: "team-login", title: "Giving a member their own login" },
   ] },
+  { id: "branches", title: "Branches in other cities", children: [
+    { id: "branches-what", title: "What a branch is" },
+    { id: "branches-add", title: "Adding a branch" },
+    { id: "branches-services", title: "Different services or products" },
+    { id: "branches-team", title: "Team members in a branch" },
+    { id: "branches-manage", title: "Hide, reorder or delete" },
+  ] },
   { id: "home-scan", title: "Home, Scan and taps", children: [
     { id: "home", title: "Home" },
     { id: "scan", title: "Scan" },
@@ -590,8 +597,16 @@ export default function UserManualContent() {
           <Steps>
             <Step>On the Team screen, tap <strong>Add Member</strong>.</Step>
             <Step>Enter their name and designation (for example <em>Sales Executive</em>), and optionally their email and phone.</Step>
+            <Step>If you have branches, choose where they work in <strong>Works at</strong> (main office or a branch).</Step>
             <Step>Tap <strong>Add Member</strong> to save. You can edit their details, change their photo and cover, or remove them later.</Step>
           </Steps>
+          <Callout kind="info" title="Their link never changes">
+            <p>
+              Each member&apos;s link is made from their name when you add them, for example <em>nammainfo.in/yourbusiness/ravi</em>. If two
+              members share a name, the second gets <em>ravi-2</em>. Renaming someone later does <strong>not</strong> change their link, so
+              printed cards and QR codes keep working.
+            </p>
+          </Callout>
         </Sub>
 
         <Sub id="team-login" title="Giving a member their own login">
@@ -619,7 +634,93 @@ export default function UserManualContent() {
       </Section>
 
       {/* ------------------------------------------------------------ */}
-      <Section id="home-scan" num={10} title="Home, Scan and taps">
+      <Section id="branches" num={10} title="Branches in other cities">
+        <p>
+          Have offices or shops in more than one city? Don&apos;t make a second profile. Add a <strong>branch</strong>: one profile, with a page
+          for each location.
+        </p>
+
+        <Sub id="branches-what" title="What a branch is">
+          <div className={s.tableWrap}>
+            <table>
+              <thead><tr><th>Address</th><th>Opens</th></tr></thead>
+              <tbody>
+                <tr><td>nammainfo.in/<strong>abc</strong></td><td>Your main profile</td></tr>
+                <tr><td>nammainfo.in/abc/<strong>mangaluru</strong></td><td>Your Mangaluru branch</td></tr>
+                <tr><td>nammainfo.in/abc/mangaluru/<strong>sujay</strong></td><td>Sujay&apos;s card, who works at the Mangaluru branch</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>A branch has its <strong>own</strong>:</p>
+          <ul>
+            <li>Cover photo and photo (logo)</li>
+            <li>Contact person, phone, WhatsApp and email</li>
+            <li>Address, Google Maps link (so <strong>Get Directions</strong> goes to that branch) and Google review link</li>
+            <li>Services and products, if you want them to be different</li>
+            <li>Team members</li>
+          </ul>
+          <p>
+            Everything else, like your business name, about, gallery, testimonials, clients, social links and bank details, comes from your main
+            profile. You edit it once and every branch shows the change.
+          </p>
+          <Callout kind="tip">
+            <p>Leave any branch field empty and the branch uses your main profile&apos;s value. The empty box shows that value in grey, so you can see what visitors will get.</p>
+          </Callout>
+        </Sub>
+
+        <Sub id="branches-add" title="Adding a branch">
+          <Steps>
+            <Step>Go to <strong>Settings → Branches</strong> and tap <strong>Add branch</strong>.</Step>
+            <Step>Type the <strong>Branch name</strong>, for example <em>Mangaluru</em>. The <strong>Branch link</strong> fills in by itself (<em>mangaluru</em>); you can change it.</Step>
+            <Step>Optional: add a branch cover photo (1920 × 1080 px) and photo (square, 400 × 400 px or bigger).</Step>
+            <Step>Optional: add the branch&apos;s contact person, phone, WhatsApp and email.</Step>
+            <Step>Add the branch address, city, pincode and its Google Maps link. Paste the branch&apos;s Google review link and tap <strong>Connect</strong> if it has its own Google listing.</Step>
+            <Step>Tap <strong>Add branch</strong>. Copy its link with the copy button, or open it to check.</Step>
+          </Steps>
+          <p>
+            Visitors on any page see <strong>Our Branches</strong>, a list of your main office and every branch, so they can switch to the one
+            nearest them. Contacts who open a branch page are tagged with that branch.
+          </p>
+          <Callout kind="info">
+            <p>Branches are part of the paid plan. You can add up to 50.</p>
+          </Callout>
+        </Sub>
+
+        <Sub id="branches-services" title="Different services or products">
+          <p>In the branch editor, <strong>Services</strong> and <strong>Products</strong> each have two choices:</p>
+          <ul>
+            <li><strong>Same as main</strong>: the branch shows your main list and updates when you change it.</li>
+            <li><strong>Custom for this branch</strong>: we copy your main list to start; then add, remove, reorder or edit items (name, price, category, description and photo) for this branch only.</li>
+          </ul>
+          <p>Review suggestions on a branch page are written from that branch&apos;s services and products.</p>
+        </Sub>
+
+        <Sub id="branches-team" title="Team members in a branch">
+          <Steps>
+            <Step>Go to <strong>Settings → Team / Employees</strong>.</Step>
+            <Step>Add a member, or tap the pencil on an existing one, and pick the branch in <strong>Works at</strong>.</Step>
+            <Step>Save. Their link becomes <em>nammainfo.in/abc/mangaluru/sujay</em>, and their card shows the branch&apos;s address, directions and services.</Step>
+          </Steps>
+          <Callout kind="tip">
+            <p>Cards printed before you added branches keep working: the old link <em>nammainfo.in/abc/sujay</em> takes visitors to the new one automatically.</p>
+          </Callout>
+          <p>In <strong>Saved → Contacts</strong>, use the branch chips (<strong>All branches</strong>, <strong>Main office</strong>, each branch) to see the contacts from one location.</p>
+        </Sub>
+
+        <Sub id="branches-manage" title="Hide, reorder or delete">
+          <ul>
+            <li>The <strong>eye</strong> button hides a branch: it disappears from your card and its link stops working until you show it again.</li>
+            <li>The <strong>arrows</strong> change the order branches appear in <strong>Our Branches</strong>.</li>
+            <li><strong>Delete</strong> removes the branch for good. Its team members stay on your team and move back to the main office; its contacts are kept.</li>
+          </ul>
+          <Callout kind="warn">
+            <p>Changing a branch&apos;s link breaks the old one. Change it only before you print it on cards.</p>
+          </Callout>
+        </Sub>
+      </Section>
+
+      {/* ------------------------------------------------------------ */}
+      <Section id="home-scan" num={11} title="Home, Scan and taps">
         <p>The bar at the bottom of the screen has five tabs: <strong>Home</strong>, <strong>Saved</strong>, <strong>Scan</strong> (the round button), <strong>Profile</strong> and <strong>Settings</strong>.</p>
 
         <Sub id="home" title="Home">
@@ -655,7 +756,7 @@ export default function UserManualContent() {
       </Section>
 
       {/* ------------------------------------------------------------ */}
-      <Section id="settings" num={11} title="Settings, orders and the app">
+      <Section id="settings" num={12} title="Settings, orders and the app">
         <Sub id="settings-list" title="Settings">
           <div className={s.tableWrap}>
             <table>
@@ -663,6 +764,7 @@ export default function UserManualContent() {
               <tbody>
                 <tr><td>Edit Profile</td><td>Opens your profile editor</td></tr>
                 <tr><td>Team / Employees</td><td>Add team members, give them logins, buy team cards</td></tr>
+                <tr><td>Branches</td><td>Add offices in other cities, each with its own link, photos, contact details and directions</td></tr>
                 <tr><td>Card Orders &amp; Fulfillment</td><td>Track your physical card orders</td></tr>
                 <tr><td>Membership &amp; Plan</td><td>See your plan and days left; upgrade or renew</td></tr>
                 <tr><td>Appearance</td><td><strong>Light</strong>, <strong>Dark</strong> or <strong>System default</strong>, and a colour <strong>Theme</strong> for your page</td></tr>
@@ -703,7 +805,7 @@ export default function UserManualContent() {
       </Section>
 
       {/* ------------------------------------------------------------ */}
-      <Section id="faq" num={12} title="Questions and answers">
+      <Section id="faq" num={13} title="Questions and answers">
         <div className={s.faq}>
           {FAQ.map((f) => (
             <details key={f.q}>
@@ -715,7 +817,7 @@ export default function UserManualContent() {
       </Section>
 
       {/* ------------------------------------------------------------ */}
-      <Section id="privacy" num={13} title="Privacy and safety">
+      <Section id="privacy" num={14} title="Privacy and safety">
         <div className={s.tableWrap}>
           <table>
             <thead><tr><th>Public: anyone with your link can see it</th><th>Private: only you (and the relevant team member)</th></tr></thead>

@@ -167,6 +167,8 @@ export interface Employee {
   user_id?: string | null;
   login_email?: string | null;
   login_enabled?: boolean;
+  /** Branch this member works at (migration 20261112). NULL = main office. */
+  branch_id?: string | null;
   created_at: string;
 }
 
@@ -189,6 +191,8 @@ export interface ContactRow {
   /** Photo of the visitor's business card (private storage path), if they added one. */
   card_front_path: string | null;
   card_back_path: string | null;
+  /** Branch page the visitor came from (migration 20261112). */
+  branch_id?: string | null;
 }
 
 /* ---- Database type (for Supabase client generic) ----------------- */
@@ -237,6 +241,12 @@ export interface Database {
       };
       employees: {
         Row: Employee;
+        Insert: Record<string, any>;
+        Update: Record<string, any>;
+        Relationships: AnyRelationship[];
+      };
+      branches: {
+        Row: import("@/features/branches/types").Branch;
         Insert: Record<string, any>;
         Update: Record<string, any>;
         Relationships: AnyRelationship[];

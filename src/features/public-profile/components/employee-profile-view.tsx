@@ -14,7 +14,10 @@ import {
   Mail,
   Share2,
   Globe,
+  MapPin,
 } from "lucide-react";
+import type { Branch, BranchSummary } from "@/features/branches/types";
+import { employeePath } from "@/features/branches/lib/paths";
 
 /**
  * Ensure a URL string has a protocol prefix.
@@ -31,12 +34,21 @@ export default function EmployeeProfileView({
   card,
   reviews,
   employees,
+  branch = null,
+  branches = [],
+  handle,
 }: {
   employee: Employee;
+  /** The business. For a branch member, the branch is already merged in (applyBranch). */
   owner: Profile;
   card: Card | null;
   reviews: Review[];
   employees: Employee[];
+  /** The member's branch, if they belong to one. */
+  branch?: Branch | null;
+  branches?: BranchSummary[];
+  /** The business's link name (username, or the card link it was opened with). */
+  handle?: string;
 }) {
   const ownerTheme = getTheme(owner.theme);
   const [themeMode, setThemeMode] = useState<"light" | "dark">("light");
@@ -52,13 +64,13 @@ export default function EmployeeProfileView({
     return vars as Record<string, string>;
   }, [ownerTheme, themeMode]);
 
+  const linkName = handle ?? owner.username;
+  const pagePath = linkName ? employeePath(linkName, employee.slug, branch?.slug) : null;
   const [profileUrl, setProfileUrl] = useState("");
 
   useEffect(() => {
-    setProfileUrl(
-      `${window.location.origin}/${owner.username}/${employee.slug}`
-    );
-  }, [owner.username, employee.slug]);
+    setProfileUrl(pagePath ? `${window.location.origin}${pagePath}` : window.location.href);
+  }, [pagePath]);
 
   function saveContact() {
     saveContactFromUrl(
@@ -91,6 +103,7 @@ export default function EmployeeProfileView({
       <VisitorDetailsGate
         ownerId={owner.id}
         employeeId={employee.id}
+        branchId={branch?.id ?? null}
         personName={employee.name}
         businessName={owner.business_name || owner.owner_name || "this business"}
         avatarUrl={employee.avatar_url}
@@ -152,6 +165,12 @@ export default function EmployeeProfileView({
                 .filter(Boolean)
                 .join(" · ")}
             </p>
+            {branch && (
+              <p className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-[var(--accent)] px-2.5 py-1 text-[11px] font-semibold text-[var(--foreground)]">
+                <MapPin size={11} />
+                {branch.name}
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -220,6 +239,9 @@ export default function EmployeeProfileView({
         card={card}
         reviews={reviews}
         employees={employees}
+        branch={branch}
+        branches={branches}
+        handle={linkName ?? undefined}
         isEmployeeView
         hideHero
       />

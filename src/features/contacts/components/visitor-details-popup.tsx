@@ -45,38 +45,55 @@ function readDetails(): Details | null {
   }
 }
 
-function submit(
-  ownerId: string,
-  employeeId: string | null,
+interface Target {
+  ownerId: string;
+  employeeId: string | null;
+  /** Set on a branch page, so the contact is tagged with that branch. */
+  branchId: string | null;
+}
+
+async function submit(
+  t: Target,
   d: Details,
   source: string,
   card?: { front: string | null; back: string | null }
 ) {
-  return createClient()
-    .rpc("submit_contact", {
-      p_owner_id: ownerId,
-      p_employee_id: employeeId,
-      p_name: d.name,
-      p_phone: d.phone ?? null,
-      p_email: d.email ?? null,
-      p_source: source,
-      p_card_front: card?.front ?? null,
-      p_card_back: card?.back ?? null,
-    } as never)
-    .then(({ error }) => {
-      if (error) console.warn("[VisitorDetailsGate]", error.message);
-    });
+  const args = {
+    p_owner_id: t.ownerId,
+    p_employee_id: t.employeeId,
+    p_name: d.name,
+    p_phone: d.phone ?? null,
+    p_email: d.email ?? null,
+    p_source: source,
+    p_card_front: card?.front ?? null,
+    p_card_back: card?.back ?? null,
+  };
+  const supabase = createClient();
+  if (t.branchId) {
+    const { error } = await supabase.rpc("submit_branch_contact", { p_branch_id: t.branchId, ...args } as never);
+    if (!error) return;
+    // Branches migration not run yet: save it without the branch.
+    if (!/submit_branch_contact|function .* does not exist|schema cache/i.test(error.message)) {
+      console.warn("[VisitorDetailsGate]", error.message);
+      return;
+    }
+  }
+  const { error } = await supabase.rpc("submit_contact", args as never);
+  if (error) console.warn("[VisitorDetailsGate]", error.message);
 }
 
 export default function VisitorDetailsGate({
   ownerId,
   employeeId = null,
+  branchId = null,
   personName,
   businessName,
   avatarUrl,
 }: {
   ownerId: string;
   employeeId?: string | null;
+  /** The branch page this card was opened on, if any. */
+  branchId?: string | null;
   /** Whose card this is (employee name, or owner/business). */
   personName: string;
   businessName: string;
@@ -123,13 +140,13 @@ export default function VisitorDetailsGate({
           phone: p.phone ?? undefined,
           email: p.email || user.email || undefined,
         };
-        if (d.name) submit(ownerId, employeeId, d, source); // server ignores the business's own team
+        if (d.name) submit({ ownerId, employeeId, branchId }, d, source); // server ignores the business's own team
         return setMode("none");
       }
 
       const saved = readDetails();
       if (saved) {
-        submit(ownerId, employeeId, saved, source);
+        submit({ ownerId, employeeId, branchId }, saved, source);
         setMode("shared");
         setTimeout(() => !cancelled && setMode("none"), 3000);
         return;
@@ -142,7 +159,7 @@ export default function VisitorDetailsGate({
     return () => {
       cancelled = true;
     };
-  }, [ownerId, employeeId, skipKey]);
+  }, [ownerId, employeeId, branchId, skipKey]);
 
   // Lock scrolling behind the form
   useEffect(() => {
@@ -167,7 +184,7 @@ export default function VisitorDetailsGate({
     try {
       localStorage.setItem(DETAILS_KEY, JSON.stringify(d));
     } catch {}
-    submit(ownerId, employeeId, d, new URLSearchParams(window.location.search).get("src") || "card");
+    submit({ ownerId, employeeId, branchId }, d, new URLSearchParams(window.location.search).get("src") || "card");
     setMode("none"); // instant: don't make them wait for the network
   }
 
@@ -223,7 +240,7 @@ export default function VisitorDetailsGate({
         }
       }
       if (!frontPath && !(d.name && (d.phone || d.email))) return; // nothing to save
-      await submit(ownerId, employeeId, d, source, { front: frontPath, back: backPath });
+      await submit({ ownerId, employeeId, branchId }, d, source, { front: frontPath, back: backPath });
     })();
   }
 

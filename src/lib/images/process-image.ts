@@ -29,6 +29,12 @@ export interface ProcessedImage {
 
 export const AVATAR_IMAGE: ProcessOptions = { mode: "square", width: 320, targetBytes: 45 * 1024 };
 export const LOGO_IMAGE: ProcessOptions = { mode: "contain", width: 480, height: 240, targetBytes: 60 * 1024 };
+/** Square brand photo / logo for a branch (already cropped square). */
+export const SQUARE_PHOTO_IMAGE: ProcessOptions = { mode: "square", width: 400, targetBytes: 60 * 1024 };
+/** 16:9 cover photo (already cropped), max 1600 × 900. */
+export const COVER_IMAGE: ProcessOptions = { mode: "contain", width: 1600, height: 900, targetBytes: 220 * 1024 };
+/** Service / product photo, max 1000 × 1000, aspect kept. */
+export const ITEM_IMAGE: ProcessOptions = { mode: "contain", width: 1000, height: 1000, targetBytes: 120 * 1024 };
 
 const MAX_INPUT_BYTES = 15 * 1024 * 1024;
 

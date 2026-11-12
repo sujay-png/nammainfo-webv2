@@ -25,6 +25,8 @@ export interface EmployeeRecord {
   owner_business_name: string | null;
   owner_logo_url: string | null;
   owner_theme: string | null;
+  /** Link of the member's branch, when they work at one (migration 20261112). */
+  branch_slug?: string | null;
 }
 
 interface AccountState {
@@ -68,6 +70,21 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     const supabase = createClient();
     const { data } = await supabase.rpc("my_employee_record");
     const employee = (Array.isArray(data) ? data[0] : data) as EmployeeRecord | undefined;
+    if (employee) {
+      // Branch link for their card URL (/<business>/<branch>/<member>).
+      // Best effort: without it the old link still works (it redirects).
+      const { data: emp } = await supabase.from("employees").select("branch_id").eq("id", employee.id).maybeSingle();
+      const branchId = (emp as { branch_id?: string | null } | null)?.branch_id;
+      if (branchId) {
+        const { data: b } = await supabase
+          .from("branches")
+          .select("slug")
+          .eq("id", branchId)
+          .eq("is_active", true)
+          .maybeSingle();
+        employee.branch_slug = (b as { slug?: string } | null)?.slug ?? null;
+      }
+    }
     setState({
       loading: false,
       userId: user.id,
@@ -89,7 +106,10 @@ export function useAccount() {
 }
 
 /** Public link of an employee's card. */
-export function employeeCardUrl(e: Pick<EmployeeRecord, "owner_username" | "slug">) {
+export function employeeCardUrl(e: Pick<EmployeeRecord, "owner_username" | "slug" | "branch_slug">) {
   const origin = typeof window !== "undefined" ? window.location.origin : "https://nammainfo.in";
-  return e.owner_username ? `${origin}/${e.owner_username}/${e.slug}` : null;
+  if (!e.owner_username) return null;
+  return e.branch_slug
+    ? `${origin}/${e.owner_username}/${e.branch_slug}/${e.slug}`
+    : `${origin}/${e.owner_username}/${e.slug}`;
 }

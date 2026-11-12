@@ -51,6 +51,9 @@ import PublicTestimonials from "@/features/testimonials/components/public-testim
 import PublicClients from "@/features/clients/components/public-clients";
 import { cleanTestimonials } from "@/features/testimonials/types";
 import { cleanClients } from "@/features/clients/types";
+import PublicBranches from "@/features/branches/components/public-branches";
+import type { Branch, BranchSummary } from "@/features/branches/types";
+import { branchPath, profilePath } from "@/features/branches/lib/paths";
 
 /**
  * Ensure a URL string has a protocol prefix, so it opens as an absolute URL
@@ -682,6 +685,9 @@ export default function PublicProfileView({
   employees,
   isEmployeeView = false,
   hideHero = false,
+  branch = null,
+  branches = [],
+  handle,
 }: {
   profile: Profile;
   card: Card | null;
@@ -691,6 +697,12 @@ export default function PublicProfileView({
   isEmployeeView?: boolean;
   /** When true, hides the hero/header section (used when embedded inside employee view) */
   hideHero?: boolean;
+  /** The branch being shown. `profile` already has the branch merged in (applyBranch). */
+  branch?: Branch | null;
+  /** All active branches of this business, for the "Our Branches" list. */
+  branches?: BranchSummary[];
+  /** The business's link name (username, or the card link it was opened with). */
+  handle?: string;
 }) {
   const ownerTheme = getTheme(profile.theme);
   const directionsHref = directionsUrl(profile);
@@ -722,24 +734,18 @@ export default function PublicProfileView({
     image_url?: string;
   } | null>(null);
 
-  const [profileUrl, setProfileUrl] = useState(() => {
-    const base = "https://nammainfo.in";
-    return profile.username
-      ? `${base}/${profile.username}`
-      : card
-        ? `${base}/${card.public_slug}`
-        : base;
-  });
+  // Link name of this business, and the path of the page being shown
+  // (a branch has its own: /abc/mangaluru).
+  const linkName = handle ?? profile.username ?? card?.public_slug ?? null;
+  const pagePath = linkName ? (branch ? branchPath(linkName, branch.slug) : profilePath(linkName)) : null;
+
+  const [profileUrl, setProfileUrl] = useState(() =>
+    pagePath ? `https://nammainfo.in${pagePath}` : "https://nammainfo.in"
+  );
 
   useEffect(() => {
-    const origin = window.location.origin;
-    const url = profile.username
-      ? `${origin}/${profile.username}`
-      : card
-        ? `${origin}/${card.public_slug}`
-        : window.location.href;
-    setProfileUrl(url);
-  }, [profile.username, card]);
+    setProfileUrl(pagePath ? `${window.location.origin}${pagePath}` : window.location.href);
+  }, [pagePath]);
 
   /* Review tabs: service categories and product categories. Items with no
      category get a plain "Services" / "Products" tab, so products always
@@ -773,7 +779,7 @@ export default function PublicProfileView({
 
   async function saveContact() {
     saveContactFromUrl(
-      `/api/vcard/${profile.id}`,
+      `/api/vcard/${profile.id}${branch ? `?branch=${branch.id}` : ""}`,
       `${(profile.owner_name ?? profile.business_name ?? "contact").replace(/[^a-z0-9 ]/gi, "").trim() || "contact"}.vcf`
     );
   }
@@ -823,6 +829,7 @@ export default function PublicProfileView({
       {!isEmployeeView && (
         <VisitorDetailsGate
           ownerId={profile.id}
+          branchId={branch?.id ?? null}
           personName={profile.owner_name || profile.business_name || "them"}
           businessName={profile.business_name || profile.owner_name || "this business"}
           avatarUrl={profile.logo_url || profile.avatar_url}
@@ -892,6 +899,12 @@ export default function PublicProfileView({
                     .filter(Boolean)
                     .join(" · ")}
                 </p>
+                {branch && (
+                  <p className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-[var(--accent)] px-2.5 py-1 text-[11px] font-semibold text-[var(--foreground)]">
+                    <MapPin size={11} />
+                    {branch.name}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -1064,6 +1077,23 @@ export default function PublicProfileView({
         {clientList.length > 0 && (
           <CollapsibleSection title="Our Clients" icon={<Building2 size={15} />} badge={clientList.length}>
             <PublicClients items={clientList} />
+          </CollapsibleSection>
+        )}
+
+        {/* ── Our Branches ── */}
+        {linkName && branches.length > 0 && (
+          <CollapsibleSection
+            title="Our Branches"
+            icon={<MapPin size={15} />}
+            badge={branches.length + 1}
+            defaultOpen={Boolean(branch)}
+          >
+            <PublicBranches
+              handle={linkName}
+              branches={branches}
+              currentId={branch?.id ?? null}
+              mainCity={branch ? null : profile.city}
+            />
           </CollapsibleSection>
         )}
 
