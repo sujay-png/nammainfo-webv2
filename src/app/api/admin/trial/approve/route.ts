@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { requireAdminAuth } from "@/admin/shared/lib/admin-auth";
 import { saveAdminNotes } from "@/admin/shared/lib/admin-notes";
+import { sendWhatsAppTemplate } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +47,7 @@ export async function POST(request: Request) {
       is_member: true,
       status: "active",
       primary_card_count: 1,
+      purchased_id_count: 5,
       subscription_started_at: now.toISOString(),
       membership_expires_at: expiresAt,
       trial_status: "approved",
@@ -92,6 +94,20 @@ export async function POST(request: Request) {
         .from("cards")
         .update({ is_active: true })
         .eq("id", existingCard.id);
+    }
+
+    // Trigger automated WhatsApp notification to customer if phone number exists
+    if (profile.phone) {
+      const recipientName = profile.owner_name || profile.business_name || "Valued Customer";
+      const cardSlug = profile.username || profile.slug || "";
+      sendWhatsAppTemplate({
+        toPhone: profile.phone,
+        templateName: "trial_approved",
+        languageCode: "en",
+        bodyParameters: [recipientName, cardSlug],
+      }).catch((waErr) => {
+        console.error("[Admin Trial Approve] WhatsApp notification error:", waErr);
+      });
     }
 
     // Purge Next.js ISR & route cache so public profile and user dashboard reflect immediately

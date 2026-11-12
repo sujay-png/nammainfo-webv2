@@ -72,9 +72,13 @@ export const AdminLoginView: React.FC = () => {
       router.push(isSubdomain ? "/" : "/admin");
     } catch (err: any) {
       console.error("[Admin Login Error]:", err);
-      const msg = err.message || "Failed to sign in.";
-      if (msg.includes("Invalid login credentials")) {
+      const msg = err?.message || "Failed to sign in.";
+      if (/invalid login credentials/i.test(msg)) {
         setError("Invalid email or password. Please try again.");
+      } else if (/unexpected token|not valid json|<!doctype|doctype|syntaxerror|failed to fetch|network/i.test(msg)) {
+        setError("Unable to reach the sign-in service right now. Please try again in a moment.");
+      } else if (msg.includes("<") || msg.includes(">") || msg.includes("{") || msg.length > 120) {
+        setError("Something went wrong while signing in. Please try again.");
       } else {
         setError(msg);
       }

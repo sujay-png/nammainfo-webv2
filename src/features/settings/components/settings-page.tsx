@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import UpgradeToProModal from "@/components/UpgradeToProModal";
 import RenewalModal from "@/components/RenewalModal";
+import BuyPrimaryCardsModal from "@/components/BuyPrimaryCardsModal";
 import { getMembership } from "@/lib/membership";
 
 function OwnerSettingsPage() {
@@ -44,6 +45,7 @@ function OwnerSettingsPage() {
   const [showThemes, setShowThemes] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [showRenewalModal, setShowRenewalModal] = useState(false);
+  const [showBuyPrimaryModal, setShowBuyPrimaryModal] = useState(false);
   const [teamCount, setTeamCount] = useState(0);
   const [runningAsApp, setRunningAsApp] = useState(true);
   useEffect(() => setRunningAsApp(isRunningAsApp()), []);
@@ -233,6 +235,25 @@ function OwnerSettingsPage() {
             }
           }}
         />
+        <SettingsItem
+          icon={<CreditCard size={18} />}
+          label="Buy Additional Primary Card"
+          sublabel="Order extra physical NFC cards for your primary profile (₹500/card)"
+          badge={profile ? `${profile.primary_card_count || 1} active` : ""}
+          onClick={() => {
+            const isMember = Boolean(
+              profile?.subscription_plan === "pro" ||
+              profile?.subscription_plan === "lifetime" ||
+              profile?.subscription_plan === "trial" ||
+              profile?.is_member
+            );
+            if (isMember) {
+              setShowBuyPrimaryModal(true);
+            } else {
+              setShowUpgradeModal(true);
+            }
+          }}
+        />
       </div>
 
       {/* Appearance section */}
@@ -402,6 +423,19 @@ function OwnerSettingsPage() {
           employeesCount={teamCount}
           onSuccess={() => {
             setShowRenewalModal(false);
+            window.location.reload();
+          }}
+        />
+      )}
+
+      {/* Buy Additional Primary NFC Cards Modal */}
+      {profile && (
+        <BuyPrimaryCardsModal
+          isOpen={showBuyPrimaryModal}
+          onClose={() => setShowBuyPrimaryModal(false)}
+          profile={profile}
+          onSuccess={() => {
+            setShowBuyPrimaryModal(false);
             window.location.reload();
           }}
         />

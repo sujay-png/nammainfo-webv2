@@ -109,7 +109,7 @@ function OwnerTeamPage() {
 
   async function addEmployee() {
     if (!profile || !newEmp.name || !newEmp.designation) return;
-    if (availableSlots <= 0) {
+    if (!isTrial && availableSlots <= 0) {
       alert("No available team card slots. Please purchase additional team cards first.");
       setShowBuyTeamModal(true);
       return;
@@ -294,16 +294,18 @@ function OwnerTeamPage() {
   }
 
   // Primary card is the business owner's card
+  const isTrial = profile?.subscription_plan === "trial";
   const isMember = Boolean(
     profile?.subscription_plan === "pro" ||
     profile?.subscription_plan === "lifetime" ||
+    isTrial ||
     profile?.is_member
   );
   const primaryCards = Number(profile?.primary_card_count ?? (isMember ? 1 : 0));
 
-  // Employee quota is strictly the slots purchased for team members
-  const quota = isMember ? Number(profile?.purchased_id_count || 0) : 0;
-  const availableSlots = Math.max(0, quota - employees.length);
+  // Employee quota: Free Trial accounts have unlimited team additions during trial
+  const quota = isTrial ? employees.length : isMember ? Number(profile?.purchased_id_count || 0) : 0;
+  const availableSlots = isTrial ? 9999 : Math.max(0, quota - employees.length);
   const totalCards = primaryCards + employees.length;
   const renewalCost = calculateRenewalCost(primaryCards, employees.length);
 
@@ -317,35 +319,36 @@ function OwnerTeamPage() {
   return (
     <div className="mx-auto max-w-lg px-4 py-5 space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
           <Link
             href="/dashboard/settings"
-            className="rounded-xl border border-[var(--border)] p-2 transition hover:bg-[var(--accent)]"
+            className="shrink-0 rounded-[5px] border border-[var(--border)] p-2 transition hover:bg-[var(--accent)] text-[var(--foreground)]"
+            aria-label="Back to Settings"
           >
             <ArrowLeft size={16} />
           </Link>
-          <div>
-            <h1 className="font-headline text-xl font-semibold">
+          <div className="min-w-0 flex-1">
+            <h1 className="font-headline text-lg sm:text-xl font-bold tracking-tight text-[var(--foreground)] truncate">
               Team / Employees
             </h1>
-            <p className="font-mono text-[11px] text-[var(--muted-foreground)]">
+            <p className="font-mono text-[11px] text-[var(--muted-foreground)] truncate">
               {totalCards} Total Cards ({primaryCards} Primary + {employees.length} Team)
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="shrink-0">
           <button
             onClick={() => {
-              if (availableSlots > 0) {
+              if (isTrial || availableSlots > 0) {
                 setShowAdd(true);
               } else {
                 setShowBuyTeamModal(true);
               }
             }}
-            className="flex items-center gap-1.5 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 active:scale-[0.98] px-3.5 py-2 text-xs font-semibold shadow-sm transition-all cursor-pointer"
+            className="shrink-0 whitespace-nowrap inline-flex items-center justify-center gap-1.5 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 active:scale-[0.98] px-3 py-2 text-xs font-semibold shadow-sm transition-all cursor-pointer"
           >
-            <Plus size={14} />
+            <Plus size={14} strokeWidth={2.2} />
             <span>Add Member</span>
           </button>
         </div>
@@ -358,7 +361,7 @@ function OwnerTeamPage() {
             <div className="flex items-center gap-2">
               <Clock size={16} className="text-amber-600 dark:text-amber-400" />
               <span className="font-semibold text-sm text-[var(--foreground)]">
-                Organization Subscription Expiring Soon
+                {isTrial ? "Free Trial Ending Soon" : "Organization Subscription Expiring Soon"}
               </span>
             </div>
             <span className="font-mono text-xs font-bold text-amber-700 bg-amber-500/20 px-2 py-0.5 rounded-md">
@@ -366,17 +369,17 @@ function OwnerTeamPage() {
             </span>
           </div>
           <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
-            All team member cards sync with your company&apos;s annual expiry. Renewing now covers all <strong>{totalCards} cards</strong> (1 Primary + {employees.length} Team) at the volume rate of <strong>₹{renewalCost.unitPrice}/card</strong>:
+            All team member cards sync with your company&apos;s annual expiry. Upgrading now covers all <strong>{totalCards} cards</strong> (1 Primary + {employees.length} Team) at the volume rate of <strong>₹{renewalCost.unitPrice}/card</strong>:
           </p>
           <div className="flex items-center justify-between pt-1 border-t border-amber-500/20">
             <span className="font-headline font-bold text-sm text-[var(--foreground)]">
-              Total Renewal: ₹{renewalCost.totalAmount.toLocaleString("en-IN")}
+              Total {isTrial ? "Pro Upgrade" : "Renewal"}: ₹{renewalCost.totalAmount.toLocaleString("en-IN")}
             </span>
             <button
               onClick={() => setShowRenewalModal(true)}
               className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shadow-sm transition"
             >
-              Renew All Cards
+              {isTrial ? "Upgrade to Pro" : "Renew Subscription"}
             </button>
           </div>
         </div>
@@ -388,36 +391,44 @@ function OwnerTeamPage() {
           <div className="flex items-center gap-2">
             <Users size={16} className="text-[var(--primary)]" />
             <span className="text-xs font-semibold text-[var(--foreground)]">
-              Card Slots Quota:
+              {isTrial ? "Trial Team Members:" : "Card Slots Quota:"}
             </span>
           </div>
           <span className="font-mono text-xs font-bold text-[var(--foreground)]">
-            {employees.length} of {quota} Slots Used
+            {isTrial
+              ? `${employees.length} Team Members Added`
+              : `${employees.length} of ${quota} Slots Used`}
           </span>
         </div>
 
-        <div className="h-1.5 overflow-hidden rounded-full bg-[var(--muted)]">
-          <div
-            className="h-full rounded-full bg-[var(--primary)] transition-all duration-500"
-            style={{ width: `${Math.min(100, quota > 0 ? (employees.length / quota) * 100 : 0)}%` }}
-          />
-        </div>
+        {!isTrial && (
+          <div className="h-1.5 overflow-hidden rounded-full bg-[var(--muted)]">
+            <div
+              className="h-full rounded-full bg-[var(--primary)] transition-all duration-500"
+              style={{ width: `${Math.min(100, quota > 0 ? (employees.length / quota) * 100 : 0)}%` }}
+            />
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
           <span className="text-xs text-[var(--muted-foreground)]">
-            {availableSlots > 0
+            {isTrial
+              ? "Unlimited team members during your 100-day Free Trial. When upgrading to Pro, all cards renew together."
+              : availableSlots > 0
               ? `${availableSlots} slot${availableSlots === 1 ? "" : "s"} ready to assign`
               : quota === 0
-              ? "0 paid employee slots — purchase cards below to add members"
-              : "All paid employee slots currently assigned"}
+              ? "0 employee slots — purchase cards below to add members"
+              : "All employee slots currently assigned"}
           </span>
-          <button
-            onClick={() => setShowBuyTeamModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--accent)] hover:bg-[var(--accent)]/80 text-[var(--foreground)] text-xs font-semibold transition cursor-pointer"
-          >
-            <CreditCard size={13} />
-            <span>Buy More Team Cards</span>
-          </button>
+          {!isTrial && (
+            <button
+              onClick={() => setShowBuyTeamModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-[5px] border border-[var(--border)] bg-[var(--accent)] hover:bg-[var(--accent)]/80 text-[var(--foreground)] text-xs font-semibold transition cursor-pointer"
+            >
+              <CreditCard size={13} />
+              <span>Buy More Team Cards</span>
+            </button>
+          )}
         </div>
       </div>
 

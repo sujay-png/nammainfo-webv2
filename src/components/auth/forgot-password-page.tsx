@@ -37,13 +37,17 @@ export default function ForgotPasswordPage() {
       setSent(true);
     } catch (err) {
       const message = err instanceof Error ? err.message : "";
-      setError(
-        typeof navigator !== "undefined" && navigator.onLine === false
-          ? "Couldn't connect to Namma Info. Please try again. If it keeps happening, your Wi-Fi or office network may be blocking us: try mobile data."
-          : /rate limit|too many|429|security purposes/i.test(message)
-            ? "Too many requests. Please wait a minute before asking for another link."
-            : message || "Something went wrong. Please try again."
-      );
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        setError("Couldn't connect to Namma Info. Please try again. If it keeps happening, your Wi-Fi or office network may be blocking us: try mobile data.");
+      } else if (/unexpected token|not valid json|<!doctype|doctype|syntaxerror|failed to fetch|network/i.test(message)) {
+        setError("Unable to reach the service right now. Please check your connection and try again.");
+      } else if (/rate limit|too many|429|security purposes/i.test(message)) {
+        setError("Too many requests. Please wait a minute before asking for another link.");
+      } else if (message.includes("<") || message.includes(">") || message.length > 120) {
+        setError("Something went wrong. Please try again.");
+      } else {
+        setError(message || "Something went wrong. Please try again.");
+      }
     } finally {
       setLoading(false);
     }

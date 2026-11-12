@@ -249,10 +249,10 @@ export default function BuyTeamCardsModal({
 
           <div className="flex items-center justify-between border-b border-[var(--border)] pb-2">
             <div className="flex items-center gap-1.5">
-              <span className="text-[var(--muted-foreground)]">Applied Volume Rate</span>
-              {cost.unitPrice < 1999 && (
-                <span className="bg-emerald-500/10 text-emerald-600 font-mono text-[9px] px-1.5 py-0.5 rounded font-bold border border-emerald-500/20">
-                  Volume Tier
+              <span className="text-[var(--muted-foreground)]">Applied Rate</span>
+              {cost.newTotalCards >= 5 && (
+                <span className="rounded-[4px] border border-[var(--border)] bg-[var(--card)] px-1.5 py-0.5 font-mono text-[9px] font-semibold text-[var(--foreground)]">
+                  Volume Tier ({cost.newTotalCards >= 25 ? "25+ Cards" : "5+ Cards"})
                 </span>
               )}
             </div>
@@ -322,7 +322,7 @@ export default function BuyTeamCardsModal({
           ) : (
             <>
               <CreditCard size={15} />
-              <span>Pay ₹{cost.totalAmount.toLocaleString("en-IN")} via Razorpay</span>
+              <span>Pay ₹{cost.totalAmount.toLocaleString("en-IN")}</span>
             </>
           )}
         </button>

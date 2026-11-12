@@ -21,6 +21,8 @@ import {
   Building2,
   User,
   MessageSquare,
+  Minus,
+  Plus,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Profile } from "@/lib/supabase/types";
@@ -86,6 +88,9 @@ export default function UpgradeToProModal({
     notes: "",
   });
 
+  // Step 3 / Pricing: Primary card quantity (1 included with base Pro, +₹500 per additional card)
+  const [primaryCardQuantity, setPrimaryCardQuantity] = useState<number>(1);
+
   // Unique idempotency key per checkout attempt
   const [idempotencyKey, setIdempotencyKey] = useState<string>("");
 
@@ -96,6 +101,7 @@ export default function UpgradeToProModal({
       setDesignOption(null);
       setVisitingCardFile(null);
       setVisitingCardPreview(null);
+      setPrimaryCardQuantity(1);
       setCardDetails({
         companyName: profile.business_name || "",
         ownerName: profile.owner_name || "",
@@ -119,99 +125,10 @@ export default function UpgradeToProModal({
 
   if (!isOpen) return null;
 
-  if (!completion.isComplete) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-        <div className="w-full max-w-lg max-h-[92dvh] flex flex-col rounded-3xl border border-[var(--border)] bg-[var(--card)] shadow-2xl relative overflow-hidden">
-          {/* Close Button */}
-          <button
-            onClick={onClose}
-            className="absolute top-4 right-4 sm:top-5 sm:right-5 p-2 rounded-xl text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors cursor-pointer z-10"
-          >
-            <X size={18} />
-          </button>
-
-          <div className="flex-1 overflow-y-auto p-5 sm:p-7 space-y-4 sm:space-y-5">
-
-          {/* Header */}
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-1.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-              <AlertCircle size={12} />
-              <span>100% Profile Required</span>
-            </div>
-            <h2 className="font-headline text-xl sm:text-2xl font-bold text-[var(--foreground)]">
-              Complete Profile Before Upgrading
-            </h2>
-            <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
-              To ensure your custom physical NFC card is engraved accurately and your vanity link (<code className="font-mono text-[11px] text-[var(--foreground)]">namma.info/{profile.username || "username"}</code>) is ready for public sharing, your profile must be 100% complete before checkout.
-            </p>
-          </div>
-
-          {/* Progress Bar */}
-          <div className="space-y-2 p-3.5 rounded-2xl bg-[var(--accent)]/40 border border-[var(--border)]">
-            <div className="flex items-center justify-between text-xs font-medium">
-              <span className="text-[var(--foreground)] font-semibold">Profile Completion</span>
-              <span className="font-mono text-xs font-bold text-[var(--primary)]">
-                {completion.percentage}% ({completion.completedCount}/{completion.totalCount} completed)
-              </span>
-            </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--muted)]">
-              <div
-                className="h-full rounded-full bg-[var(--primary)] transition-all duration-500"
-                style={{ width: `${completion.percentage}%` }}
-              />
-            </div>
-          </div>
-
-          {/* Missing Checklist */}
-          <div className="space-y-2">
-            <span className="text-xs font-semibold text-[var(--foreground)] block">
-              Remaining items to finish ({completion.missingItems.length}):
-            </span>
-            <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
-              {completion.missingItems.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center justify-between p-2.5 rounded-xl border border-[var(--border)] bg-[var(--background)] text-xs"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="h-4 w-4 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-600 flex items-center justify-center shrink-0">
-                      <AlertCircle size={10} />
-                    </div>
-                    <span className="text-[var(--foreground)] font-medium">{item.label}</span>
-                  </div>
-                  <span className="text-[10px] font-mono text-[var(--muted-foreground)] uppercase">
-                    Pending
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* CTA Buttons */}
-          <div className="space-y-2 pt-1">
-            <button
-              onClick={() => {
-                onClose();
-                router.push("/dashboard/profile");
-              }}
-              className="w-full flex items-center justify-center gap-2 py-3 px-5 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] font-semibold text-xs shadow-md hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
-            >
-              <span>Complete Profile Now</span>
-              <ArrowRight size={14} />
-            </button>
-            <button
-              onClick={onClose}
-              className="w-full py-2.5 px-4 rounded-xl text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors cursor-pointer text-center"
-            >
-              I&apos;ll do this later
-            </button>
-          </div>
-        </div>
-        </div>
-      </div>
-    );
-  }
+  const extraPrimaryCards = Math.max(0, primaryCardQuantity - 1);
+  const extraCost = extraPrimaryCards * 500;
+  const basePrice = 1999;
+  const totalAmount = basePrice + extraCost;
 
   // Handle existing visiting card file selection
   const handleVisitingCardChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -346,7 +263,7 @@ export default function UpgradeToProModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           orderType: "pro_initial",
-          cardQuantity: 1,
+          cardQuantity: primaryCardQuantity,
           designUrl: finalDesignUrl,
           designMode: designOption === "upload_card" ? "uploaded" : "team_assist",
           shippingAddress: shippingPayload,
@@ -360,7 +277,7 @@ export default function UpgradeToProModal({
         throw new Error(orderData.error || "Failed to create payment order");
       }
 
-      const { razorpayOrderId, amount, key, cardQuantity, unitPrice, totalAmount } = orderData;
+      const { razorpayOrderId, amount, key, cardQuantity, unitPrice, totalAmount: orderTotal } = orderData;
 
       if (!key) {
         throw new Error("Razorpay API Key is not configured. Please add NEXT_PUBLIC_RAZORPAY_KEY_ID in .env.");
@@ -388,7 +305,10 @@ export default function UpgradeToProModal({
         amount,
         currency: "INR",
         name: "Namma Info",
-        description: "Pro Subscription + Custom NFC Business Card",
+        description:
+          primaryCardQuantity > 1
+            ? `Pro Subscription + ${primaryCardQuantity} Primary NFC Cards`
+            : "Pro Subscription + Custom NFC Business Card",
         order_id: razorpayOrderId,
         prefill: {
           name: shippingData.fullName,
@@ -404,9 +324,9 @@ export default function UpgradeToProModal({
             razorpayPaymentId: response.razorpay_payment_id,
             razorpaySignature: response.razorpay_signature,
             orderType: "pro_initial",
-            cardQuantity: cardQuantity || 1,
-            unitPrice: unitPrice || 1999,
-            totalAmount: totalAmount || 1999,
+            cardQuantity: cardQuantity || primaryCardQuantity,
+            unitPrice: unitPrice || Math.round(totalAmount / primaryCardQuantity),
+            totalAmount: orderTotal || totalAmount,
             designUrl: finalDesignUrl,
             designMode: designOption === "upload_card" ? "uploaded" : "team_assist",
             shippingAddress: shippingPayload,
@@ -946,21 +866,80 @@ export default function UpgradeToProModal({
         {/* STEP 3: Payment & Summary */}
         {step === 3 && (
           <div className="space-y-4">
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--accent)]/30 p-4 space-y-3">
+            {/* Primary NFC Cards Quantity Stepper */}
+            <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <CreditCard size={15} className="text-[var(--primary)]" />
+                    <span className="font-semibold text-xs text-[var(--foreground)]">
+                      Primary NFC Cards
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[var(--muted-foreground)]">
+                    1 card included. Extra cards for office, wallet, or car at ₹500/each.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 border border-[var(--border)] rounded-[5px] bg-[var(--background)] px-2.5 py-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setPrimaryCardQuantity((q) => Math.max(1, q - 1))}
+                    disabled={primaryCardQuantity <= 1 || loading}
+                    className="p-1 rounded-[4px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed transition"
+                    aria-label="Decrease primary cards"
+                  >
+                    <Minus size={13} />
+                  </button>
+                  <span className="w-6 text-center font-mono font-bold text-xs text-[var(--foreground)]">
+                    {primaryCardQuantity}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPrimaryCardQuantity((q) => Math.min(20, q + 1))}
+                    disabled={primaryCardQuantity >= 20 || loading}
+                    className="p-1 rounded-[4px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed transition"
+                    aria-label="Increase primary cards"
+                  >
+                    <Plus size={13} />
+                  </button>
+                </div>
+              </div>
+
+              {extraPrimaryCards > 0 && (
+                <div className="flex items-center justify-between text-[11px] pt-1.5 border-t border-[var(--border)] text-[var(--muted-foreground)]">
+                  <span>Additional Primary Cards ({extraPrimaryCards} × ₹500):</span>
+                  <span className="font-mono font-semibold text-[var(--foreground)]">
+                    +₹{extraCost.toLocaleString("en-IN")}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-[5px] border border-[var(--border)] bg-[var(--accent)]/30 p-4 space-y-3">
               <div className="flex items-center justify-between border-b border-[var(--border)] pb-2 text-xs">
                 <div>
                   <span className="font-semibold text-[var(--foreground)] block">Pro Membership (1 Year)</span>
                   <span className="text-[11px] text-[var(--muted-foreground)]">Custom vanity profile URL & premium features</span>
                 </div>
-                <span className="font-mono font-bold text-[var(--foreground)]">Included</span>
+                <span className="font-mono font-bold text-[var(--foreground)]">₹1,999</span>
               </div>
 
               <div className="flex items-center justify-between border-b border-[var(--border)] pb-2 text-xs">
                 <div>
-                  <span className="font-semibold text-[var(--foreground)] block">Custom NFC Physical Card</span>
-                  <span className="text-[11px] text-[var(--muted-foreground)]">Tap-to-share contactless business card</span>
+                  <span className="font-semibold text-[var(--foreground)] block">
+                    {primaryCardQuantity === 1
+                      ? "Custom NFC Physical Card (1 Included)"
+                      : `Custom NFC Physical Cards (${primaryCardQuantity} Cards)`}
+                  </span>
+                  <span className="text-[11px] text-[var(--muted-foreground)]">
+                    {primaryCardQuantity === 1
+                      ? "Tap-to-share contactless business card included"
+                      : `1 included + ${extraPrimaryCards} additional @ ₹500/ea`}
+                  </span>
                 </div>
-                <span className="font-mono font-bold text-[var(--foreground)]">Included</span>
+                <span className="font-mono font-bold text-[var(--foreground)]">
+                  {extraPrimaryCards > 0 ? `+₹${extraCost.toLocaleString("en-IN")}` : "Included"}
+                </span>
               </div>
 
               <div className="flex items-center justify-between border-b border-[var(--border)] pb-2 text-xs">
@@ -986,7 +965,7 @@ export default function UpgradeToProModal({
                 </div>
                 <div className="text-right">
                   <span className="font-headline text-2xl font-extrabold text-[var(--foreground)]">
-                    ₹1,999
+                    ₹{totalAmount.toLocaleString("en-IN")}
                   </span>
                 </div>
               </div>
@@ -994,7 +973,7 @@ export default function UpgradeToProModal({
 
             <div className="flex items-center gap-2 text-[11px] text-[var(--muted-foreground)]">
               <ShieldCheck size={16} className="text-emerald-500 shrink-0" />
-              <span>Secured by Razorpay • 100% Safe & Secure Payment</span>
+              <span>100% Safe & Secure Payment</span>
             </div>
 
             <div className="flex items-center justify-between pt-2">
@@ -1002,7 +981,7 @@ export default function UpgradeToProModal({
                 type="button"
                 onClick={() => setStep(2)}
                 disabled={loading}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-[5px] text-xs font-semibold text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors cursor-pointer"
               >
                 <ArrowLeft size={14} />
                 <span>Back</span>
@@ -1011,7 +990,7 @@ export default function UpgradeToProModal({
                 type="button"
                 onClick={handleRazorpayPayment}
                 disabled={loading}
-                className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] font-semibold text-xs shadow-md hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50 cursor-pointer"
+                className="flex items-center gap-2 px-6 py-2.5 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] font-semibold text-xs shadow-md hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50 cursor-pointer"
               >
                 {loading ? (
                   <>
@@ -1021,7 +1000,7 @@ export default function UpgradeToProModal({
                 ) : (
                   <>
                     <CreditCard size={15} />
-                    <span>Pay ₹1,999 via Razorpay</span>
+                    <span>Pay ₹{totalAmount.toLocaleString("en-IN")}</span>
                   </>
                 )}
               </button>
