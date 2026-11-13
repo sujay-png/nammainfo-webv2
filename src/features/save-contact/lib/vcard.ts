@@ -1,4 +1,4 @@
-import type { Employee, Profile } from "@/supabase/database-types";
+import type { ContactRow, Employee, Profile } from "@/supabase/database-types";
 
 /* ------------------------------------------------------------------ */
 /*  vCard 3.0 builder                                                  */
@@ -103,6 +103,20 @@ export function buildEmployeeVCard(
     owner.address && `ADR;TYPE=WORK:;;${esc(owner.address)};;;;`,
     opts.photo && `PHOTO;ENCODING=b;TYPE=${opts.photo.type}:${opts.photo.base64}`,
     opts.sourceUrl && `SOURCE:${opts.sourceUrl}`,
+  ]);
+}
+
+export function buildContactVCard(contact: ContactRow) {
+  const noteLines = [
+    contact.category && `Category: ${contact.category}`,
+    contact.note && `Note: ${contact.note}`,
+  ].filter(Boolean);
+
+  return finish([
+    ...nameLines(contact.name, "Contact"),
+    contact.phone && `TEL;TYPE=CELL,VOICE:${esc(contact.phone)}`,
+    contact.email && `EMAIL;TYPE=INTERNET:${esc(contact.email)}`,
+    noteLines.length > 0 && `NOTE:${esc(noteLines.join("\n"))}`,
   ]);
 }
 

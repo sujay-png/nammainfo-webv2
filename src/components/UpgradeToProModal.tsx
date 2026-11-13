@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   X,
   CreditCard,
@@ -93,6 +94,21 @@ export default function UpgradeToProModal({
 
   // Unique idempotency key per checkout attempt
   const [idempotencyKey, setIdempotencyKey] = useState<string>("");
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -123,7 +139,7 @@ export default function UpgradeToProModal({
     }
   }, [isOpen, profile]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const extraPrimaryCards = Math.max(0, primaryCardQuantity - 1);
   const extraCost = extraPrimaryCards * 500;
@@ -376,11 +392,11 @@ export default function UpgradeToProModal({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-xl max-h-[92dvh] h-auto flex flex-col rounded-[5px] border border-[var(--border)] bg-[var(--card)] shadow-2xl overflow-hidden">
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex flex-col sm:items-center sm:justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4 animate-fade-in">
+      <div className="w-full sm:max-w-xl h-dvh sm:h-auto sm:max-h-[90dvh] flex flex-col bg-[var(--card)] rounded-none sm:rounded-[5px] border-0 sm:border border-[var(--border)] shadow-2xl overflow-hidden">
         {/* Fixed Modal Header */}
-        <div className="p-4 sm:p-5 border-b border-[var(--border)] bg-[var(--card)] shrink-0 space-y-3">
+        <div className="p-4 pt-safe sm:p-5 border-b border-[var(--border)] bg-[var(--card)] shrink-0 space-y-3">
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1">
               <div className="flex items-center gap-1.5 font-mono text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
@@ -398,10 +414,10 @@ export default function UpgradeToProModal({
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="p-1.5 rounded-[5px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors cursor-pointer shrink-0"
+              className="p-2 -mr-1 rounded-[5px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors cursor-pointer shrink-0"
               aria-label="Close modal"
             >
-              <X size={18} />
+              <X size={19} />
             </button>
           </div>
 
@@ -439,7 +455,7 @@ export default function UpgradeToProModal({
         </div>
 
         {/* Scrollable Form Body */}
-        <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-5 space-y-4">
           {errorMsg && (
             <div className="flex items-center gap-2 p-3 rounded-[5px] bg-rose-500/10 border border-rose-500/20 text-rose-600 text-xs">
               <AlertCircle size={15} className="shrink-0" />
@@ -955,7 +971,7 @@ export default function UpgradeToProModal({
         </div>
 
         {/* Pinned Modal Footer */}
-        <div className="p-3.5 sm:p-4 border-t border-[var(--border)] bg-[var(--card)] shrink-0 flex items-center justify-between gap-3">
+        <div className="p-3.5 pb-safe sm:p-4 border-t border-[var(--border)] bg-[var(--card)] shrink-0 flex items-center justify-between gap-3">
           {step === 1 ? (
             <>
               <button
@@ -1030,6 +1046,7 @@ export default function UpgradeToProModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

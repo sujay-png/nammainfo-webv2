@@ -23,6 +23,7 @@ export interface SavedCardSummary {
   avatar_url?: string | null;
   username: string | null;
   slug: string | null;
+  category?: string | null;
   saved_at: string;
 }
 

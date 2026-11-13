@@ -2,7 +2,23 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Bookmark, ChevronRight, IdCard, Mail, MessageCircle, Pencil, Phone, Plus, Search, Trash2, UserRound } from "lucide-react";
+import {
+  Bookmark,
+  ChevronRight,
+  IdCard,
+  Mail,
+  MessageCircle,
+  Pencil,
+  Phone,
+  Plus,
+  Search,
+  Trash2,
+  UserRound,
+  UserPlus,
+  MoreVertical,
+  Upload,
+  Loader2,
+} from "lucide-react";
 import { createClient } from "@/supabase/client";
 import { useAccount } from "@/hooks/use-account";
 import { flushPendingSaves, readSavedCache, writeSavedCache, type SavedCardSummary } from "@/features/saved-cards/services/saved-cards.service";
@@ -13,6 +29,7 @@ import Sheet, { ui } from "@/components/ui/sheet";
 import { deleteCardPhotos, getCardPhotoUrls } from "@/features/contacts/services/business-card-upload.service";
 import { listMyBranches } from "@/features/branches/services/branches.service";
 import type { Branch } from "@/features/branches/types";
+import { saveContactFromUrl } from "@/features/save-contact/lib/save-contact";
 
 /* ------------------------------------------------------------------ */
 /*  Saved: two tabs                                                     */
@@ -38,8 +55,11 @@ function SavedInner() {
   const { loading: accountLoading, userId, role } = useAccount();
   const isOwner = role === "owner";
 
+  type SortOption = "recent" | "az" | "za";
+
   const [tab, setTab] = useState<"cards" | "contacts">(params.get("tab") === "contacts" ? "contacts" : "cards");
   const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState<SortOption>("recent");
   const [who, setWho] = useState<string>("all"); // all | me | <employee id>
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -50,11 +70,14 @@ function SavedInner() {
   const [contacts, setContacts] = useState<ContactRow[]>([]);
   const [contactsLoading, setContactsLoading] = useState(true);
   const [category, setCategory] = useState<string>("All");
+  const [savedCardCategory, setSavedCardCategory] = useState<string>("All");
   const [openContact, setOpenContact] = useState<ContactRow | null>(null);
+  const [categorizingCard, setCategorizingCard] = useState<SavedItem | null>(null);
 
   function switchTab(t: "cards" | "contacts") {
     setTab(t);
     setCategory("All");
+    setSavedCardCategory("All");
     router.replace(t === "contacts" ? "/dashboard/saved?tab=contacts" : "/dashboard/saved", { scroll: false });
   }
 
@@ -72,12 +95,12 @@ function SavedInner() {
       const supabase = createClient();
 
       const [{ data: mine }, teamRes, membersRes] = await Promise.all([
-        supabase.from("connections").select("connected_user_id, created_at").eq("user_id", userId).order("created_at", { ascending: false }),
+        supabase.from("connections").select("connected_user_id, created_at, category").eq("user_id", userId).order("created_at", { ascending: false }),
         isOwner ? supabase.rpc("team_saved_cards") : Promise.resolve({ data: [] }),
         isOwner ? supabase.from("employees").select("id, name, user_id").eq("owner_id", userId).order("created_at") : Promise.resolve({ data: [] }),
       ]);
-      const mineRows = (mine ?? []) as { connected_user_id: string; created_at: string }[];
-      const teamRows = ((teamRes.data ?? []) as { employee_id: string; employee_name: string; connected_user_id: string; saved_at: string }[]) ?? [];
+      const mineRows = (mine ?? []) as { connected_user_id: string; created_at: string; category?: string | null }[];
+      const teamRows = ((teamRes.data ?? []) as { employee_id: string; employee_name: string; connected_user_id: string; saved_at: string; category?: string | null }[]) ?? [];
       const members = ((membersRes.data ?? []) as { id: string; name: string; user_id: string | null }[]).filter((m) => m.user_id);
       if (!cancelled) setTeam(members.map((m) => ({ id: m.id, name: m.name })));
 
@@ -88,10 +111,10 @@ function SavedInner() {
         byId = new Map(((profs ?? []) as Omit<SavedCardSummary, "saved_at">[]).map((p) => [p.id, p]));
       }
       const mineItems: SavedItem[] = mineRows
-        .map((r) => (byId.get(r.connected_user_id) ? { ...byId.get(r.connected_user_id)!, saved_at: r.created_at, saved_by: null } : null))
+        .map((r) => (byId.get(r.connected_user_id) ? { ...byId.get(r.connected_user_id)!, saved_at: r.created_at, saved_by: null, category: r.category || null } : null))
         .filter(Boolean) as SavedItem[];
       const teamItems: SavedItem[] = teamRows
-        .map((r) => (byId.get(r.connected_user_id) ? { ...byId.get(r.connected_user_id)!, saved_at: r.saved_at, saved_by: r.employee_id } : null))
+        .map((r) => (byId.get(r.connected_user_id) ? { ...byId.get(r.connected_user_id)!, saved_at: r.saved_at, saved_by: r.employee_id, category: r.category || null } : null))
         .filter(Boolean) as SavedItem[];
 
       if (cancelled) return;
@@ -127,16 +150,37 @@ function SavedInner() {
   const teamName = (id: string | null) => team.find((t) => t.id === id)?.name ?? "Team";
   const q = search.trim().toLowerCase();
 
-  const visibleCards = useMemo(
-    () =>
-      cards.filter((c) => {
-        if (who === "me" && c.saved_by) return false;
-        if (who !== "all" && who !== "me" && c.saved_by !== who) return false;
-        if (!q) return true;
-        return [c.owner_name, c.business_name, c.job_title].some((v) => v?.toLowerCase().includes(q));
-      }),
-    [cards, who, q]
-  );
+  const cardCategories = useMemo(() => {
+    const set = new Set<string>();
+    cards.forEach((c) => {
+      if (c.category) set.add(c.category);
+    });
+    return ["All", ...Array.from(set).sort()];
+  }, [cards]);
+
+  const visibleCards = useMemo(() => {
+    let list = cards.filter((c) => {
+      if (who === "me" && c.saved_by) return false;
+      if (who !== "all" && who !== "me" && c.saved_by !== who) return false;
+      if (savedCardCategory !== "All" && (c.category || "Uncategorized") !== savedCardCategory) return false;
+      if (!q) return true;
+      return [c.owner_name, c.business_name, c.job_title, c.category].some((v) => v?.toLowerCase().includes(q));
+    });
+
+    if (sortBy === "az") {
+      list = [...list].sort((a, b) =>
+        (a.owner_name || a.business_name || "").localeCompare(b.owner_name || b.business_name || "")
+      );
+    } else if (sortBy === "za") {
+      list = [...list].sort((a, b) =>
+        (b.owner_name || b.business_name || "").localeCompare(a.owner_name || a.business_name || "")
+      );
+    } else {
+      list = [...list].sort((a, b) => b.saved_at.localeCompare(a.saved_at));
+    }
+
+    return list;
+  }, [cards, who, savedCardCategory, q, sortBy]);
 
   const whoContacts = useMemo(
     () =>
@@ -154,32 +198,72 @@ function SavedInner() {
     const set = new Set<string>(whoContacts.map((c) => c.category));
     return ["All", ...Array.from(set).sort((a, b) => (a === "New" ? -1 : b === "New" ? 1 : a.localeCompare(b)))];
   }, [whoContacts]);
-  const visibleContacts = useMemo(
-    () =>
-      whoContacts.filter((c) => {
-        if (category !== "All" && c.category !== category) return false;
-        if (!q) return true;
-        return [c.name, c.phone, c.email, c.category, c.note].some((v) => v?.toLowerCase().includes(q));
-      }),
-    [whoContacts, category, q]
-  );
+
+  const visibleContacts = useMemo(() => {
+    let list = whoContacts.filter((c) => {
+      if (category !== "All" && c.category !== category) return false;
+      if (!q) return true;
+      return [c.name, c.phone, c.email, c.category, c.note].some((v) => v?.toLowerCase().includes(q));
+    });
+
+    if (sortBy === "az") {
+      list = [...list].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    } else if (sortBy === "za") {
+      list = [...list].sort((a, b) => (b.name || "").localeCompare(a.name || ""));
+    } else {
+      list = [...list].sort((a, b) =>
+        (b.last_seen_at || b.created_at).localeCompare(a.last_seen_at || a.created_at)
+      );
+    }
+
+    return list;
+  }, [whoContacts, category, q, sortBy]);
+
+  async function updateSavedCardCategory(cardId: string, cat: string) {
+    const formatted = cat.trim() || null;
+    setCards((prev) =>
+      prev.map((c) => (c.id === cardId ? { ...c, category: formatted } : c))
+    );
+    setCategorizingCard(null);
+
+    const supabase = createClient();
+    await supabase.rpc("update_saved_card_category", {
+      p_connected_user_id: cardId,
+      p_category: formatted ?? "",
+    } as never);
+
+    if (userId) {
+      const updated = cards.map((c) => (c.id === cardId ? { ...c, category: formatted } : c));
+      writeSavedCache(userId, updated);
+    }
+  }
 
   async function updateContact(
     id: string,
-    patch: Partial<Pick<ContactRow, "category" | "note" | "name" | "phone" | "email">>
+    patch: Partial<Pick<ContactRow, "category" | "note" | "name" | "phone" | "email" | "card_front_path" | "card_back_path">>
   ) {
     const apply = (p: Partial<ContactRow>) => {
       setContacts((prev) => prev.map((c) => (c.id === id ? { ...c, ...p } : c)));
       setOpenContact((c) => (c && c.id === id ? { ...c, ...p } : c));
     };
     apply(patch);
-    const { data } = await createClient()
-      .from("contacts")
-      .update(patch as never)
-      .eq("id", id)
-      .select("name, phone, email")
-      .maybeSingle();
-    if (data) apply(data as Partial<ContactRow>); // server tidies the number format
+
+    const dbPatch: Record<string, any> = {};
+    if (patch.name !== undefined) dbPatch.name = patch.name;
+    if (patch.phone !== undefined) dbPatch.phone = patch.phone;
+    if (patch.email !== undefined) dbPatch.email = patch.email;
+    if (patch.category !== undefined) dbPatch.category = patch.category;
+    if (patch.note !== undefined) dbPatch.note = patch.note;
+
+    if (Object.keys(dbPatch).length > 0) {
+      const { data } = await createClient()
+        .from("contacts")
+        .update(dbPatch as never)
+        .eq("id", id)
+        .select("name, phone, email")
+        .maybeSingle();
+      if (data) apply(data as Partial<ContactRow>); // server tidies the number format
+    }
   }
   async function deleteContact(id: string) {
     const gone = contacts.find((c) => c.id === id);
@@ -228,19 +312,33 @@ function SavedInner() {
         ))}
       </div>
 
-      {/* Search */}
-      <div className="relative mb-3">
-        <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]" />
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={tab === "cards" ? "Search by name or business" : "Search by name, number or category"}
-          className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] pl-9 pr-3 text-sm outline-none transition placeholder:text-[var(--muted-foreground)] focus:border-[var(--muted-foreground)]"
-        />
+      {/* Search & Sort */}
+      <div className="mb-3 flex items-center gap-2">
+        <div className="relative min-w-0 flex-1">
+          <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={tab === "cards" ? "Search by name or business" : "Search by name, number or category"}
+            className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] pl-9 pr-3 text-sm outline-none transition placeholder:text-[var(--muted-foreground)] focus:border-[var(--muted-foreground)]"
+          />
+        </div>
+        <div className="relative shrink-0">
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SortOption)}
+            aria-label="Sort list"
+            className="h-10 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-xs font-medium text-[var(--foreground)] outline-none transition focus:border-[var(--muted-foreground)] cursor-pointer"
+          >
+            <option value="recent">Recently Added</option>
+            <option value="az">A – Z</option>
+            <option value="za">Z – A</option>
+          </select>
+        </div>
       </div>
 
       {/* Filters */}
-      {(showWho || showBranches || (tab === "contacts" && categories.length > 2)) && (
+      {(showWho || showBranches || (tab === "cards" && cardCategories.length > 2) || (tab === "contacts" && categories.length > 2)) && (
         <div className="mb-4 space-y-2">
           {showBranches && (
             <FilterRow>
@@ -260,6 +358,16 @@ function SavedInner() {
               {team.map((t) => (
                 <Chip key={t.id} active={who === t.id} onClick={() => setWho(t.id)}>
                   {t.name.split(" ")[0]}
+                </Chip>
+              ))}
+            </FilterRow>
+          )}
+          {tab === "cards" && cardCategories.length > 2 && (
+            <FilterRow>
+              {cardCategories.map((c) => (
+                <Chip key={c} active={savedCardCategory === c} onClick={() => setSavedCardCategory(c)}>
+                  {c !== "All" && <Dot category={c} />}
+                  {c}
                 </Chip>
               ))}
             </FilterRow>
@@ -289,13 +397,14 @@ function SavedInner() {
         ) : (
           <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]">
             {visibleCards.map((p) => (
-              <li key={`${p.id}-${p.saved_by ?? "me"}`}>
+              <li key={`${p.id}-${p.saved_by ?? "me"}`} className="flex items-center gap-1 pr-1.5 transition hover:bg-[var(--muted)]">
                 <button
+                  type="button"
                   onClick={() => {
                     const slug = p.username || p.slug;
                     if (slug) router.push(`/${slug}`);
                   }}
-                  className="flex w-full items-center gap-3 px-3.5 py-3 text-left transition hover:bg-[var(--muted)]"
+                  className="flex min-w-0 flex-1 items-center gap-3 px-3.5 py-3 text-left"
                 >
                   <Avatar name={p.owner_name || p.business_name} src={p.logo_url || p.avatar_url} size={40} shape="rounded" />
                   <div className="min-w-0 flex-1">
@@ -303,6 +412,12 @@ function SavedInner() {
                     <p className="truncate text-[13px] text-[var(--muted-foreground)]">
                       {[p.job_title, p.owner_name ? p.business_name : null].filter(Boolean).join(" · ") || "Namma Info card"}
                     </p>
+                    {p.category && (
+                      <p className="mt-0.5 flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
+                        <Dot category={p.category} />
+                        <span className="text-[var(--foreground)] font-medium">{p.category}</span>
+                      </p>
+                    )}
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="text-xs tabular-nums text-[var(--muted-foreground)]">{formatDistanceToNow(p.saved_at)}</p>
@@ -311,6 +426,18 @@ function SavedInner() {
                     )}
                   </div>
                   <ChevronRight size={16} className="shrink-0 text-[var(--muted-foreground)]" />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCategorizingCard(p);
+                  }}
+                  aria-label="Add or change category"
+                  title="Add or change category"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)] transition hover:bg-[var(--background)] hover:text-[var(--foreground)] cursor-pointer"
+                >
+                  <MoreVertical size={16} />
                 </button>
               </li>
             ))}
@@ -377,7 +504,17 @@ function SavedInner() {
           onCategory={(cat) => updateContact(openContact.id, { category: cat })}
           onNote={(note) => updateContact(openContact.id, { note })}
           onDetails={(d) => updateContact(openContact.id, d)}
+          onPhotosUpdated={(photos) => updateContact(openContact.id, photos)}
           onDelete={() => deleteContact(openContact.id)}
+        />
+      )}
+
+      {categorizingCard && (
+        <SavedCardCategorySheet
+          card={categorizingCard}
+          allCategories={cardCategories.filter((c) => c !== "All")}
+          onClose={() => setCategorizingCard(null)}
+          onSave={(cat) => updateSavedCardCategory(categorizingCard.id, cat)}
         />
       )}
     </div>
@@ -438,6 +575,7 @@ function ContactSheet({
   onCategory,
   onNote,
   onDetails,
+  onPhotosUpdated,
   onDelete,
 }: {
   contact: ContactRow;
@@ -447,6 +585,7 @@ function ContactSheet({
   onCategory: (c: string) => void;
   onNote: (n: string | null) => void;
   onDetails: (d: { name: string; phone: string | null; email: string | null }) => void;
+  onPhotosUpdated: (p: { card_front_path: string | null; card_back_path: string | null }) => void;
   onDelete: () => void;
 }) {
   const noDetails = !contact.phone && !contact.email;
@@ -455,6 +594,35 @@ function ContactSheet({
   const [ePhone, setEPhone] = useState(contact.phone ?? "");
   const [eEmail, setEEmail] = useState(contact.email ?? "");
   const [eError, setEError] = useState<string | null>(null);
+
+  const [uploadingCard, setUploadingCard] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  async function handleCardUpload(e: React.ChangeEvent<HTMLInputElement>, side: "front" | "back") {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingCard(true);
+    setUploadError(null);
+    try {
+      const formData = new FormData();
+      formData.append(side, file);
+      const res = await fetch(`/api/contacts/${contact.id}/photos`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to upload photo");
+      onPhotosUpdated({
+        card_front_path: data.card_front_path,
+        card_back_path: data.card_back_path,
+      });
+    } catch (err: any) {
+      setUploadError(err.message || "Failed to upload");
+    } finally {
+      setUploadingCard(false);
+      e.target.value = "";
+    }
+  }
 
   function saveDetails() {
     const name = eName.trim();
@@ -495,7 +663,7 @@ function ContactSheet({
 
   return (
     <Sheet title={contact.name} description={meta} onClose={close}>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {contact.phone && (
           <a href={`tel:${contact.phone}`} className={actionBtn}>
             <Phone size={17} /> Call
@@ -511,11 +679,71 @@ function ContactSheet({
             <Mail size={17} /> Email
           </a>
         )}
+        <button
+          type="button"
+          onClick={() => saveContactFromUrl(`/api/vcard/contact/${contact.id}`, `${contact.name || "contact"}.vcf`)}
+          className={actionBtn}
+        >
+          <UserPlus size={17} /> Add to Contacts
+        </button>
       </div>
 
-      {(contact.card_front_path || contact.card_back_path) && (
-        <CardPhotos front={contact.card_front_path} back={contact.card_back_path} />
-      )}
+      {/* Business Card Photos & Upload */}
+      <div className="mt-4">
+        {(contact.card_front_path || contact.card_back_path) ? (
+          <div>
+            <CardPhotos front={contact.card_front_path} back={contact.card_back_path} />
+            <div className="mt-2 flex items-center gap-3">
+              <label className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--primary)] hover:underline cursor-pointer">
+                {uploadingCard ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+                <span>{contact.card_back_path ? "Replace front photo" : "Add back photo"}</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={uploadingCard}
+                  onChange={(e) => handleCardUpload(e, contact.card_back_path ? "front" : "back")}
+                />
+              </label>
+              {contact.card_back_path && (
+                <label className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--primary)] hover:underline cursor-pointer">
+                  <span>Replace back photo</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={uploadingCard}
+                    onChange={(e) => handleCardUpload(e, "back")}
+                  />
+                </label>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            <p className="text-[13px] font-medium">Business card</p>
+            <label className="flex flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-[var(--border)] p-4 text-center hover:border-[var(--muted-foreground)] cursor-pointer transition bg-[var(--card)]">
+              {uploadingCard ? (
+                <Loader2 size={18} className="animate-spin text-[var(--muted-foreground)]" />
+              ) : (
+                <Upload size={18} className="text-[var(--muted-foreground)]" />
+              )}
+              <span className="text-xs font-medium text-[var(--foreground)]">
+                {uploadingCard ? "Uploading photo..." : "Upload business card photo"}
+              </span>
+              <span className="text-[11px] text-[var(--muted-foreground)]">Attach a photo of their physical card</span>
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                disabled={uploadingCard}
+                onChange={(e) => handleCardUpload(e, "front")}
+              />
+            </label>
+          </div>
+        )}
+        {uploadError && <p className="mt-1 text-xs text-rose-500">{uploadError}</p>}
+      </div>
 
       {editing ? (
         <div className="mt-4 rounded-lg border border-[var(--border)] p-3">
@@ -630,6 +858,129 @@ function ContactSheet({
       >
         <Trash2 size={14} /> {confirmDelete ? "Confirm delete" : "Delete contact"}
       </button>
+    </Sheet>
+  );
+}
+
+function SavedCardCategorySheet({
+  card,
+  allCategories,
+  onClose,
+  onSave,
+}: {
+  card: SavedItem;
+  allCategories: string[];
+  onClose: () => void;
+  onSave: (cat: string) => void;
+}) {
+  const [selectedCat, setSelectedCat] = useState<string>(card.category || "");
+  const [customCat, setCustomCat] = useState<string>("");
+  const [isCustom, setIsCustom] = useState(false);
+
+  const predefined = Array.from(new Set([...DEFAULT_CATEGORIES, ...allCategories]));
+
+  function handleSave() {
+    const finalCat = isCustom ? customCat.trim() : selectedCat.trim();
+    onSave(finalCat);
+  }
+
+  return (
+    <Sheet
+      title="Categorize Card"
+      description="Organize your saved cards into custom categories"
+      onClose={onClose}
+    >
+      {/* Prefilled Read-Only Card Details */}
+      <div className="flex items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--muted)]/50 p-3">
+        <Avatar
+          name={card.owner_name || card.business_name}
+          src={card.logo_url || card.avatar_url}
+          size={42}
+          shape="rounded"
+        />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-[var(--foreground)]">
+            {card.owner_name || card.business_name || "Unknown"}
+          </p>
+          <p className="truncate text-xs text-[var(--muted-foreground)]">
+            {[card.job_title, card.owner_name ? card.business_name : null].filter(Boolean).join(" · ") || "Namma Info card"}
+          </p>
+          {card.category && (
+            <span className="mt-1 inline-flex items-center gap-1 rounded-[4px] border border-[var(--border)] bg-[var(--card)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--foreground)]">
+              Current: {card.category}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-5 space-y-3">
+        <p className="text-[13px] font-medium text-[var(--foreground)]">Select Category</p>
+        <div className="flex flex-wrap gap-1.5">
+          {predefined.map((c) => (
+            <Chip
+              key={c}
+              active={!isCustom && selectedCat === c}
+              onClick={() => {
+                setIsCustom(false);
+                setSelectedCat(c);
+              }}
+            >
+              <Dot category={c} />
+              {c}
+            </Chip>
+          ))}
+          <Chip
+            active={isCustom}
+            onClick={() => {
+              setIsCustom(true);
+            }}
+          >
+            <Plus size={12} /> Custom
+          </Chip>
+        </div>
+
+        {isCustom && (
+          <div className="mt-2">
+            <input
+              autoFocus
+              type="text"
+              value={customCat}
+              onChange={(e) => setCustomCat(e.target.value)}
+              placeholder="e.g. VIP, Client, Vendor"
+              maxLength={24}
+              className="h-9 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-xs outline-none focus:border-[var(--foreground)]"
+            />
+          </div>
+        )}
+      </div>
+
+      <div className="mt-6 flex items-center justify-between gap-2 border-t border-[var(--border)] pt-4">
+        {card.category ? (
+          <button
+            type="button"
+            onClick={() => onSave("")}
+            className="text-xs font-medium text-rose-600 hover:underline cursor-pointer"
+          >
+            Remove Category
+          </button>
+        ) : <div />}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-9 rounded-lg border border-[var(--border)] px-3 text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            className="h-9 rounded-lg bg-[var(--foreground)] px-4 text-xs font-semibold text-[var(--background)] hover:opacity-90 cursor-pointer"
+          >
+            Save Category
+          </button>
+        </div>
+      </div>
     </Sheet>
   );
 }
