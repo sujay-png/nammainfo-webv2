@@ -664,22 +664,14 @@ function ContactSheet({
 
       {/* Business Card Section */}
       <div className="mt-4">
-        <div className="mb-2 flex items-center justify-between">
-          <p className="text-[13px] font-medium text-[var(--foreground)]">Business card</p>
-          {(contact.card_front_path || contact.card_back_path) && (
-            <button
-              type="button"
-              onClick={() => setShowPhotoModal(true)}
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--primary)] hover:underline cursor-pointer"
-            >
-              <Camera size={13} />
-              <span>Edit business card</span>
-            </button>
-          )}
-        </div>
+        <p className="mb-2 text-[13px] font-medium text-[var(--foreground)]">Business card</p>
 
         {(contact.card_front_path || contact.card_back_path) ? (
-          <CardPhotos front={contact.card_front_path} back={contact.card_back_path} />
+          <CardPhotos
+            front={contact.card_front_path}
+            back={contact.card_back_path}
+            onEdit={() => setShowPhotoModal(true)}
+          />
         ) : (
           <button
             type="button"
@@ -1173,7 +1165,15 @@ function SavedCardCategorySheet({
 }
 
 /** Front/back photos of a visitor's business card. Links are private and expire after an hour. */
-function CardPhotos({ front, back }: { front: string | null; back: string | null }) {
+function CardPhotos({
+  front,
+  back,
+  onEdit,
+}: {
+  front: string | null;
+  back: string | null;
+  onEdit?: () => void;
+}) {
   const [urls, setUrls] = useState<Record<string, string>>({});
   useEffect(() => {
     const paths = [front, back].filter((p): p is string => !!p);
@@ -1185,8 +1185,7 @@ function CardPhotos({ front, back }: { front: string | null; back: string | null
   ].filter((s) => s.path);
 
   return (
-    <div className="mt-4">
-      <p className="mb-2 text-[13px] font-medium">Business card</p>
+    <div>
       <div className={`grid gap-2 ${sides.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
         {sides.map((s) => {
           const url = urls[s.path!];
@@ -1207,7 +1206,19 @@ function CardPhotos({ front, back }: { front: string | null; back: string | null
           );
         })}
       </div>
-      <p className="mt-1.5 text-xs text-[var(--muted-foreground)]">Tap a photo to open it full size.</p>
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <p className="text-xs text-[var(--muted-foreground)]">Tap a photo to open it full size.</p>
+        {onEdit && (
+          <button
+            type="button"
+            onClick={onEdit}
+            className="inline-flex items-center gap-1.5 rounded-[5px] border border-[var(--border)] bg-[var(--card)] px-2.5 py-1 text-xs font-medium text-[var(--foreground)] hover:bg-[var(--muted)] transition cursor-pointer"
+          >
+            <Camera size={13} />
+            <span>Edit card</span>
+          </button>
+        )}
+      </div>
     </div>
   );
 }
