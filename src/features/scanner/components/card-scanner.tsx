@@ -611,14 +611,7 @@ export default function ScannerPage() {
                   : "text-yellow-300 border-yellow-400/40"
               }`}
             >
-              <span
-                className={`w-1.5 h-1.5 rounded-full ${
-                  scannedDetected ? "bg-emerald-400" : "bg-yellow-400 animate-pulse"
-                }`}
-              />
-              <span>
-                {scannedDetected ? "QR Code Detected!" : "Align QR inside yellow frame"}
-              </span>
+              
             </div>
 
             {zoomAvailable && currentZoom <= 1.2 && !scannedDetected && (
