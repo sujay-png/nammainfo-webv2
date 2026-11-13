@@ -161,6 +161,15 @@ select {
   animation: qr-laser 2.2s ease-in-out infinite;
 }
 
+@keyframes qr-scanner-beam {
+  0% { top: 5%; opacity: 0.3; }
+  50% { top: 92%; opacity: 0.95; }
+  100% { top: 5%; opacity: 0.3; }
+}
+.animate-qr-scanner-beam {
+  animation: qr-scanner-beam 2.2s ease-in-out infinite;
+}
+
 /* Safe area utilities for mobile devices & PWAs */
 .pb-safe {
   padding-bottom: max(env(safe-area-inset-bottom), 12px);

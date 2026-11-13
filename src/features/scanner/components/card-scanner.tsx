@@ -12,8 +12,14 @@ import {
   SwitchCamera,
   Upload,
   ArrowRight,
+  Check,
 } from "lucide-react";
-import { Html5Qrcode, Html5QrcodeSupportedFormats, type CameraDevice } from "html5-qrcode";
+import {
+  Html5Qrcode,
+  Html5QrcodeSupportedFormats,
+  type CameraDevice,
+  type Html5QrcodeCameraScanConfig,
+} from "html5-qrcode";
 
 export default function ScannerPage() {
   const router = useRouter();
@@ -26,6 +32,11 @@ export default function ScannerPage() {
   const [currentCameraIndex, setCurrentCameraIndex] = useState(0);
   const [torchAvailable, setTorchAvailable] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
+  const [zoomAvailable, setZoomAvailable] = useState(false);
+  const [currentZoom, setCurrentZoom] = useState(1);
+  const [zoomMin, setZoomMin] = useState(1);
+  const [zoomMax, setZoomMax] = useState(1);
+  const [scannedDetected, setScannedDetected] = useState(false);
 
   const qrScannerRef = useRef<Html5Qrcode | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -62,6 +73,7 @@ export default function ScannerPage() {
     setError(null);
     setStarting(true);
     setScanning(true);
+    setScannedDetected(false);
 
     // Ensure DOM container has rendered and has non-zero client dimensions
     isProcessingScanRef.current = false;
@@ -116,8 +128,25 @@ export default function ScannerPage() {
         ? { deviceId: { exact: cameraDeviceId } }
         : { facingMode: "environment" };
 
-      const scanConfig = {
-        fps: 10,
+      // Config with targeted qrbox crop and high-res video feed for sharp small-QR detection
+      const scanConfig: Html5QrcodeCameraScanConfig = {
+        fps: 15,
+        qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+          const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+          const boxSize = Math.max(200, Math.min(Math.floor(minEdge * 0.72), 320));
+          return { width: boxSize, height: boxSize };
+        },
+        videoConstraints: cameraDeviceId
+          ? {
+              deviceId: { exact: cameraDeviceId },
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+            }
+          : {
+              facingMode: "environment",
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+            },
       };
 
       try {
@@ -130,30 +159,49 @@ export default function ScannerPage() {
           () => {}
         );
       } catch (primaryErr) {
-        console.warn("Primary camera start failed, trying fallback camera:", primaryErr);
-        // Fallback: try user facing camera or first available camera device
+        console.warn("High-res camera start failed, trying fallback scan config:", primaryErr);
+        const fallbackConfig: Html5QrcodeCameraScanConfig = {
+          fps: 15,
+          qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+            const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+            const boxSize = Math.max(200, Math.min(Math.floor(minEdge * 0.72), 320));
+            return { width: boxSize, height: boxSize };
+          },
+        };
+
         try {
           await scanner.start(
-            { facingMode: "user" },
-            scanConfig,
+            cameraConfig,
+            fallbackConfig,
             (decodedText) => {
               handleScannedUrl(decodedText);
             },
             () => {}
           );
         } catch (secondaryErr) {
-          const availableDevices = await Html5Qrcode.getCameras().catch(() => []);
-          if (availableDevices && availableDevices.length > 0) {
+          try {
             await scanner.start(
-              availableDevices[0].id,
-              scanConfig,
+              { facingMode: "user" },
+              fallbackConfig,
               (decodedText) => {
                 handleScannedUrl(decodedText);
               },
               () => {}
             );
-          } else {
-            throw secondaryErr;
+          } catch (tertiaryErr) {
+            const availableDevices = await Html5Qrcode.getCameras().catch(() => []);
+            if (availableDevices && availableDevices.length > 0) {
+              await scanner.start(
+                availableDevices[0].id,
+                fallbackConfig,
+                (decodedText) => {
+                  handleScannedUrl(decodedText);
+                },
+                () => {}
+              );
+            } else {
+              throw tertiaryErr;
+            }
           }
         }
       }
@@ -161,18 +209,55 @@ export default function ScannerPage() {
       setScanning(true);
       setStarting(false);
 
-      // Check if camera supports torch (flashlight)
+      // Check if camera supports torch (flashlight) and hardware zoom
       try {
         const capabilities = (scanner as unknown as {
           getRunningTrackCameraCapabilities?: () => {
             torchFeature?: () => { isSupported: () => boolean };
+            zoomFeature?: () => {
+              isSupported: () => boolean;
+              min: () => number;
+              max: () => number;
+              step: () => number;
+              value: () => number | null;
+            };
           };
         }).getRunningTrackCameraCapabilities?.();
+
         if (capabilities?.torchFeature?.().isSupported()) {
           setTorchAvailable(true);
         }
+
+        const zoom = capabilities?.zoomFeature?.();
+        if (zoom && zoom.isSupported()) {
+          const maxZ = zoom.max();
+          if (maxZ > 1) {
+            setZoomAvailable(true);
+            setZoomMin(zoom.min() || 1);
+            setZoomMax(maxZ);
+            setCurrentZoom(zoom.value() || 1);
+          }
+        }
       } catch {
-        setTorchAvailable(false);
+        // Fallback check on MediaStreamTrack
+        try {
+          const videoEl = document.querySelector("#qr-reader video") as HTMLVideoElement | null;
+          const stream = videoEl?.srcObject as MediaStream | null;
+          const track = stream?.getVideoTracks()?.[0];
+          if (track && typeof track.getCapabilities === "function") {
+            const trackCaps = track.getCapabilities() as unknown as {
+              torch?: boolean;
+              zoom?: { min: number; max: number; step: number };
+            };
+            if (trackCaps?.torch) setTorchAvailable(true);
+            if (trackCaps?.zoom && trackCaps.zoom.max > 1) {
+              setZoomAvailable(true);
+              setZoomMin(trackCaps.zoom.min || 1);
+              setZoomMax(trackCaps.zoom.max);
+              setCurrentZoom(1);
+            }
+          }
+        } catch {}
       }
     } catch (err: unknown) {
       await stopScannerInternal();
@@ -207,12 +292,63 @@ export default function ScannerPage() {
     setStarting(false);
     setTorchOn(false);
     setTorchAvailable(false);
+    setZoomAvailable(false);
+    setCurrentZoom(1);
+    setScannedDetected(false);
+  }
+
+  async function handleSetZoom(val: number) {
+    if (!qrScannerRef.current) return;
+    try {
+      const caps = (qrScannerRef.current as unknown as {
+        getRunningTrackCameraCapabilities?: () => {
+          zoomFeature?: () => {
+            isSupported: () => boolean;
+            apply: (v: number) => Promise<void>;
+          };
+        };
+      }).getRunningTrackCameraCapabilities?.();
+
+      const zoom = caps?.zoomFeature?.();
+      if (zoom && zoom.isSupported()) {
+        await zoom.apply(val);
+        setCurrentZoom(val);
+        return;
+      }
+
+      const videoEl = document.querySelector("#qr-reader video") as HTMLVideoElement | null;
+      const stream = videoEl?.srcObject as MediaStream | null;
+      const track = stream?.getVideoTracks()?.[0];
+      if (track && typeof track.applyConstraints === "function") {
+        // @ts-expect-error advanced constraint
+        await track.applyConstraints({ advanced: [{ zoom: val }] });
+        setCurrentZoom(val);
+      }
+    } catch (err) {
+      console.warn("Failed to set camera zoom:", err);
+    }
   }
 
   async function toggleTorch() {
     if (!qrScannerRef.current || !torchAvailable) return;
     try {
       const nextState = !torchOn;
+      const caps = (qrScannerRef.current as unknown as {
+        getRunningTrackCameraCapabilities?: () => {
+          torchFeature?: () => {
+            isSupported: () => boolean;
+            apply: (v: boolean) => Promise<void>;
+          };
+        };
+      }).getRunningTrackCameraCapabilities?.();
+
+      const torch = caps?.torchFeature?.();
+      if (torch && torch.isSupported()) {
+        await torch.apply(nextState);
+        setTorchOn(nextState);
+        return;
+      }
+
       await (qrScannerRef.current as unknown as {
         applyVideoConstraints: (constraints: {
           advanced: Array<{ torch?: boolean }>;
@@ -297,62 +433,68 @@ export default function ScannerPage() {
   function handleScannedUrl(url: string) {
     if (isProcessingScanRef.current) return;
     isProcessingScanRef.current = true;
-
-    stopScanner().catch(() => {});
-    setNfcReading(false);
+    setScannedDetected(true);
 
     try {
       if (typeof navigator !== "undefined" && navigator.vibrate) {
-        navigator.vibrate(80);
+        navigator.vibrate([40, 50, 40]);
       }
     } catch {}
 
     const clean = url.trim();
     if (!clean) {
       isProcessingScanRef.current = false;
+      setScannedDetected(false);
       return;
     }
 
-    try {
-      let toParse = clean;
-      if (!/^https?:\/\//i.test(toParse) && (toParse.includes("/") || toParse.includes("."))) {
-        toParse = `https://${toParse}`;
-      }
+    // Brief 400ms delay to display the iOS-style locked green/yellow checkmark feedback
+    setTimeout(() => {
+      stopScanner().catch(() => {});
+      setNfcReading(false);
 
-      if (/^https?:\/\//i.test(toParse)) {
-        const parsed = new URL(toParse);
-        const isCurrentSite =
-          typeof window !== "undefined" &&
-          (parsed.hostname === window.location.hostname ||
-            parsed.hostname.endsWith("nammainfo.in"));
+      try {
+        let toParse = clean;
+        if (!/^https?:\/\//i.test(toParse) && (toParse.includes("/") || toParse.includes("."))) {
+          toParse = `https://${toParse}`;
+        }
 
-        if (isCurrentSite) {
-          const path = parsed.pathname.replace(/^\//, "");
-          if (path) {
-            router.push(`/${path}${parsed.search || ""}${parsed.hash || ""}`);
+        if (/^https?:\/\//i.test(toParse)) {
+          const parsed = new URL(toParse);
+          const isCurrentSite =
+            typeof window !== "undefined" &&
+            (parsed.hostname === window.location.hostname ||
+              parsed.hostname.endsWith("nammainfo.in"));
+
+          if (isCurrentSite) {
+            const path = parsed.pathname.replace(/^\//, "");
+            if (path) {
+              router.push(`/${path}${parsed.search || ""}${parsed.hash || ""}`);
+              return;
+            }
+          } else {
+            // If external link, navigate directly
+            window.location.href = clean;
             return;
           }
-        } else {
-          // If external link, navigate directly
-          window.location.href = clean;
+        }
+      } catch {
+        // Fall through to slug handling
+      }
+
+      // Bare slug like 'sujay', 'c/card_123', or 'company/member'
+      if (clean && !clean.includes(" ") && !clean.startsWith("http")) {
+        const slug = clean.replace(/^\//, "");
+        if (slug) {
+          router.push(`/${slug}`);
           return;
         }
       }
-    } catch {
-      // Fall through to slug handling
-    }
 
-    // Bare slug like 'sujay', 'c/card_123', or 'company/member'
-    if (clean && !clean.includes(" ") && !clean.startsWith("http")) {
-      const slug = clean.replace(/^\//, "");
-      if (slug) {
-        router.push(`/${slug}`);
-        return;
-      }
-    }
-
-    isProcessingScanRef.current = false;
-    setError("Could not recognize the scanned code as a valid Namma Info card link.");
+      isProcessingScanRef.current = false;
+      setScannedDetected(false);
+      setError("Could not recognize the scanned code as a valid Namma Info card link.");
+    }, 400);
   }
 
   return (
@@ -384,22 +526,114 @@ export default function ScannerPage() {
       >
         {/* Starting indicator while camera stream connects */}
         {starting && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/80 z-10 text-white min-h-[280px]">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/85 z-30 text-white min-h-[360px]">
             <Loader2 size={24} className="animate-spin text-white/80" />
-            <span className="text-xs font-mono text-white/70">Starting camera…</span>
+            <span className="text-xs font-mono text-white/70">Connecting camera…</span>
           </div>
         )}
 
         {/* Html5Qrcode video attaches into this container with natural undistorted aspect ratio */}
         <div
           id="qr-reader"
-          className="w-full overflow-hidden min-h-[280px] bg-black flex items-center justify-center [&_video]:!w-full [&_video]:!h-auto [&_video]:!block [&_video]:!m-0 [&_video]:!p-0 [&_#qr-shaded-region]:!hidden"
+          className="w-full overflow-hidden min-h-[360px] bg-black flex items-center justify-center [&_video]:!w-full [&_video]:!h-auto [&_video]:!block [&_video]:!m-0 [&_video]:!p-0 [&_#qr-shaded-region]:!hidden"
         />
+
+        {/* iOS-Style Yellow Targeting Viewfinder Overlay */}
+        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center p-4">
+          {/* Target Reticle Box (matches qrbox crop) */}
+          <div
+            className={`relative transition-transform duration-200 ${
+              scannedDetected ? "scale-95" : "scale-100"
+            }`}
+            style={{
+              width: "240px",
+              height: "240px",
+              maxWidth: "68vw",
+              maxHeight: "68vw",
+            }}
+          >
+            {/* iOS Yellow Corner Brackets */}
+            {/* Top-Left */}
+            <div
+              className={`absolute -top-0.5 -left-0.5 w-7 h-7 border-t-[3.5px] border-l-[3.5px] rounded-tl-[6px] transition-colors ${
+                scannedDetected ? "border-emerald-400" : "border-yellow-400"
+              }`}
+            />
+            {/* Top-Right */}
+            <div
+              className={`absolute -top-0.5 -right-0.5 w-7 h-7 border-t-[3.5px] border-r-[3.5px] rounded-tr-[6px] transition-colors ${
+                scannedDetected ? "border-emerald-400" : "border-yellow-400"
+              }`}
+            />
+            {/* Bottom-Left */}
+            <div
+              className={`absolute -bottom-0.5 -left-0.5 w-7 h-7 border-b-[3.5px] border-l-[3.5px] rounded-bl-[6px] transition-colors ${
+                scannedDetected ? "border-emerald-400" : "border-yellow-400"
+              }`}
+            />
+            {/* Bottom-Right */}
+            <div
+              className={`absolute -bottom-0.5 -right-0.5 w-7 h-7 border-b-[3.5px] border-r-[3.5px] rounded-br-[6px] transition-colors ${
+                scannedDetected ? "border-emerald-400" : "border-yellow-400"
+              }`}
+            />
+
+            {/* Center target dot */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div
+                className={`w-1.5 h-1.5 rounded-full transition-colors ${
+                  scannedDetected ? "bg-emerald-400" : "bg-yellow-400/70"
+                }`}
+              />
+            </div>
+
+            {/* Smooth scanning beam */}
+            {!scannedDetected && (
+              <div className="absolute inset-x-2 h-[2px] bg-gradient-to-r from-transparent via-yellow-400 to-transparent animate-qr-scanner-beam" />
+            )}
+
+            {/* Success checkmark indicator */}
+            {scannedDetected && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500 text-black shadow-lg animate-scale-in">
+                  <Check size={26} strokeWidth={3} />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* iOS-style Yellow Targeting Status Pill */}
+          <div className="mt-4 flex flex-col items-center gap-1">
+            <div
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-[4px] bg-black/80 backdrop-blur-md text-[11px] font-medium border transition-colors ${
+                scannedDetected
+                  ? "text-emerald-300 border-emerald-400/40"
+                  : "text-yellow-300 border-yellow-400/40"
+              }`}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  scannedDetected ? "bg-emerald-400" : "bg-yellow-400 animate-pulse"
+                }`}
+              />
+              <span>
+                {scannedDetected ? "QR Code Detected!" : "Align QR inside yellow frame"}
+              </span>
+            </div>
+
+            {zoomAvailable && currentZoom <= 1.2 && !scannedDetected && (
+              <span className="text-[10px] text-white/70 font-mono">
+                Small card QR? Tap 2x zoom below
+              </span>
+            )}
+          </div>
+        </div>
 
         {/* Top Controls Bar */}
         <div className="absolute top-3 inset-x-3 flex items-center justify-between z-20">
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] bg-black/75 backdrop-blur-md text-[11px] font-mono font-medium text-white border border-white/15">
-            Scanning for QR…
+            <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+            Scanning…
           </span>
 
           <div className="flex items-center gap-2">
@@ -440,16 +674,59 @@ export default function ScannerPage() {
           </div>
         </div>
 
-        {/* Bottom helper text */}
-        <div className="absolute bottom-3 inset-x-3 flex justify-center z-20">
+        {/* Bottom Bar: Stop button & iOS-style Zoom buttons */}
+        <div className="absolute bottom-3 inset-x-3 flex items-center justify-between z-20">
           <button
             type="button"
             onClick={stopScanner}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[5px] bg-black/75 backdrop-blur-md text-xs font-semibold text-white border border-white/15 hover:bg-black transition-all cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[5px] bg-black/75 backdrop-blur-md text-xs font-semibold text-white border border-white/15 hover:bg-black transition-all cursor-pointer"
           >
             <X size={14} />
-            Stop Scanning
+            Stop
           </button>
+
+          {/* iOS Style Zoom Pill */}
+          {zoomAvailable && (
+            <div className="flex items-center rounded-full bg-black/80 backdrop-blur-md border border-white/20 p-0.5">
+              <button
+                type="button"
+                onClick={() => handleSetZoom(1)}
+                className={`h-7 px-3 rounded-full text-xs font-mono font-bold transition-all cursor-pointer ${
+                  currentZoom <= 1.2
+                    ? "bg-yellow-400 text-black shadow-sm"
+                    : "text-white/80 hover:text-white"
+                }`}
+              >
+                1x
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSetZoom(Math.min(2, zoomMax))}
+                className={`h-7 px-3 rounded-full text-xs font-mono font-bold transition-all cursor-pointer ${
+                  currentZoom > 1.2
+                    ? "bg-yellow-400 text-black shadow-sm"
+                    : "text-white/80 hover:text-white"
+                }`}
+              >
+                2x
+              </button>
+              {zoomMax >= 3 && (
+                <button
+                  type="button"
+                  onClick={() => handleSetZoom(3)}
+                  className={`h-7 px-2.5 rounded-full text-xs font-mono font-bold transition-all cursor-pointer ${
+                    currentZoom > 2.2
+                      ? "bg-yellow-400 text-black shadow-sm"
+                      : "text-white/80 hover:text-white"
+                  }`}
+                >
+                  3x
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="w-12" />
         </div>
       </div>
 
