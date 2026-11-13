@@ -153,7 +153,11 @@ export default function UpgradeToProModal({
       setVisitingCardFile(file);
       setDesignOption("upload_card");
       setErrorMsg(null);
-      setVisitingCardPreview(URL.createObjectURL(file));
+      if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+        setVisitingCardPreview(null);
+      } else {
+        setVisitingCardPreview(URL.createObjectURL(file));
+      }
     }
   };
 
@@ -172,15 +176,24 @@ export default function UpgradeToProModal({
     try {
       const supabase = createClient();
       const ext = file.name.split(".").pop();
-      const path = `card-designs/${profile.id}/${folder}_${Date.now()}.${ext}`;
+      const rand = Math.random().toString(36).slice(2, 8);
+      const path = `${profile.id}/card-designs/${folder}_${Date.now()}_${rand}.${ext}`;
 
       const { error: uploadError } = await supabase.storage
         .from("profile-media")
-        .upload(path, file);
+        .upload(path, file, { upsert: true });
 
       if (uploadError) {
         console.warn("Storage upload error:", uploadError);
-        return null;
+        const fallbackPath = `card-designs/${profile.id}/${folder}_${Date.now()}_${rand}.${ext}`;
+        const { error: fbErr } = await supabase.storage
+          .from("profile-media")
+          .upload(fallbackPath, file, { upsert: true });
+        if (fbErr) {
+          console.warn("Fallback upload error:", fbErr);
+          return null;
+        }
+        return supabase.storage.from("profile-media").getPublicUrl(fallbackPath).data.publicUrl;
       }
 
       const { data } = supabase.storage.from("profile-media").getPublicUrl(path);
@@ -476,9 +489,6 @@ export default function UpgradeToProModal({
                 onClick={() => {
                   setDesignOption("upload_card");
                   setErrorMsg(null);
-                  if (!visitingCardPreview) {
-                    document.getElementById("visiting-card-input")?.click();
-                  }
                 }}
                 className={`p-4 rounded-[5px] border transition-all cursor-pointer ${
                   designOption === "upload_card"
@@ -486,14 +496,6 @@ export default function UpgradeToProModal({
                     : "border-[var(--border)] bg-[var(--card)] hover:border-[var(--primary)]/60 hover:bg-[var(--accent)]/30"
                 }`}
               >
-                <input
-                  id="visiting-card-input"
-                  type="file"
-                  accept="image/*,.pdf"
-                  className="hidden"
-                  onChange={handleVisitingCardChange}
-                />
-                
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3">
                     <div className="h-10 w-10 rounded-[5px] bg-[var(--accent)] border border-[var(--border)] flex items-center justify-center text-[var(--foreground)] shrink-0 mt-0.5">
@@ -523,46 +525,56 @@ export default function UpgradeToProModal({
 
                 {/* Uploaded Visiting Card Details / Dropzone Trigger */}
                 {designOption === "upload_card" && (
-                  <div className="mt-3 pt-3 border-t border-[var(--border)]">
-                    {visitingCardPreview ? (
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                          <img
-                            src={visitingCardPreview}
-                            alt="Visiting Card Preview"
-                            className="h-12 w-16 object-cover rounded-[4px] border border-[var(--border)] shadow-xs shrink-0"
-                          />
-                          <div>
-                            <p className="text-xs font-semibold text-[var(--foreground)] truncate max-w-[200px]">
-                              {visitingCardFile?.name || "Uploaded Visiting Card"}
+                  <div
+                    className="mt-3 pt-3 border-t border-[var(--border)]"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {visitingCardFile ? (
+                      <div className="flex items-center justify-between gap-3 p-2 rounded-[5px] border border-[var(--border)] bg-[var(--background)]">
+                        <div className="flex items-center gap-3 min-w-0">
+                          {visitingCardPreview ? (
+                            <img
+                              src={visitingCardPreview}
+                              alt="Visiting Card Preview"
+                              className="h-12 w-16 object-cover rounded-[4px] border border-[var(--border)] shadow-xs shrink-0"
+                            />
+                          ) : (
+                            <div className="h-12 w-16 rounded-[4px] border border-[var(--border)] bg-[var(--muted)] flex flex-col items-center justify-center shrink-0">
+                              <FileText size={20} className="text-red-500" />
+                              <span className="text-[9px] font-mono uppercase font-bold text-[var(--foreground)]">PDF</span>
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-[var(--foreground)] truncate max-w-[160px] sm:max-w-[240px]">
+                              {visitingCardFile.name}
                             </p>
                             <p className="font-mono text-[10px] text-emerald-600 font-medium">
-                              Ready for production ({(visitingCardFile ? (visitingCardFile.size / 1024).toFixed(0) : "0")} KB)
+                              Ready for production ({(visitingCardFile.size / 1024).toFixed(0)} KB)
                             </p>
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            document.getElementById("visiting-card-input")?.click();
-                          }}
-                          className="text-[11px] font-semibold text-[var(--primary)] hover:underline cursor-pointer"
-                        >
-                          Change File
-                        </button>
+                        <label className="text-[11px] font-semibold text-[var(--primary)] hover:underline cursor-pointer inline-flex items-center shrink-0">
+                          <span>Change File</span>
+                          <input
+                            type="file"
+                            accept="image/*,.pdf,application/pdf"
+                            className="hidden"
+                            onChange={handleVisitingCardChange}
+                          />
+                        </label>
                       </div>
                     ) : (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          document.getElementById("visiting-card-input")?.click();
-                        }}
-                        className="w-full py-2.5 px-3 rounded-[5px] border border-dashed border-[var(--border)] hover:border-[var(--primary)] text-center text-xs font-medium text-[var(--foreground)] bg-[var(--background)] cursor-pointer"
-                      >
-                        Click to select visiting card photo or PDF from your device
-                      </button>
+                      <label className="w-full py-3 px-3 rounded-[5px] border border-dashed border-[var(--border)] hover:border-[var(--primary)] text-center text-xs font-medium text-[var(--foreground)] bg-[var(--background)] cursor-pointer flex flex-col items-center justify-center gap-1 transition">
+                        <Upload size={16} className="text-[var(--muted-foreground)]" />
+                        <span>Click to select visiting card photo or PDF from your device</span>
+                        <span className="text-[10px] text-[var(--muted-foreground)]">PNG, JPG, PDF up to 10MB</span>
+                        <input
+                          type="file"
+                          accept="image/*,.pdf,application/pdf"
+                          className="hidden"
+                          onChange={handleVisitingCardChange}
+                        />
+                      </label>
                     )}
                   </div>
                 )}
@@ -687,42 +699,40 @@ export default function UpgradeToProModal({
                           <span className="text-[10px] text-emerald-600 font-medium">Logo selected</span>
                         )}
                       </div>
-                      <input
-                        id="card-logo-input"
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={handleLogoFileChange}
-                      />
 
                       {logoPreview ? (
                         <div className="flex items-center justify-between p-2 rounded-[5px] border border-[var(--border)] bg-[var(--background)]">
-                          <div className="flex items-center gap-2.5">
+                          <div className="flex items-center gap-2.5 min-w-0">
                             <img
                               src={logoPreview}
                               alt="Logo"
-                              className="h-8 w-8 object-contain rounded-[4px] border border-[var(--border)] bg-black/5"
+                              className="h-8 w-8 object-contain rounded-[4px] border border-[var(--border)] bg-black/5 shrink-0"
                             />
-                            <span className="text-xs text-[var(--foreground)] truncate max-w-[200px]">
+                            <span className="text-xs text-[var(--foreground)] truncate max-w-[160px] sm:max-w-[240px]">
                               {logoFile ? logoFile.name : "Using existing profile logo"}
                             </span>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => document.getElementById("card-logo-input")?.click()}
-                            className="text-[11px] font-semibold text-[var(--primary)] hover:underline cursor-pointer"
-                          >
-                            Change Logo
-                          </button>
+                          <label className="text-[11px] font-semibold text-[var(--primary)] hover:underline cursor-pointer inline-flex items-center shrink-0">
+                            <span>Change Logo</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={handleLogoFileChange}
+                            />
+                          </label>
                         </div>
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() => document.getElementById("card-logo-input")?.click()}
-                          className="w-full py-2 px-3 rounded-[5px] border border-dashed border-[var(--border)] hover:border-[var(--primary)] text-center text-xs font-medium text-[var(--foreground)] bg-[var(--background)] cursor-pointer"
-                        >
-                          Click to upload company logo (PNG, JPG, SVG)
-                        </button>
+                        <label className="w-full py-2.5 px-3 rounded-[5px] border border-dashed border-[var(--border)] hover:border-[var(--primary)] text-center text-xs font-medium text-[var(--foreground)] bg-[var(--background)] cursor-pointer flex items-center justify-center gap-2 transition">
+                          <Upload size={14} className="text-[var(--muted-foreground)]" />
+                          <span>Click to upload company logo (PNG, JPG, SVG)</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handleLogoFileChange}
+                          />
+                        </label>
                       )}
                     </div>
 
