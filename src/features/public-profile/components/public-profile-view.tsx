@@ -46,6 +46,7 @@ import {
   X,
   Quote,
   Building2,
+  Contact,
 } from "lucide-react";
 import PublicTestimonials from "@/features/testimonials/components/public-testimonials";
 import PublicClients from "@/features/clients/components/public-clients";
@@ -710,6 +711,7 @@ export default function PublicProfileView({
   const [activeReviewTab, setActiveReviewTab] = useState("All");
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [qrLightbox, setQrLightbox] = useState<string | null>(null);
+  const [showVisitorGate, setShowVisitorGate] = useState(false);
   const [copiedToast, setCopiedToast] = useState(false);
   // The review the visitor just copied — drives the "Review copied" sheet.
   const [copiedReview, setCopiedReview] = useState<string | null>(null);
@@ -826,6 +828,8 @@ export default function PublicProfileView({
           personName={profile.owner_name || profile.business_name || "them"}
           businessName={profile.business_name || profile.owner_name || "this business"}
           avatarUrl={profile.logo_url || profile.avatar_url}
+          forceOpen={showVisitorGate}
+          onClose={() => setShowVisitorGate(false)}
         />
       )}
       {!isEmployeeView && (
@@ -1345,6 +1349,18 @@ export default function PublicProfileView({
               </div>
             )}
           </div>
+        )}
+
+        {/* Share your details button — triggers visitor details popup */}
+        {!isEmployeeView && (
+          <button
+            type="button"
+            onClick={() => setShowVisitorGate(true)}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[var(--border)] py-4 text-sm font-medium text-[var(--muted-foreground)] transition hover:border-[var(--foreground)] hover:text-[var(--foreground)]"
+          >
+            <Contact size={16} />
+            Share your details
+          </button>
         )}
 
         {/* CTA — hidden on employee views */}

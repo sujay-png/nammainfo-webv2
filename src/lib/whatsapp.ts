@@ -7,13 +7,15 @@ interface SendTemplateParams {
   templateName: string;
   languageCode?: string;
   bodyParameters?: (string | number)[];
+  buttonParameters?: (string | number)[];
 }
 
 export async function sendWhatsAppTemplate({
   toPhone,
   templateName,
-  languageCode = "en",
+  languageCode = "en_IN",
   bodyParameters = [],
+  buttonParameters = [],
 }: SendTemplateParams): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
@@ -31,6 +33,34 @@ export async function sendWhatsAppTemplate({
     formatted = `91${formatted.slice(1)}`;
   }
 
+  const components: Record<string, unknown>[] = [];
+
+  if (bodyParameters.length > 0) {
+    components.push({
+      type: "body",
+      parameters: bodyParameters.map((val) => ({
+        type: "text",
+        text: String(val),
+      })),
+    });
+  }
+
+  if (buttonParameters.length > 0) {
+    buttonParameters.forEach((val, idx) => {
+      components.push({
+        type: "button",
+        sub_type: "url",
+        index: String(idx),
+        parameters: [
+          {
+            type: "text",
+            text: String(val),
+          },
+        ],
+      });
+    });
+  }
+
   const payload: Record<string, unknown> = {
     messaging_product: "whatsapp",
     recipient_type: "individual",
@@ -41,20 +71,9 @@ export async function sendWhatsAppTemplate({
       language: {
         code: languageCode,
       },
+      ...(components.length > 0 ? { components } : {}),
     },
   };
-
-  if (bodyParameters.length > 0) {
-    (payload.template as Record<string, unknown>).components = [
-      {
-        type: "body",
-        parameters: bodyParameters.map((val) => ({
-          type: "text",
-          text: String(val),
-        })),
-      },
-    ];
-  }
 
   try {
     const res = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
@@ -66,8 +85,26 @@ export async function sendWhatsAppTemplate({
       body: JSON.stringify(payload),
     });
 
-    const data = await res.json();
-    if (!res.ok) {
+    let data = await res.json();
+    if (!res.ok && data?.error?.code === 132001) {
+      // Translation missing: retry with alternate language between en_IN and en
+      const fallbackLang = languageCode === "en_IN" ? "en" : "en_IN";
+      (payload.template as Record<string, unknown>).language = { code: fallbackLang };
+      const fallbackRes = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+      const fallbackData = await fallbackRes.json();
+      if (fallbackRes.ok) {
+        data = fallbackData;
+      }
+    }
+
+    if (data?.error) {
       console.error("[WhatsApp] API error response:", data);
       return { success: false, error: data?.error?.message || "Failed to send WhatsApp message" };
     }

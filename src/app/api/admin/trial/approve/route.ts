@@ -103,8 +103,9 @@ export async function POST(request: Request) {
       sendWhatsAppTemplate({
         toPhone: profile.phone,
         templateName: "trial_approved",
-        languageCode: "en",
-        bodyParameters: [recipientName, cardSlug],
+        languageCode: "en_IN",
+        bodyParameters: [cardSlug, recipientName],
+        buttonParameters: [cardSlug],
       }).catch((waErr) => {
         console.error("[Admin Trial Approve] WhatsApp notification error:", waErr);
       });

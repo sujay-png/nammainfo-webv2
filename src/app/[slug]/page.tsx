@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { createCachedPublicClient } from "@/supabase/server";
 import PublicProfileView from "@/features/public-profile/components/public-profile-view";
 import type { Metadata } from "next";
@@ -12,6 +12,15 @@ export const revalidate = 30;
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+function sanitizeSlug(raw: string): string {
+  try {
+    const decoded = decodeURIComponent(raw);
+    return decoded.replace(/^(\{+[\d\w_]+\}+|%7b+[\d\w_]+%7d+)/i, "").trim();
+  } catch {
+    return raw.replace(/^(\{+[\d\w_]+\}+|%7b+[\d\w_]+%7d+)/i, "").trim();
+  }
+}
+
 /**
  * Resolves /<slug> to a profile (+ its card) — by username first, then by
  * card public_slug / id. Wrapped in React `cache()` so generateMetadata and
@@ -19,7 +28,8 @@ const UUID_RE =
  * twice. (Metadata also used to look only at card slugs, so username URLs
  * got the title "Card not found".)
  */
-const resolveSlug = cache(async (slug: string) => {
+const resolveSlug = cache(async (rawSlug: string) => {
+  const slug = sanitizeSlug(rawSlug);
   const supabase = createCachedPublicClient();
 
   const { data: byUsername } = await supabase
@@ -81,6 +91,10 @@ export default async function SlugPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
+  const clean = sanitizeSlug(slug);
+  if (clean && clean !== slug) {
+    redirect(`/${clean}`);
+  }
   const result = await resolveSlug(slug);
   if (!result) notFound();
 

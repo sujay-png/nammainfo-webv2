@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Camera, Check, Lock, ScanLine } from "lucide-react";
+import { Camera, Check, Lock, ScanLine, X } from "lucide-react";
 import { createClient } from "@/supabase/client";
 import { getCurrentUser } from "@/supabase/current-user";
 import Avatar from "@/components/ui/avatar";
@@ -74,6 +74,8 @@ export default function VisitorDetailsGate({
   personName,
   businessName,
   avatarUrl,
+  forceOpen = false,
+  onClose,
 }: {
   ownerId: string;
   employeeId?: string | null;
@@ -81,6 +83,8 @@ export default function VisitorDetailsGate({
   personName: string;
   businessName: string;
   avatarUrl?: string | null;
+  forceOpen?: boolean;
+  onClose?: () => void;
 }) {
   const [mode, setMode] = useState<"checking" | "form" | "shared" | "none">("checking");
   const [name, setName] = useState("");
@@ -144,13 +148,37 @@ export default function VisitorDetailsGate({
     };
   }, [ownerId, employeeId, skipKey]);
 
-  // Lock scrolling behind the form
+  // Open and prefill data when manually triggered via forceOpen
+  useEffect(() => {
+    if (!forceOpen) return;
+    const saved = readDetails();
+    if (saved) {
+      if (saved.name) setName(saved.name);
+      if (saved.phone) {
+        setPhone(saved.phone);
+        setUseEmail(false);
+      } else if (saved.email) {
+        setEmail(saved.email);
+        setUseEmail(true);
+      }
+    }
+    setError(null);
+    setCardStep("none");
+    setMode("form");
+  }, [forceOpen]);
+
+  // Lock scrolling behind the form & handle Escape key
   useEffect(() => {
     if (mode !== "form") return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") skip();
+    }
+    window.addEventListener("keydown", handleKeyDown);
     return () => {
       document.body.style.overflow = prev;
+      window.removeEventListener("keydown", handleKeyDown);
     };
   }, [mode]);
 
@@ -168,7 +196,11 @@ export default function VisitorDetailsGate({
       localStorage.setItem(DETAILS_KEY, JSON.stringify(d));
     } catch {}
     submit(ownerId, employeeId, d, new URLSearchParams(window.location.search).get("src") || "card");
-    setMode("none"); // instant: don't make them wait for the network
+    setMode("shared");
+    setTimeout(() => {
+      setMode("none");
+      onClose?.();
+    }, 2500);
   }
 
   /** Valid parts of whatever the visitor typed (all optional with a card). */
@@ -209,7 +241,11 @@ export default function VisitorDetailsGate({
         localStorage.setItem(DETAILS_KEY, JSON.stringify(d));
       } catch {}
     }
-    setMode("none");
+    setMode("shared");
+    setTimeout(() => {
+      setMode("none");
+      onClose?.();
+    }, 2500);
     const source = new URLSearchParams(window.location.search).get("src") || "card";
     (async () => {
       const frontPath = (await frontJobRef.current) ?? null;
@@ -232,6 +268,7 @@ export default function VisitorDetailsGate({
       sessionStorage.setItem(skipKey, "1");
     } catch {}
     setMode("none");
+    onClose?.();
   }
 
   if (mode === "shared") {
@@ -252,6 +289,9 @@ export default function VisitorDetailsGate({
       role="dialog"
       aria-modal="true"
       aria-labelledby="visitor-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) skip();
+      }}
     >
       <form
         onSubmit={onSubmit}
@@ -259,12 +299,22 @@ export default function VisitorDetailsGate({
         className="w-full max-w-[420px] animate-slide-up rounded-t-2xl border border-[var(--border)] bg-[var(--background)] shadow-[0_-8px_40px_-12px_rgba(0,0,0,0.3)] sm:rounded-2xl"
       >
         {/* Whose card this is */}
-        <div className="flex items-center gap-3 border-b border-[var(--border)] px-5 py-4">
-          <Avatar name={personName} src={avatarUrl} size={40} shape="rounded" />
-          <div className="min-w-0">
-            <p className="truncate text-[15px] font-semibold text-[var(--foreground)]">{personName}</p>
-            <p className="truncate text-[13px] text-[var(--muted-foreground)]">{businessName}</p>
+        <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <Avatar name={personName} src={avatarUrl} size={40} shape="rounded" />
+            <div className="min-w-0">
+              <p className="truncate text-[15px] font-semibold text-[var(--foreground)]">{personName}</p>
+              <p className="truncate text-[13px] text-[var(--muted-foreground)]">{businessName}</p>
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={skip}
+            className="shrink-0 rounded-lg p-1 text-[var(--muted-foreground)] transition hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+            aria-label="Close"
+          >
+            <X size={18} />
+          </button>
         </div>
 
         <div className="px-5 pb-5 pt-4">
