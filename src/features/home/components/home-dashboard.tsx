@@ -27,7 +27,6 @@ import { getCurrentUser } from "@/supabase/current-user";
 import { formatDistanceToNow, initials } from "@/lib/utils";
 import type { Profile, Card, Review, Employee, Connection } from "@/supabase/database-types";
 import UpgradeToProModal from "@/components/UpgradeToProModal";
-import ApplyFreeTrialModal from "@/components/ApplyFreeTrialModal";
 
 interface EnrichedConnection extends Connection {
   connected_profile?: {
@@ -120,14 +119,12 @@ function ValidityCard({
   completionPct,
   onOpenUpgrade,
   onOpenRenewal,
-  onOpenTrial,
 }: {
   profile: Profile;
   employeesCount: number;
   completionPct: number;
   onOpenUpgrade: () => void;
   onOpenRenewal: () => void;
-  onOpenTrial: () => void;
 }) {
   const joined = startOfDay(new Date(profile.created_at));
 
@@ -140,7 +137,6 @@ function ValidityCard({
 
   if (isFree) {
     const isProfileComplete = completionPct === 100;
-    const isPendingApproval = profile.trial_status === "pending_approval";
 
     return (
       <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-4 shadow-sm">
@@ -172,44 +168,14 @@ function ValidityCard({
           </div>
         </div>
 
-        {/* Pending Approval Notice */}
-        {isPendingApproval && (
-          <div className="flex items-center gap-2.5 p-3 rounded-[5px] bg-[var(--accent)]/40 border border-[var(--border)] text-[var(--foreground)] text-xs">
-            <Clock size={15} className="text-[var(--muted-foreground)] shrink-0" />
-            <span className="leading-snug">
-              Your 100-Day Free Trial application is under review. Our team will verify and activate your trial shortly.
-            </span>
-          </div>
-        )}
-
-        {/* Dual Actions: Upgrade to Pro & Apply / Waiting for Approval */}
-        <div className="flex flex-col sm:flex-row gap-2">
-          <button
-            onClick={onOpenUpgrade}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold shadow-xs hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
-          >
-            <span>{isProfileComplete ? "Order Custom NFC Card & Upgrade" : "Upgrade to Pro"}</span>
-            <ArrowRight size={14} />
-          </button>
-
-          {isPendingApproval ? (
-            <button
-              disabled
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-[5px] border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] text-xs font-semibold cursor-not-allowed opacity-75"
-            >
-              <Clock size={14} className="text-[var(--muted-foreground)]" />
-              <span>Waiting for Approval</span>
-            </button>
-          ) : (
-            <button
-              onClick={onOpenTrial}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-[5px] border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--accent)] text-[var(--foreground)] text-xs font-semibold shadow-xs hover:border-[var(--foreground)]/40 active:scale-[0.98] transition-all cursor-pointer"
-            >
-              <Clock size={14} className="text-[var(--muted-foreground)]" />
-              <span>Apply for Free Trial</span>
-            </button>
-          )}
-        </div>
+        {/* Primary Action: Upgrade to Pro */}
+        <button
+          onClick={onOpenUpgrade}
+          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold shadow-xs hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
+        >
+          <span>{isProfileComplete ? "Order Custom NFC Card & Upgrade" : "Upgrade to Pro"}</span>
+          <ArrowRight size={14} />
+        </button>
 
         {/* Structured specs row - no wrapping glitches, crisp scannability */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-[var(--border)]">
@@ -487,7 +453,6 @@ function OwnerHomePage() {
   const [reviewCount, setReviewCount] = useState(0);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [showRenewalModal, setShowRenewalModal] = useState(false);
-  const [showTrialModal, setShowTrialModal] = useState(false);
 
   useEffect(() => {
     let activeChannel: any = null;
@@ -671,7 +636,6 @@ function OwnerHomePage() {
         completionPct={completionPct}
         onOpenUpgrade={() => setShowUpgradeModal(true)}
         onOpenRenewal={() => setShowRenewalModal(true)}
-        onOpenTrial={() => setShowTrialModal(true)}
       />
 
       {/* Profile completion */}
@@ -963,17 +927,6 @@ function OwnerHomePage() {
         profile={profile}
       />
 
-      {/* 100-Day Free Trial Application Modal */}
-      <ApplyFreeTrialModal
-        isOpen={showTrialModal}
-        onClose={() => setShowTrialModal(false)}
-        profile={profile}
-        completionPct={completionPct}
-        onSuccess={() => {
-          setShowTrialModal(false);
-          window.location.reload();
-        }}
-      />
 
       {/* Annual Organization Renewal Modal */}
       {profile && (

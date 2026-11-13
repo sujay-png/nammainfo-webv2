@@ -3,7 +3,7 @@ import { CreditCard, Clock, CalendarX, FileText } from "lucide-react";
 import { StatCard } from "@/admin/shared/ui/StatCard";
 import type { AdminStats } from "@/admin/entities/company/model/types";
 
-export type AdminViewFilter = "all" | "pending_trials" | "upcoming_renewals" | "expired";
+export type AdminViewFilter = "all" | "active_trials" | "upcoming_renewals" | "expired";
 
 interface KpiMetricsGridProps {
   stats: AdminStats;
@@ -35,18 +35,14 @@ export const KpiMetricsGrid: React.FC<KpiMetricsGridProps> = ({
         onClick={() => onSelectView("all")}
       />
 
-      {/* 2. Pending Free Trials (Action Required) */}
+      {/* 2. Active Free Trials */}
       <StatCard
-        title="Pending Trials"
-        value={loading ? "—" : stats.pendingTrialsCount ?? 0}
-        subtitle={
-          <span className={(stats.pendingTrialsCount ?? 0) > 0 ? "font-semibold text-[var(--foreground)]" : ""}>
-            {(stats.pendingTrialsCount ?? 0) > 0 ? "Awaiting approval" : "No pending requests"}
-          </span>
-        }
+        title="Active Trials"
+        value={loading ? "—" : stats.activeTrialsCount ?? 0}
+        subtitle="100-day coverage"
         icon={<FileText size={18} strokeWidth={1.8} />}
-        isActive={activeView === "pending_trials"}
-        onClick={() => onSelectView("pending_trials")}
+        isActive={activeView === "active_trials"}
+        onClick={() => onSelectView("active_trials")}
       />
 
       {/* 3. Upcoming Renewals (< 30 days) */}

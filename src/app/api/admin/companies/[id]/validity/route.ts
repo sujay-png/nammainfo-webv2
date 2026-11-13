@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdminAuth } from "@/admin/shared/lib/admin-auth";
+import { sendWhatsAppTemplate } from "@/lib/whatsapp";
 
 const validityUpdateSchema = z.object({
   subscriptionStartedAt: z.string().nullable().optional(),
@@ -39,6 +40,9 @@ export async function POST(
     if (parsed.data.membershipExpiresAt !== undefined) {
       updates.membership_expires_at = parsed.data.membershipExpiresAt;
     }
+    if (parsed.data.primaryCardCount !== undefined) {
+      updates.primary_card_count = parsed.data.primaryCardCount;
+    }
     if (parsed.data.purchasedIdCount !== undefined) {
       updates.purchased_id_count = parsed.data.purchasedIdCount;
     }
@@ -48,6 +52,24 @@ export async function POST(
       if (parsed.data.subscriptionPlan === "free") {
         updates.membership_expires_at = null;
         updates.subscription_started_at = null;
+        updates.trial_status = "none";
+      } else if (parsed.data.subscriptionPlan === "trial") {
+        const now = new Date();
+        const oneHundredDaysMs = 100 * 24 * 60 * 60 * 1000;
+        if (!updates.membership_expires_at) {
+          updates.membership_expires_at = new Date(now.getTime() + oneHundredDaysMs).toISOString();
+        }
+        if (!updates.subscription_started_at) {
+          updates.subscription_started_at = now.toISOString();
+        }
+        updates.trial_status = "approved";
+        updates.trial_approved_at = now.toISOString();
+        updates.trial_extension_days = 0;
+        updates.status = "active";
+        updates.is_member = true;
+        if (updates.primary_card_count === undefined) {
+          updates.primary_card_count = 1;
+        }
       }
     }
 
@@ -56,16 +78,16 @@ export async function POST(
     // Check current status so we never override manual admin suspensions
     const { data: currentProfile } = await supabase
       .from("profiles")
-      .select("status, slug, username")
+      .select("status, slug, username, phone, owner_name, business_name, subscription_plan")
       .eq("id", id)
       .single();
 
     if (currentProfile && currentProfile.status !== "suspended") {
       if (parsed.data.subscriptionPlan === "free") {
         updates.status = "active";
-      } else if (parsed.data.membershipExpiresAt !== undefined) {
-        if (parsed.data.membershipExpiresAt) {
-          const isFuture = new Date(parsed.data.membershipExpiresAt).getTime() > Date.now();
+      } else if (updates.membership_expires_at !== undefined) {
+        if (updates.membership_expires_at) {
+          const isFuture = new Date(updates.membership_expires_at).getTime() > Date.now();
           updates.status = isFuture ? "active" : "expired";
         }
       }
@@ -75,10 +97,15 @@ export async function POST(
       return NextResponse.json({ message: "No fields to update" });
     }
 
-    const { error: updateError } = await supabase
+    let { error: updateError } = await supabase
       .from("profiles")
       .update(updates)
       .eq("id", id);
+
+    if (updateError?.message?.includes("primary_card_count")) {
+      delete updates.primary_card_count;
+      ({ error: updateError } = await supabase.from("profiles").update(updates).eq("id", id));
+    }
 
     if (updateError) {
       console.error("[Admin API] Failed to update profile validity:", updateError);
@@ -86,6 +113,43 @@ export async function POST(
         { error: updateError.message },
         { status: 500 }
       );
+    }
+
+    // Ensure digital card exists and is active for public access
+    if (parsed.data.subscriptionPlan === "trial" || parsed.data.subscriptionPlan === "pro") {
+      const { data: existingCard } = await supabase
+        .from("cards")
+        .select("id")
+        .eq("profile_id", id)
+        .maybeSingle();
+
+      if (!existingCard) {
+        await supabase.from("cards").insert({
+          profile_id: id,
+          public_slug: currentProfile?.slug || currentProfile?.username || `user-${id.slice(0, 6)}`,
+          is_active: true,
+        });
+      } else {
+        await supabase
+          .from("cards")
+          .update({ is_active: true })
+          .eq("id", existingCard.id);
+      }
+    }
+
+    // Trigger automated WhatsApp notification if plan was set/switched to Free Trial
+    if (parsed.data.subscriptionPlan === "trial" && currentProfile?.phone) {
+      const recipientName = currentProfile.owner_name || currentProfile.business_name || "Valued Customer";
+      const cardSlug = currentProfile.username || currentProfile.slug || "";
+      sendWhatsAppTemplate({
+        toPhone: currentProfile.phone,
+        templateName: "trial_approved",
+        languageCode: "en_IN",
+        bodyParameters: [cardSlug, recipientName],
+        buttonParameters: [cardSlug],
+      }).catch((waErr) => {
+        console.error("[Admin Validity] WhatsApp notification error:", waErr);
+      });
     }
 
     // Synchronize team members according to company plan:
@@ -100,17 +164,17 @@ export async function POST(
           status: "active",
         })
         .eq("owner_id", id);
-    } else if (parsed.data.membershipExpiresAt !== undefined) {
+    } else if (updates.membership_expires_at !== undefined) {
       // If company validity is renewed/updated, sync expiry and status only for employees on Pro plan
-      const isFuture = parsed.data.membershipExpiresAt
-        ? new Date(parsed.data.membershipExpiresAt).getTime() > Date.now()
+      const isFuture = updates.membership_expires_at
+        ? new Date(updates.membership_expires_at).getTime() > Date.now()
         : true;
       const empUpdates: Record<string, any> = {
-        subscription_expires_at: parsed.data.membershipExpiresAt,
+        subscription_expires_at: updates.membership_expires_at,
         status: isFuture ? "active" : "expired",
       };
-      if (parsed.data.subscriptionStartedAt !== undefined) {
-        empUpdates.subscription_started_at = parsed.data.subscriptionStartedAt;
+      if (updates.subscription_started_at !== undefined) {
+        empUpdates.subscription_started_at = updates.subscription_started_at;
       }
       await supabase
         .from("employees")

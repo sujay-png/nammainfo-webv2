@@ -13,7 +13,6 @@ import {
 import { CompaniesTable } from "@/admin/widgets/companies-table/ui/CompaniesTable";
 import { UpcomingRenewalsTable } from "@/admin/widgets/upcoming-renewals/ui/UpcomingRenewalsTable";
 import { ExpiredCardsTable } from "@/admin/widgets/expired-cards/ui/ExpiredCardsTable";
-import { PendingTrialsTable } from "@/admin/widgets/pending-trials/ui/PendingTrialsTable";
 import { FreeTrialsTable } from "@/admin/widgets/free-trials/ui/FreeTrialsTable";
 import { CompanyFiltersBar } from "@/admin/features/company-filters/ui/CompanyFiltersBar";
 import { CompanyDetailModal } from "@/admin/widgets/company-detail-modal/ui/CompanyDetailModal";
@@ -58,7 +57,7 @@ export const AdminDashboardView: React.FC = () => {
   });
   const [loading, setLoading] = useState(true);
 
-  // Active top KPI filter view: "all" | "pending_trials" | "upcoming_renewals" | "expired"
+  // Active top KPI filter view: "all" | "active_trials" | "upcoming_renewals" | "expired"
   const [activeView, setActiveView] = useState<AdminViewFilter>("all");
 
   // Filters state for all companies
@@ -379,8 +378,8 @@ export const AdminDashboardView: React.FC = () => {
                 <span className="font-medium text-[var(--foreground)]">
                   Viewing:{" "}
                   <span className="font-semibold">
-                    {activeView === "pending_trials"
-                      ? "Pending Free Trial Requests"
+                    {activeView === "active_trials"
+                      ? "Active 100-Day Free Trials"
                       : activeView === "upcoming_renewals"
                       ? "Upcoming Renewals (Next 30 Days)"
                       : activeView === "expired"
@@ -398,9 +397,9 @@ export const AdminDashboardView: React.FC = () => {
             )}
 
             {/* KPI Drilldown Views vs Unified Table */}
-            {activeView === "pending_trials" ? (
-              <PendingTrialsTable
-                companies={companies}
+            {activeView === "active_trials" ? (
+              <FreeTrialsTable
+                companies={companies.filter((c) => c.subscriptionPlan === "trial")}
                 loading={loading}
                 onSelectCompany={handleSelectCompany}
                 onRefresh={loadData}
