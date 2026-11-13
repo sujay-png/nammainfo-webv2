@@ -19,7 +19,14 @@ import type { Branch } from "../types";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** /<slug> → profile (+ card when found by card link). Username first, then card public_slug / id. */
-export const resolveOwner = cache(async (slug: string) => {
+export const resolveOwner = cache(async (rawSlug: string) => {
+  let slug = rawSlug;
+  try {
+    const decoded = decodeURIComponent(rawSlug);
+    slug = decoded.replace(/^(\{+[\d\w_]+\}+|%7b+[\d\w_]+%7d+)/i, "").trim();
+  } catch {
+    slug = rawSlug.replace(/^(\{+[\d\w_]+\}+|%7b+[\d\w_]+%7d+)/i, "").trim();
+  }
   const supabase = createCachedPublicClient();
 
   const { data: byUsername } = await supabase.from("profiles").select("*").eq("username", slug).maybeSingle();

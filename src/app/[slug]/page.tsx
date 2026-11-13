@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import PublicProfileView from "@/features/public-profile/components/public-profile-view";
 import {
@@ -13,13 +13,23 @@ import {
 // while repeat visitors get a cached page instantly
 export const revalidate = 30;
 
+function sanitizeSlug(raw: string): string {
+  try {
+    const decoded = decodeURIComponent(raw);
+    return decoded.replace(/^(\{+[\d\w_]+\}+|%7b+[\d\w_]+%7d+)/i, "").trim();
+  } catch {
+    return raw.replace(/^(\{+[\d\w_]+\}+|%7b+[\d\w_]+%7d+)/i, "").trim();
+  }
+}
+
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const result = await resolveOwner(slug);
+  const clean = sanitizeSlug(slug);
+  const result = await resolveOwner(clean);
   if (!result) return { title: "Card not found" };
 
   const { profile } = result;
@@ -41,7 +51,11 @@ export default async function SlugPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const result = await resolveOwner(slug);
+  const clean = sanitizeSlug(slug);
+  if (clean && clean !== slug) {
+    redirect(`/${clean}`);
+  }
+  const result = await resolveOwner(clean);
   if (!result) notFound();
 
   const { profile } = result;
