@@ -377,70 +377,75 @@ export default function UpgradeToProModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-xl max-h-[92dvh] flex flex-col rounded-3xl border border-[var(--border)] bg-[var(--card)] shadow-2xl relative overflow-hidden">
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          disabled={loading}
-          className="absolute top-4 right-4 sm:top-5 sm:right-5 p-2 rounded-xl text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors cursor-pointer z-10"
-        >
-          <X size={18} />
-        </button>
-
-        <div className="flex-1 overflow-y-auto p-5 sm:p-7 space-y-5">
-          {/* Modal Header */}
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-1.5 font-mono text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-            <CreditCard size={13} className="text-[var(--foreground)]" />
-            <span>Pro Membership & NFC Card</span>
-          </div>
-          <h2 className="font-headline text-xl sm:text-2xl font-bold text-[var(--foreground)]">
-            Claim Your Custom NFC Smart Card
-          </h2>
-          <p className="text-xs text-[var(--muted-foreground)]">
-            Activate your vanity profile URL and get your high-finish NFC card delivered to your door.
-          </p>
-        </div>
-
-        {/* Step Indicator */}
-        <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
-          {[
-            { num: 1, label: "Design", icon: Palette },
-            { num: 2, label: "Shipping", icon: Truck },
-            { num: 3, label: "Review & Pay", icon: CreditCard },
-          ].map((s) => {
-            const isActive = step === s.num;
-            const isCompleted = step > s.num;
-            const Icon = s.icon;
-            return (
-              <div
-                key={s.num}
-                className={`flex items-center justify-center gap-1 sm:gap-1.5 py-1.5 sm:py-2 px-1.5 sm:px-2.5 rounded-xl border text-[11px] sm:text-xs font-medium transition-all ${
-                  isActive
-                    ? "bg-[var(--primary)] text-[var(--primary-foreground)] border-transparent shadow-sm font-semibold"
-                    : isCompleted
-                    ? "bg-[var(--accent)] text-[var(--foreground)] border-[var(--border)]"
-                    : "bg-[var(--accent)]/30 text-[var(--muted-foreground)] border-transparent"
-                }`}
-              >
-                {isCompleted ? (
-                  <Check size={11} strokeWidth={2.5} className="shrink-0" />
-                ) : (
-                  <Icon size={11} className="shrink-0" />
-                )}
-                <span className="truncate">{s.label}</span>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
+      <div className="w-full max-w-xl max-h-[92dvh] h-auto flex flex-col rounded-[5px] border border-[var(--border)] bg-[var(--card)] shadow-2xl overflow-hidden">
+        {/* Fixed Modal Header */}
+        <div className="p-4 sm:p-5 border-b border-[var(--border)] bg-[var(--card)] shrink-0 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5 font-mono text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+                <CreditCard size={13} className="text-[var(--foreground)]" />
+                <span>Pro Membership & NFC Card</span>
               </div>
-            );
-          })}
+              <h2 className="font-headline text-lg sm:text-xl font-bold text-[var(--foreground)] leading-tight">
+                Claim Your Custom NFC Smart Card
+              </h2>
+              <p className="text-xs text-[var(--muted-foreground)]">
+                Step {step} of 3 • {step === 1 ? "Design Your Card" : step === 2 ? "Shipping Address" : "Review & Pay"}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={loading}
+              className="p-1.5 rounded-[5px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors cursor-pointer shrink-0"
+              aria-label="Close modal"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          {/* Step Indicator */}
+          <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+            {[
+              { num: 1, label: "Design", icon: Palette },
+              { num: 2, label: "Shipping", icon: Truck },
+              { num: 3, label: "Review & Pay", icon: CreditCard },
+            ].map((s) => {
+              const isActive = step === s.num;
+              const isCompleted = step > s.num;
+              const Icon = s.icon;
+              return (
+                <div
+                  key={s.num}
+                  className={`flex items-center justify-center gap-1 sm:gap-1.5 py-1.5 px-2 rounded-[5px] border text-[11px] font-medium transition-all ${
+                    isActive
+                      ? "bg-[var(--primary)] text-[var(--primary-foreground)] border-transparent shadow-xs font-semibold"
+                      : isCompleted
+                      ? "bg-[var(--accent)] text-[var(--foreground)] border-[var(--border)]"
+                      : "bg-[var(--accent)]/30 text-[var(--muted-foreground)] border-transparent"
+                  }`}
+                >
+                  {isCompleted ? (
+                    <Check size={11} strokeWidth={2.5} className="shrink-0" />
+                  ) : (
+                    <Icon size={11} className="shrink-0" />
+                  )}
+                  <span className="truncate">{s.label}</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
-        {errorMsg && (
-          <div className="flex items-center gap-2 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 text-xs">
-            <AlertCircle size={15} className="shrink-0" />
-            <span>{errorMsg}</span>
-          </div>
-        )}
+        {/* Scrollable Form Body */}
+        <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5 space-y-4">
+          {errorMsg && (
+            <div className="flex items-center gap-2 p-3 rounded-[5px] bg-rose-500/10 border border-rose-500/20 text-rose-600 text-xs">
+              <AlertCircle size={15} className="shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
 
         {/* STEP 1: Card Design */}
         {step === 1 && (
@@ -724,24 +729,13 @@ export default function UpgradeToProModal({
                 )}
               </div>
             </div>
-
-            <div className="flex justify-end pt-2">
-              <button
-                type="button"
-                onClick={goToStep2}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] font-semibold text-xs shadow-sm hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
-              >
-                <span>Continue to Shipping</span>
-                <ArrowRight size={14} />
-              </button>
-            </div>
           </div>
         )}
 
         {/* STEP 2: Shipping & Delivery Address */}
         {step === 2 && (
           <div className="space-y-4">
-            <label className="flex items-start sm:items-center gap-3 p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--accent)]/40 hover:bg-[var(--accent)]/70 cursor-pointer text-xs transition-colors">
+            <label className="flex items-start sm:items-center gap-3 p-3.5 rounded-[5px] border border-[var(--border)] bg-[var(--accent)]/40 hover:bg-[var(--accent)]/70 cursor-pointer text-xs transition-colors">
               <input
                 type="checkbox"
                 checked={sameAsProfile}
@@ -759,7 +753,7 @@ export default function UpgradeToProModal({
                     }));
                   }
                 }}
-                className="mt-0.5 sm:mt-0 h-4 w-4 rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]/30 accent-[var(--primary)]"
+                className="mt-0.5 sm:mt-0 h-4 w-4 rounded-[3px] border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]/30 accent-[var(--primary)]"
               />
               <div className="flex-1 min-w-0">
                 <span className="font-semibold text-[var(--foreground)] block">
@@ -783,7 +777,7 @@ export default function UpgradeToProModal({
                     type="text"
                     value={shippingData.fullName}
                     onChange={(e) => setShippingData({ ...shippingData, fullName: e.target.value })}
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-3.5 py-2.5 outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/20 transition-all text-xs"
+                    className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3.5 py-2.5 outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/20 transition-all text-xs"
                     placeholder="Enter recipient name"
                   />
                 </div>
@@ -795,7 +789,7 @@ export default function UpgradeToProModal({
                     type="text"
                     value={shippingData.phone}
                     onChange={(e) => setShippingData({ ...shippingData, phone: e.target.value })}
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-3.5 py-2.5 outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/20 transition-all text-xs"
+                    className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3.5 py-2.5 outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/20 transition-all text-xs"
                     placeholder="10-digit mobile number"
                   />
                 </div>
@@ -809,7 +803,7 @@ export default function UpgradeToProModal({
                   rows={2}
                   value={shippingData.street}
                   onChange={(e) => setShippingData({ ...shippingData, street: e.target.value })}
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-3.5 py-2.5 outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/20 transition-all text-xs"
+                  className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3.5 py-2.5 outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/20 transition-all text-xs"
                   placeholder="Flat/House number, Building, Street, Area"
                 />
               </div>
@@ -823,7 +817,7 @@ export default function UpgradeToProModal({
                     type="text"
                     value={shippingData.city}
                     onChange={(e) => setShippingData({ ...shippingData, city: e.target.value })}
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-3.5 py-2.5 outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/20 transition-all text-xs"
+                    className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3.5 py-2.5 outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/20 transition-all text-xs"
                     placeholder="e.g. Bengaluru"
                   />
                 </div>
@@ -835,30 +829,11 @@ export default function UpgradeToProModal({
                     type="text"
                     value={shippingData.pincode}
                     onChange={(e) => setShippingData({ ...shippingData, pincode: e.target.value })}
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-3.5 py-2.5 outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/20 transition-all text-xs"
+                    className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3.5 py-2.5 outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/20 transition-all text-xs"
                     placeholder="6-digit PIN code"
                   />
                 </div>
               </div>
-            </div>
-
-            <div className="flex items-center justify-between pt-2">
-              <button
-                type="button"
-                onClick={() => setStep(1)}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors cursor-pointer"
-              >
-                <ArrowLeft size={14} />
-                <span>Back</span>
-              </button>
-              <button
-                type="button"
-                onClick={goToStep3}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] font-semibold text-xs shadow-sm hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
-              >
-                <span>Review & Pay</span>
-                <ArrowRight size={14} />
-              </button>
             </div>
           </div>
         )}
@@ -975,8 +950,55 @@ export default function UpgradeToProModal({
               <ShieldCheck size={16} className="text-emerald-500 shrink-0" />
               <span>100% Safe & Secure Payment</span>
             </div>
+          </div>
+        )}
+        </div>
 
-            <div className="flex items-center justify-between pt-2">
+        {/* Pinned Modal Footer */}
+        <div className="p-3.5 sm:p-4 border-t border-[var(--border)] bg-[var(--card)] shrink-0 flex items-center justify-between gap-3">
+          {step === 1 ? (
+            <>
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={loading}
+                className="px-4 py-2 rounded-[5px] text-xs font-semibold text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={goToStep2}
+                disabled={loading}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] font-semibold text-xs shadow-xs hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
+              >
+                <span>Continue to Shipping</span>
+                <ArrowRight size={14} />
+              </button>
+            </>
+          ) : step === 2 ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setStep(1)}
+                disabled={loading}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-[5px] text-xs font-semibold text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors cursor-pointer"
+              >
+                <ArrowLeft size={14} />
+                <span>Back</span>
+              </button>
+              <button
+                type="button"
+                onClick={goToStep3}
+                disabled={loading}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] font-semibold text-xs shadow-xs hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
+              >
+                <span>Review & Pay</span>
+                <ArrowRight size={14} />
+              </button>
+            </>
+          ) : (
+            <>
               <button
                 type="button"
                 onClick={() => setStep(2)}
@@ -990,7 +1012,7 @@ export default function UpgradeToProModal({
                 type="button"
                 onClick={handleRazorpayPayment}
                 disabled={loading}
-                className="flex items-center gap-2 px-6 py-2.5 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] font-semibold text-xs shadow-md hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50 cursor-pointer"
+                className="flex items-center gap-2 px-6 py-2.5 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] font-semibold text-xs shadow-xs hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50 cursor-pointer"
               >
                 {loading ? (
                   <>
@@ -1004,9 +1026,8 @@ export default function UpgradeToProModal({
                   </>
                 )}
               </button>
-            </div>
-          </div>
-        )}
+            </>
+          )}
         </div>
       </div>
     </div>

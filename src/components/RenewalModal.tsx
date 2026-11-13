@@ -165,7 +165,7 @@ export default function RenewalModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
       <div className="w-full max-w-lg max-h-[92dvh] flex flex-col rounded-[5px] border border-[var(--border)] bg-[var(--card)] shadow-2xl relative overflow-hidden">
         {/* Close Button */}
         <button
