@@ -37,3 +37,4 @@ export async function GET(
   const vcf = buildContactVCard(contact);
   return vcardResponse(vcf, vcardFileName(contact.name || "contact"));
 }
+

@@ -18,6 +18,7 @@ import {
   MoreVertical,
   Upload,
   Loader2,
+  Camera,
 } from "lucide-react";
 import { createClient } from "@/supabase/client";
 import { useAccount } from "@/hooks/use-account";
@@ -595,34 +596,7 @@ function ContactSheet({
   const [eEmail, setEEmail] = useState(contact.email ?? "");
   const [eError, setEError] = useState<string | null>(null);
 
-  const [uploadingCard, setUploadingCard] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-
-  async function handleCardUpload(e: React.ChangeEvent<HTMLInputElement>, side: "front" | "back") {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadingCard(true);
-    setUploadError(null);
-    try {
-      const formData = new FormData();
-      formData.append(side, file);
-      const res = await fetch(`/api/contacts/${contact.id}/photos`, {
-        method: "POST",
-        body: formData,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to upload photo");
-      onPhotosUpdated({
-        card_front_path: data.card_front_path,
-        card_back_path: data.card_back_path,
-      });
-    } catch (err: any) {
-      setUploadError(err.message || "Failed to upload");
-    } finally {
-      setUploadingCard(false);
-      e.target.value = "";
-    }
-  }
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
 
   function saveDetails() {
     const name = eName.trim();
@@ -688,62 +662,53 @@ function ContactSheet({
         </button>
       </div>
 
-      {/* Business Card Photos & Upload */}
+      {/* Business Card Section */}
       <div className="mt-4">
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-[13px] font-medium text-[var(--foreground)]">Business card</p>
+          {(contact.card_front_path || contact.card_back_path) && (
+            <button
+              type="button"
+              onClick={() => setShowPhotoModal(true)}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--primary)] hover:underline cursor-pointer"
+            >
+              <Camera size={13} />
+              <span>Edit business card</span>
+            </button>
+          )}
+        </div>
+
         {(contact.card_front_path || contact.card_back_path) ? (
-          <div>
-            <CardPhotos front={contact.card_front_path} back={contact.card_back_path} />
-            <div className="mt-2 flex items-center gap-3">
-              <label className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--primary)] hover:underline cursor-pointer">
-                {uploadingCard ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
-                <span>{contact.card_back_path ? "Replace front photo" : "Add back photo"}</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  disabled={uploadingCard}
-                  onChange={(e) => handleCardUpload(e, contact.card_back_path ? "front" : "back")}
-                />
-              </label>
-              {contact.card_back_path && (
-                <label className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--primary)] hover:underline cursor-pointer">
-                  <span>Replace back photo</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    disabled={uploadingCard}
-                    onChange={(e) => handleCardUpload(e, "back")}
-                  />
-                </label>
-              )}
-            </div>
-          </div>
+          <CardPhotos front={contact.card_front_path} back={contact.card_back_path} />
         ) : (
-          <div className="space-y-1.5">
-            <p className="text-[13px] font-medium">Business card</p>
-            <label className="flex flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-[var(--border)] p-4 text-center hover:border-[var(--muted-foreground)] cursor-pointer transition bg-[var(--card)]">
-              {uploadingCard ? (
-                <Loader2 size={18} className="animate-spin text-[var(--muted-foreground)]" />
-              ) : (
-                <Upload size={18} className="text-[var(--muted-foreground)]" />
-              )}
-              <span className="text-xs font-medium text-[var(--foreground)]">
-                {uploadingCard ? "Uploading photo..." : "Upload business card photo"}
-              </span>
-              <span className="text-[11px] text-[var(--muted-foreground)]">Attach a photo of their physical card</span>
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                disabled={uploadingCard}
-                onChange={(e) => handleCardUpload(e, "front")}
-              />
-            </label>
-          </div>
+          <button
+            type="button"
+            onClick={() => setShowPhotoModal(true)}
+            className="flex w-full flex-col items-center justify-center gap-1.5 rounded-[5px] border border-dashed border-[var(--border)] p-4 text-center hover:border-[var(--muted-foreground)] hover:bg-[var(--muted)]/20 transition cursor-pointer bg-[var(--card)]"
+          >
+            <Camera size={18} className="text-[var(--muted-foreground)]" />
+            <span className="text-xs font-medium text-[var(--foreground)]">
+              Upload business card photo
+            </span>
+            <span className="text-[11px] text-[var(--muted-foreground)]">
+              Attach front & back photos of their physical card
+            </span>
+          </button>
         )}
-        {uploadError && <p className="mt-1 text-xs text-rose-500">{uploadError}</p>}
       </div>
+
+      {showPhotoModal && (
+        <EditBusinessCardModal
+          contactId={contact.id}
+          contactName={contact.name}
+          frontPath={contact.card_front_path}
+          backPath={contact.card_back_path}
+          onClose={() => setShowPhotoModal(false)}
+          onUpdated={(p) => {
+            onPhotosUpdated(p);
+          }}
+        />
+      )}
 
       {editing ? (
         <div className="mt-4 rounded-lg border border-[var(--border)] p-3">
@@ -858,6 +823,228 @@ function ContactSheet({
       >
         <Trash2 size={14} /> {confirmDelete ? "Confirm delete" : "Delete contact"}
       </button>
+    </Sheet>
+  );
+}
+
+function EditBusinessCardModal({
+  contactId,
+  contactName,
+  frontPath: initialFrontPath,
+  backPath: initialBackPath,
+  onClose,
+  onUpdated,
+}: {
+  contactId: string;
+  contactName: string;
+  frontPath: string | null;
+  backPath: string | null;
+  onClose: () => void;
+  onUpdated: (p: { card_front_path: string | null; card_back_path: string | null }) => void;
+}) {
+  const [frontPath, setFrontPath] = useState(initialFrontPath);
+  const [backPath, setBackPath] = useState(initialBackPath);
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  const [uploadingSide, setUploadingSide] = useState<"front" | "back" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const paths = [frontPath, backPath].filter((p): p is string => !!p);
+    if (paths.length) {
+      getCardPhotoUrls(paths).then(setUrls).catch(() => {});
+    }
+  }, [frontPath, backPath]);
+
+  async function handleUpload(file: File, side: "front" | "back") {
+    setUploadingSide(side);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append(side, file);
+      const res = await fetch(`/api/contacts/${contactId}/photos`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to upload photo");
+      setFrontPath(data.card_front_path);
+      setBackPath(data.card_back_path);
+      onUpdated({
+        card_front_path: data.card_front_path,
+        card_back_path: data.card_back_path,
+      });
+    } catch (err: any) {
+      setError(err.message || "Failed to upload photo");
+    } finally {
+      setUploadingSide(null);
+    }
+  }
+
+  const frontUrl = frontPath ? urls[frontPath] : null;
+  const backUrl = backPath ? urls[backPath] : null;
+
+  return (
+    <Sheet
+      title="Business Card Photos"
+      description={`Manage physical card photos for ${contactName}`}
+      zIndex={100}
+      onClose={onClose}
+    >
+      <div className="space-y-4">
+        {error && (
+          <p className="rounded-[5px] border border-rose-500/20 bg-rose-500/10 p-2.5 text-xs text-rose-600">
+            {error}
+          </p>
+        )}
+
+        {/* Front Photo Card */}
+        <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-3.5 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+              Front Side
+            </span>
+            {frontPath && (
+              <span className="rounded-[4px] border border-[var(--border)] bg-[var(--background)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--foreground)]">
+                Uploaded
+              </span>
+            )}
+          </div>
+
+          {frontUrl ? (
+            <div className="space-y-2.5">
+              <div className="relative aspect-[1.6] w-full overflow-hidden rounded-[5px] border border-[var(--border)] bg-[var(--muted)]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={frontUrl}
+                  alt="Front side of business card"
+                  className="h-full w-full object-cover"
+                />
+              </div>
+              <label className="flex items-center justify-center gap-2 rounded-[5px] border border-[var(--border)] bg-[var(--background)] py-2 text-xs font-medium text-[var(--foreground)] hover:bg-[var(--muted)] cursor-pointer transition">
+                {uploadingSide === "front" ? (
+                  <Loader2 size={14} className="animate-spin text-[var(--muted-foreground)]" />
+                ) : (
+                  <Camera size={14} />
+                )}
+                <span>{uploadingSide === "front" ? "Uploading front photo..." : "Replace Front Photo"}</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={uploadingSide !== null}
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleUpload(f, "front");
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+            </div>
+          ) : (
+            <label className="flex aspect-[1.8] w-full flex-col items-center justify-center gap-1.5 rounded-[5px] border border-dashed border-[var(--border)] p-4 text-center hover:border-[var(--muted-foreground)] hover:bg-[var(--muted)]/20 cursor-pointer transition">
+              {uploadingSide === "front" ? (
+                <Loader2 size={20} className="animate-spin text-[var(--muted-foreground)]" />
+              ) : (
+                <Upload size={20} className="text-[var(--muted-foreground)]" />
+              )}
+              <span className="text-xs font-medium text-[var(--foreground)]">
+                {uploadingSide === "front" ? "Uploading front photo..." : "Upload Front Photo"}
+              </span>
+              <span className="text-[10px] text-[var(--muted-foreground)]">PNG, JPG, WebP</span>
+              <input
+                type="file"
+                accept="image/*"
+                disabled={uploadingSide !== null}
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleUpload(f, "front");
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          )}
+        </div>
+
+        {/* Back Photo Card */}
+        <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-3.5 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+              Back Side (Optional)
+            </span>
+            {backPath && (
+              <span className="rounded-[4px] border border-[var(--border)] bg-[var(--background)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--foreground)]">
+                Uploaded
+              </span>
+            )}
+          </div>
+
+          {backUrl ? (
+            <div className="space-y-2.5">
+              <div className="relative aspect-[1.6] w-full overflow-hidden rounded-[5px] border border-[var(--border)] bg-[var(--muted)]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={backUrl}
+                  alt="Back side of business card"
+                  className="h-full w-full object-cover"
+                />
+              </div>
+              <label className="flex items-center justify-center gap-2 rounded-[5px] border border-[var(--border)] bg-[var(--background)] py-2 text-xs font-medium text-[var(--foreground)] hover:bg-[var(--muted)] cursor-pointer transition">
+                {uploadingSide === "back" ? (
+                  <Loader2 size={14} className="animate-spin text-[var(--muted-foreground)]" />
+                ) : (
+                  <Camera size={14} />
+                )}
+                <span>{uploadingSide === "back" ? "Uploading back photo..." : "Replace Back Photo"}</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={uploadingSide !== null}
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleUpload(f, "back");
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+            </div>
+          ) : (
+            <label className="flex aspect-[1.8] w-full flex-col items-center justify-center gap-1.5 rounded-[5px] border border-dashed border-[var(--border)] p-4 text-center hover:border-[var(--muted-foreground)] hover:bg-[var(--muted)]/20 cursor-pointer transition">
+              {uploadingSide === "back" ? (
+                <Loader2 size={20} className="animate-spin text-[var(--muted-foreground)]" />
+              ) : (
+                <Upload size={20} className="text-[var(--muted-foreground)]" />
+              )}
+              <span className="text-xs font-medium text-[var(--foreground)]">
+                {uploadingSide === "back" ? "Uploading back photo..." : "Upload Back Photo (Optional)"}
+              </span>
+              <span className="text-[10px] text-[var(--muted-foreground)]">PNG, JPG, WebP</span>
+              <input
+                type="file"
+                accept="image/*"
+                disabled={uploadingSide !== null}
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleUpload(f, "back");
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          )}
+        </div>
+
+        <div className="pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full rounded-[5px] bg-[var(--foreground)] py-2.5 text-xs font-semibold text-[var(--background)] hover:opacity-90 transition cursor-pointer"
+          >
+            Done
+          </button>
+        </div>
+      </div>
     </Sheet>
   );
 }
