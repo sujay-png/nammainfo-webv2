@@ -133,7 +133,7 @@ export default function ScannerPage() {
         fps: 15,
         qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
           const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-          const boxSize = Math.max(200, Math.min(Math.floor(minEdge * 0.72), 320));
+          const boxSize = Math.max(160, Math.min(Math.floor(minEdge * 0.68), 220));
           return { width: boxSize, height: boxSize };
         },
         videoConstraints: cameraDeviceId
@@ -164,7 +164,7 @@ export default function ScannerPage() {
           fps: 15,
           qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
             const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-            const boxSize = Math.max(200, Math.min(Math.floor(minEdge * 0.72), 320));
+            const boxSize = Math.max(160, Math.min(Math.floor(minEdge * 0.68), 220));
             return { width: boxSize, height: boxSize };
           },
         };
@@ -498,7 +498,7 @@ export default function ScannerPage() {
   }
 
   return (
-    <div className="mx-auto flex max-w-lg flex-col items-center px-4 py-6">
+    <div className="mx-auto flex max-w-lg flex-col items-center px-4 py-4 sm:py-6">
       {/* Hidden file element for scanning QR from photo library */}
       <div id="qr-file-helper" className="hidden" />
       <input
@@ -509,7 +509,7 @@ export default function ScannerPage() {
         onChange={handleFileUpload}
       />
 
-      <div className="w-full mb-5">
+      <div className={`w-full ${scanning ? "mb-2" : "mb-5"}`}>
         <h1 className="font-headline text-xl font-bold tracking-tight text-[var(--foreground)]">
           Scan Card
         </h1>
@@ -520,13 +520,13 @@ export default function ScannerPage() {
 
       {/* Active Live Camera Viewfinder (Kept in DOM so Html5Qrcode attaches reliably) */}
       <div
-        className={`relative w-full overflow-hidden rounded-[5px] border border-[var(--border)] bg-black shadow-xl mb-4 ${
+        className={`relative w-full overflow-hidden rounded-[5px] border border-[var(--border)] bg-black shadow-xl mb-3 aspect-[4/3] max-h-[50dvh] sm:max-h-[420px] ${
           scanning ? "block" : "hidden"
         }`}
       >
         {/* Starting indicator while camera stream connects */}
         {starting && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/85 z-30 text-white min-h-[360px]">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/85 z-30 text-white">
             <Loader2 size={24} className="animate-spin text-white/80" />
             <span className="text-xs font-mono text-white/70">Connecting camera…</span>
           </div>
@@ -535,7 +535,7 @@ export default function ScannerPage() {
         {/* Html5Qrcode video attaches into this container with natural undistorted aspect ratio */}
         <div
           id="qr-reader"
-          className="w-full overflow-hidden min-h-[360px] bg-black flex items-center justify-center [&_video]:!w-full [&_video]:!h-auto [&_video]:!block [&_video]:!m-0 [&_video]:!p-0 [&_#qr-shaded-region]:!hidden"
+          className="w-full h-full bg-black flex items-center justify-center [&_video]:!w-full [&_video]:!h-full [&_video]:!object-cover [&_video]:!block [&_video]:!m-0 [&_video]:!p-0 [&_#qr-shaded-region]:!hidden"
         />
 
         {/* iOS-Style Yellow Targeting Viewfinder Overlay */}
@@ -546,10 +546,10 @@ export default function ScannerPage() {
               scannedDetected ? "scale-95" : "scale-100"
             }`}
             style={{
-              width: "240px",
-              height: "240px",
-              maxWidth: "68vw",
-              maxHeight: "68vw",
+              width: "200px",
+              height: "200px",
+              maxWidth: "58vw",
+              maxHeight: "58vw",
             }}
           >
             {/* iOS Yellow Corner Brackets */}
@@ -599,25 +599,6 @@ export default function ScannerPage() {
                   <Check size={26} strokeWidth={3} />
                 </div>
               </div>
-            )}
-          </div>
-
-          {/* iOS-style Yellow Targeting Status Pill */}
-          <div className="mt-4 flex flex-col items-center gap-1">
-            <div
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-[4px] bg-black/80 backdrop-blur-md text-[11px] font-medium border transition-colors ${
-                scannedDetected
-                  ? "text-emerald-300 border-emerald-400/40"
-                  : "text-yellow-300 border-yellow-400/40"
-              }`}
-            >
-              
-            </div>
-
-            {zoomAvailable && currentZoom <= 1.2 && !scannedDetected && (
-              <span className="text-[10px] text-white/70 font-mono">
-                Small card QR? Tap 2x zoom below
-              </span>
             )}
           </div>
         </div>
@@ -685,7 +666,7 @@ export default function ScannerPage() {
                 type="button"
                 onClick={() => handleSetZoom(1)}
                 className={`h-7 px-3 rounded-full text-xs font-mono font-bold transition-all cursor-pointer ${
-                  currentZoom <= 1.2
+                  currentZoom <= 1.4
                     ? "bg-yellow-400 text-black shadow-sm"
                     : "text-white/80 hover:text-white"
                 }`}
@@ -696,7 +677,7 @@ export default function ScannerPage() {
                 type="button"
                 onClick={() => handleSetZoom(Math.min(2, zoomMax))}
                 className={`h-7 px-3 rounded-full text-xs font-mono font-bold transition-all cursor-pointer ${
-                  currentZoom > 1.2
+                  currentZoom > 1.4 && currentZoom <= 2.4
                     ? "bg-yellow-400 text-black shadow-sm"
                     : "text-white/80 hover:text-white"
                 }`}
@@ -708,7 +689,7 @@ export default function ScannerPage() {
                   type="button"
                   onClick={() => handleSetZoom(3)}
                   className={`h-7 px-2.5 rounded-full text-xs font-mono font-bold transition-all cursor-pointer ${
-                    currentZoom > 2.2
+                    currentZoom > 2.4
                       ? "bg-yellow-400 text-black shadow-sm"
                       : "text-white/80 hover:text-white"
                   }`}
@@ -807,7 +788,11 @@ export default function ScannerPage() {
       )}
 
       {/* Manual link input */}
-      <div className="mt-6 w-full rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
+      <div
+        className={`mt-4 w-full rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm ${
+          scanning ? "hidden" : "block"
+        }`}
+      >
         <label
           htmlFor="manual-link"
           className="block mb-2 font-mono text-[11px] uppercase tracking-wider text-[var(--muted-foreground)]"
