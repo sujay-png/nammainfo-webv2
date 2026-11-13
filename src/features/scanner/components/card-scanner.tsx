@@ -133,7 +133,7 @@ export default function ScannerPage() {
         fps: 15,
         qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
           const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-          const boxSize = Math.max(160, Math.min(Math.floor(minEdge * 0.68), 220));
+          const boxSize = Math.max(160, Math.min(Math.floor(minEdge * 0.60), 190));
           return { width: boxSize, height: boxSize };
         },
         videoConstraints: cameraDeviceId
@@ -164,7 +164,7 @@ export default function ScannerPage() {
           fps: 15,
           qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
             const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-            const boxSize = Math.max(160, Math.min(Math.floor(minEdge * 0.68), 220));
+            const boxSize = Math.max(160, Math.min(Math.floor(minEdge * 0.60), 190));
             return { width: boxSize, height: boxSize };
           },
         };
@@ -520,7 +520,7 @@ export default function ScannerPage() {
 
       {/* Active Live Camera Viewfinder (Kept in DOM so Html5Qrcode attaches reliably) */}
       <div
-        className={`relative w-full overflow-hidden rounded-[5px] border border-[var(--border)] bg-black shadow-xl mb-3 aspect-[4/3] max-h-[50dvh] sm:max-h-[420px] ${
+        className={`relative w-full overflow-hidden rounded-[5px] border border-[var(--border)] bg-black shadow-xl mb-3 aspect-[3/4] max-h-[58dvh] sm:max-h-[440px] ${
           scanning ? "block" : "hidden"
         }`}
       >
@@ -546,10 +546,10 @@ export default function ScannerPage() {
               scannedDetected ? "scale-95" : "scale-100"
             }`}
             style={{
-              width: "200px",
-              height: "200px",
-              maxWidth: "58vw",
-              maxHeight: "58vw",
+              width: "190px",
+              height: "190px",
+              maxWidth: "52vw",
+              maxHeight: "52vw",
             }}
           >
             {/* iOS Yellow Corner Brackets */}
@@ -653,15 +653,15 @@ export default function ScannerPage() {
           <button
             type="button"
             onClick={stopScanner}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[5px] bg-black/75 backdrop-blur-md text-xs font-semibold text-white border border-white/15 hover:bg-black transition-all cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[5px] bg-black/75 backdrop-blur-md text-xs font-semibold text-white border border-white/15 hover:bg-black transition-all cursor-pointer shadow-md"
           >
             <X size={14} />
             Stop
           </button>
 
-          {/* iOS Style Zoom Pill */}
+          {/* iOS Style Zoom Pill (Centered at bottom with safe clearance) */}
           {zoomAvailable && (
-            <div className="flex items-center rounded-full bg-black/80 backdrop-blur-md border border-white/20 p-0.5">
+            <div className="absolute left-1/2 -translate-x-1/2 flex items-center rounded-full bg-black/80 backdrop-blur-md border border-white/20 p-0.5 shadow-md">
               <button
                 type="button"
                 onClick={() => handleSetZoom(1)}
@@ -700,7 +700,7 @@ export default function ScannerPage() {
             </div>
           )}
 
-          <div className="w-12" />
+          <div />
         </div>
       </div>
 
