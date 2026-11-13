@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   X,
@@ -95,6 +95,8 @@ export default function UpgradeToProModal({
   // Unique idempotency key per checkout attempt
   const [idempotencyKey, setIdempotencyKey] = useState<string>("");
   const [mounted, setMounted] = useState(false);
+  const prevOpenRef = useRef(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -111,7 +113,8 @@ export default function UpgradeToProModal({
   }, [isOpen]);
 
   useEffect(() => {
-    if (isOpen) {
+    // Only reset modal state when transitioning from closed to open
+    if (isOpen && !prevOpenRef.current) {
       setStep(1);
       setErrorMsg(null);
       setDesignOption(null);
@@ -128,16 +131,19 @@ export default function UpgradeToProModal({
       setLogoFile(null);
       setLogoPreview(profile.logo_url || null);
       setIdempotencyKey(`pro_${profile.id}_${Date.now()}`);
-      setShippingData((prev) => ({
-        ...prev,
-        fullName: profile.owner_name || profile.business_name || prev.fullName,
-        phone: profile.phone || prev.phone,
-        street: profile.address || prev.street,
-        city: profile.city || prev.city,
-        pincode: profile.pincode || prev.pincode,
-      }));
+      setShippingData({
+        fullName: profile.owner_name || profile.business_name || "",
+        phone: profile.phone || "",
+        street: profile.address || "",
+        city: profile.city || "",
+        state: "Karnataka",
+        pincode: profile.pincode || "",
+        notes: "",
+      });
+      setSameAsProfile(true);
     }
-  }, [isOpen, profile]);
+    prevOpenRef.current = isOpen;
+  }, [isOpen]);
 
   if (!isOpen || !mounted) return null;
 
@@ -231,9 +237,18 @@ export default function UpgradeToProModal({
         setErrorMsg("Please enter Company Address for the card.");
         return;
       }
+
+      // Automatically sync details to shipping address so there is zero conflict between steps
+      setShippingData((prev) => ({
+        ...prev,
+        fullName: cardDetails.ownerName.trim() || prev.fullName,
+        phone: cardDetails.contactNumber.trim() || prev.phone,
+        street: cardDetails.companyAddress.trim() || prev.street,
+      }));
     }
     setErrorMsg(null);
     setStep(2);
+    scrollContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const goToStep3 = () => {
@@ -241,8 +256,13 @@ export default function UpgradeToProModal({
       setErrorMsg("Please provide your delivery recipient name, phone, and street address.");
       return;
     }
+    if (!shippingData.city.trim() || !shippingData.pincode.trim()) {
+      setErrorMsg("Please provide your delivery city and 6-digit PIN code for courier shipping.");
+      return;
+    }
     setErrorMsg(null);
     setStep(3);
+    scrollContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   // Initialize Razorpay Payment
@@ -341,7 +361,7 @@ export default function UpgradeToProModal({
         order_id: razorpayOrderId,
         prefill: {
           name: shippingData.fullName,
-          contact: shippingData.phone,
+          contact: shippingData.phone.replace(/[^0-9+]/g, ""),
           email: profile.email || "",
         },
         theme: {
@@ -468,7 +488,7 @@ export default function UpgradeToProModal({
         </div>
 
         {/* Scrollable Form Body */}
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-5 space-y-4">
+        <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-5 space-y-4">
           {errorMsg && (
             <div className="flex items-center gap-2 p-3 rounded-[5px] bg-rose-500/10 border border-rose-500/20 text-rose-600 text-xs">
               <AlertCircle size={15} className="shrink-0" />
@@ -771,9 +791,18 @@ export default function UpgradeToProModal({
                   if (checked) {
                     setShippingData((prev) => ({
                       ...prev,
-                      fullName: profile.owner_name || profile.business_name || prev.fullName,
-                      phone: profile.phone || prev.phone,
-                      street: profile.address || prev.street,
+                      fullName:
+                        designOption === "custom_details"
+                          ? cardDetails.ownerName.trim() || profile.owner_name || ""
+                          : profile.owner_name || profile.business_name || prev.fullName,
+                      phone:
+                        designOption === "custom_details"
+                          ? cardDetails.contactNumber.trim() || profile.phone || ""
+                          : profile.phone || prev.phone,
+                      street:
+                        designOption === "custom_details"
+                          ? cardDetails.companyAddress.trim() || profile.address || ""
+                          : profile.address || prev.street,
                       city: profile.city || prev.city,
                       pincode: profile.pincode || prev.pincode,
                     }));
@@ -783,10 +812,14 @@ export default function UpgradeToProModal({
               />
               <div className="flex-1 min-w-0">
                 <span className="font-semibold text-[var(--foreground)] block">
-                  Same as address in profile
+                  {designOption === "custom_details"
+                    ? "Deliver to details entered in Card Design"
+                    : "Same as address in profile"}
                 </span>
                 <span className="text-[11px] text-[var(--muted-foreground)] block mt-0.5 truncate">
-                  {profile.address
+                  {designOption === "custom_details"
+                    ? `${cardDetails.companyAddress || "Entered address"}${cardDetails.contactNumber ? ` • ${cardDetails.contactNumber}` : ""}`
+                    : profile.address
                     ? `${profile.address}${profile.city ? `, ${profile.city}` : ""}${profile.pincode ? ` - ${profile.pincode}` : ""}${profile.phone ? ` • ${profile.phone}` : ""}`
                     : "Auto-fill courier contact and address from your business profile"}
                 </span>
@@ -802,7 +835,10 @@ export default function UpgradeToProModal({
                   <input
                     type="text"
                     value={shippingData.fullName}
-                    onChange={(e) => setShippingData({ ...shippingData, fullName: e.target.value })}
+                    onChange={(e) => {
+                      setSameAsProfile(false);
+                      setShippingData({ ...shippingData, fullName: e.target.value });
+                    }}
                     className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3.5 py-2.5 outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/20 transition-all text-xs"
                     placeholder="Enter recipient name"
                   />
@@ -814,7 +850,10 @@ export default function UpgradeToProModal({
                   <input
                     type="text"
                     value={shippingData.phone}
-                    onChange={(e) => setShippingData({ ...shippingData, phone: e.target.value })}
+                    onChange={(e) => {
+                      setSameAsProfile(false);
+                      setShippingData({ ...shippingData, phone: e.target.value });
+                    }}
                     className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3.5 py-2.5 outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/20 transition-all text-xs"
                     placeholder="10-digit mobile number"
                   />
@@ -828,7 +867,10 @@ export default function UpgradeToProModal({
                 <textarea
                   rows={2}
                   value={shippingData.street}
-                  onChange={(e) => setShippingData({ ...shippingData, street: e.target.value })}
+                  onChange={(e) => {
+                    setSameAsProfile(false);
+                    setShippingData({ ...shippingData, street: e.target.value });
+                  }}
                   className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3.5 py-2.5 outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/20 transition-all text-xs"
                   placeholder="Flat/House number, Building, Street, Area"
                 />
@@ -842,7 +884,10 @@ export default function UpgradeToProModal({
                   <input
                     type="text"
                     value={shippingData.city}
-                    onChange={(e) => setShippingData({ ...shippingData, city: e.target.value })}
+                    onChange={(e) => {
+                      setSameAsProfile(false);
+                      setShippingData({ ...shippingData, city: e.target.value });
+                    }}
                     className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3.5 py-2.5 outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/20 transition-all text-xs"
                     placeholder="e.g. Bengaluru"
                   />
@@ -854,7 +899,10 @@ export default function UpgradeToProModal({
                   <input
                     type="text"
                     value={shippingData.pincode}
-                    onChange={(e) => setShippingData({ ...shippingData, pincode: e.target.value })}
+                    onChange={(e) => {
+                      setSameAsProfile(false);
+                      setShippingData({ ...shippingData, pincode: e.target.value });
+                    }}
                     className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3.5 py-2.5 outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/20 transition-all text-xs"
                     placeholder="6-digit PIN code"
                   />
@@ -1006,7 +1054,10 @@ export default function UpgradeToProModal({
             <>
               <button
                 type="button"
-                onClick={() => setStep(1)}
+                onClick={() => {
+                  setStep(1);
+                  scrollContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+                }}
                 disabled={loading}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-[5px] text-xs font-semibold text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors cursor-pointer"
               >
@@ -1027,7 +1078,10 @@ export default function UpgradeToProModal({
             <>
               <button
                 type="button"
-                onClick={() => setStep(2)}
+                onClick={() => {
+                  setStep(2);
+                  scrollContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+                }}
                 disabled={loading}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-[5px] text-xs font-semibold text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors cursor-pointer"
               >
