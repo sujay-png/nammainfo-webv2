@@ -342,13 +342,13 @@ export const AdminWhatsAppInboxView: React.FC<{
                   {/* Initials Avatar */}
                   <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-[5px] bg-[var(--border)] font-mono text-xs font-bold text-[var(--foreground)] uppercase">
                     {title.slice(0, 2)}
-                    {/* 24h Window Indicator Dot */}
-                    <span
-                      className={`absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full border border-[var(--card)] ${
-                        conv.isWindowActive ? "bg-emerald-500" : "bg-zinc-400"
-                      }`}
-                      title={conv.isWindowActive ? "24h Window Active" : "24h Window Expired"}
-                    />
+                    {/* Online Indicator Dot */}
+                    {conv.isWindowActive && (
+                      <span
+                        className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-500 border border-[var(--card)]"
+                        title="Online"
+                      />
+                    )}
                   </div>
 
                   {/* Thread Summary */}
@@ -423,17 +423,12 @@ export const AdminWhatsAppInboxView: React.FC<{
               </div>
             </div>
 
-            {/* 24-Hour Customer Window Status Badge */}
+            {/* Online Status Badge */}
             <div className="flex items-center gap-2">
-              {activeConversation.isWindowActive ? (
+              {activeConversation.isWindowActive && (
                 <div className="flex items-center gap-2 px-2.5 py-1 rounded-[5px] border border-[var(--border)] bg-[var(--background)] text-xs text-[var(--muted-foreground)]">
                   <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
-                  <span className="text-[11px] font-medium text-[var(--foreground)]">24h window active</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 px-2.5 py-1 rounded-[5px] border border-[var(--border)] bg-[var(--background)] text-xs text-[var(--muted-foreground)]">
-                  <span className="h-2 w-2 rounded-full bg-[var(--muted-foreground)]/40 shrink-0" />
-                  <span className="text-[11px]">24h window expired</span>
+                  <span className="text-[11px] font-medium text-[var(--foreground)]">Online</span>
                 </div>
               )}
             </div>
@@ -683,11 +678,7 @@ export const AdminWhatsAppInboxView: React.FC<{
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={
-                  activeConversation.isWindowActive
-                    ? "Type a message... (Press Enter to send, Shift+Enter for newline)"
-                    : "Note: 24h window closed. Customer must message or template required."
-                }
+                placeholder="Type a message... (Press Enter to send, Shift+Enter for newline)"
                 rows={1}
                 className="w-full resize-none rounded-[5px] bg-[var(--background)] border border-[var(--border)] p-2.5 text-xs text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:border-[var(--foreground)] max-h-32"
               />
