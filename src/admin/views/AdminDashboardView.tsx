@@ -20,6 +20,7 @@ import { DeleteCompanyModal } from "@/admin/features/delete-company/ui/DeleteCom
 import { AdminOrdersView } from "@/admin/views/AdminOrdersView";
 import { DesignerDashboardView } from "@/admin/views/DesignerDashboardView";
 import { StaffAccountsView } from "@/admin/widgets/staff-accounts/ui/StaffAccountsView";
+import { AdminWhatsAppInboxView } from "@/admin/views/AdminWhatsAppInboxView";
 import { fetchAdminCompanies } from "@/admin/entities/company/api/company-api";
 import { fetchAdminOrders } from "@/admin/entities/order/api/order-api";
 import { getDaysRemaining } from "@/admin/shared/lib/formatters";
@@ -72,6 +73,7 @@ export const AdminDashboardView: React.FC = () => {
   const [deleteTarget, setDeleteTarget] = useState<Company | null>(null);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [pendingOrdersCount, setPendingOrdersCount] = useState<number>(0);
+  const [inboxUnreadCount, setInboxUnreadCount] = useState<number>(0);
   const [userRole, setUserRole] = useState<"admin" | "designer">("admin");
 
   const [unauthorizedEmail, setUnauthorizedEmail] = useState<string | null>(null);
@@ -344,6 +346,7 @@ export const AdminDashboardView: React.FC = () => {
         onTabChange={setCurrentTab}
         onSignOut={handleSignOut}
         ordersPendingCount={pendingOrdersCount}
+        inboxUnreadCount={inboxUnreadCount}
       />
 
       {/* Main Admin Content Area */}
@@ -351,6 +354,10 @@ export const AdminDashboardView: React.FC = () => {
         <AdminOrdersView
           onOrderCountUpdate={(cnt) => setPendingOrdersCount(cnt)}
         />
+      ) : currentTab === "inbox" ? (
+        <div className="flex flex-1 flex-col h-screen overflow-hidden min-w-0">
+          <AdminWhatsAppInboxView onUnreadCountUpdate={setInboxUnreadCount} />
+        </div>
       ) : currentTab === "staff" ? (
         <div className="flex flex-1 flex-col h-screen overflow-y-auto min-w-0">
           <StaffAccountsView />

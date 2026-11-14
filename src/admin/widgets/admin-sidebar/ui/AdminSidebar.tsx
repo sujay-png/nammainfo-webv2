@@ -1,11 +1,12 @@
 import React from "react";
-import { Building2, Package, UserPlus, LogOut } from "lucide-react";
+import { Building2, Package, UserPlus, LogOut, MessageSquare } from "lucide-react";
 
 interface AdminSidebarProps {
   currentTab: string;
   onTabChange: (tab: string) => void;
   onSignOut?: () => void;
   ordersPendingCount?: number;
+  inboxUnreadCount?: number;
 }
 
 export const AdminSidebar: React.FC<AdminSidebarProps> = ({
@@ -13,6 +14,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   onTabChange,
   onSignOut,
   ordersPendingCount = 0,
+  inboxUnreadCount = 0,
 }) => {
   return (
     <aside className="flex flex-col w-64 h-screen border-r border-[var(--border)] bg-[var(--card)] p-5 shrink-0 justify-between select-none">
@@ -63,6 +65,30 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                   : "bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/25"
               }`}>
                 {ordersPendingCount}
+              </span>
+            )}
+          </button>
+
+          {/* WhatsApp Customer Inbox */}
+          <button
+            onClick={() => onTabChange("inbox")}
+            className={`flex w-full items-center justify-between rounded-[5px] px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
+              currentTab === "inbox"
+                ? "bg-[var(--foreground)] text-[var(--background)]"
+                : "text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <MessageSquare size={15} />
+              <span>WhatsApp Inbox</span>
+            </div>
+            {inboxUnreadCount > 0 && (
+              <span className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                currentTab === "inbox"
+                  ? "bg-[var(--background)] text-[var(--foreground)]"
+                  : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25"
+              }`}>
+                {inboxUnreadCount}
               </span>
             )}
           </button>
