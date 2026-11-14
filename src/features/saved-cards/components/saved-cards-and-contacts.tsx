@@ -61,7 +61,7 @@ function SavedInner() {
   const [tab, setTab] = useState<"cards" | "contacts">(params.get("tab") === "contacts" ? "contacts" : "cards");
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("recent");
-  const [who, setWho] = useState<string>("all"); // all | me | <employee id>
+  const [who, setWho] = useState<string>(params.get("who") || "me"); // me (default) | all | <employee id>
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branchFilter, setBranchFilter] = useState<string>("all"); // all | main | <branch id>
@@ -292,7 +292,7 @@ function SavedInner() {
       <div role="tablist" className="mb-4 flex gap-6 border-b border-[var(--border)] px-1">
         {(
           [
-            ["cards", "Saved cards", myCardCount],
+            ["cards", "Saved cards", who === "all" ? cards.length : myCardCount],
             ["contacts", "Contacts", contacts.length],
           ] as const
         ).map(([t, label, n]) => (
@@ -354,8 +354,12 @@ function SavedInner() {
           )}
           {showWho && (
             <FilterRow>
-              <Chip active={who === "all"} onClick={() => setWho("all")}>Everyone</Chip>
-              <Chip active={who === "me"} onClick={() => setWho("me")}>{tab === "cards" ? "Me" : "My card"}</Chip>
+              <Chip active={who === "me"} onClick={() => setWho("me")}>
+                {tab === "cards" ? "Saved by me" : "My card"}
+              </Chip>
+              <Chip active={who === "all"} onClick={() => setWho("all")}>
+                All
+              </Chip>
               {team.map((t) => (
                 <Chip key={t.id} active={who === t.id} onClick={() => setWho(t.id)}>
                   {t.name.split(" ")[0]}
