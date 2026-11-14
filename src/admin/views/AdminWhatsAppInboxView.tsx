@@ -678,7 +678,7 @@ export const AdminWhatsAppInboxView: React.FC<{
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Type a message... (Press Enter to send, Shift+Enter for newline)"
+                placeholder="Type a message..."
                 rows={1}
                 className="w-full resize-none rounded-[5px] bg-[var(--background)] border border-[var(--border)] p-2.5 text-xs text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:border-[var(--foreground)] max-h-32"
               />
