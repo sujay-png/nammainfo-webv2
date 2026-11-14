@@ -17,10 +17,13 @@ export async function GET(request: NextRequest) {
   const challenge = searchParams.get("hub.challenge") || searchParams.get("hub_challenge") || "";
 
   const envToken = (process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || "").trim();
+  const envTokenWithoutHash = envToken.includes("#") ? envToken.split("#")[0].trim() : "";
   const validTokens = [
     "nammainfo_wa_2026",
     "nammainfo@akshara@wrnxt@adi#2022",
+    "nammainfo@akshara@wrnxt@adi",
     envToken,
+    envTokenWithoutHash,
   ].filter(Boolean);
 
   if (mode === "subscribe" && validTokens.includes(token)) {
