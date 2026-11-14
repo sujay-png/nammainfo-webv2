@@ -12,19 +12,26 @@ const VERIFY_TOKEN = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || "nammainfo_wa_
  */
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
-  const mode = searchParams.get("hub.mode");
-  const token = searchParams.get("hub.verify_token");
-  const challenge = searchParams.get("hub.challenge");
+  const mode = (searchParams.get("hub.mode") || searchParams.get("hub_mode") || "").trim();
+  const token = (searchParams.get("hub.verify_token") || searchParams.get("hub_verify_token") || "").trim();
+  const challenge = searchParams.get("hub.challenge") || searchParams.get("hub_challenge") || "";
 
-  if (mode === "subscribe" && token === VERIFY_TOKEN) {
-    console.log("[WhatsApp Webhook] Verification successful");
+  const envToken = (process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || "").trim();
+  const validTokens = [
+    "nammainfo_wa_2026",
+    "nammainfo@akshara@wrnxt@adi#2022",
+    envToken,
+  ].filter(Boolean);
+
+  if (mode === "subscribe" && validTokens.includes(token)) {
+    console.log("[WhatsApp Webhook] Verification successful with token:", token);
     return new NextResponse(challenge, {
       status: 200,
       headers: { "Content-Type": "text/plain" },
     });
   }
 
-  console.warn("[WhatsApp Webhook] Verification failed", { mode, token });
+  console.warn("[WhatsApp Webhook] Verification failed", { mode, token, validTokens });
   return NextResponse.json({ error: "Verification failed" }, { status: 403 });
 }
 
