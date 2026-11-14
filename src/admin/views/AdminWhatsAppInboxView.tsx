@@ -282,7 +282,7 @@ export const AdminWhatsAppInboxView: React.FC<{
         <div className="p-4 border-b border-[var(--border)] space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <MessageSquare size={18} className="text-emerald-500" />
+              <MessageSquare size={16} className="text-[var(--foreground)]" />
               <h2 className="font-headline text-sm font-bold text-[var(--foreground)] tracking-tight">
                 WhatsApp Inbox
               </h2>
@@ -344,7 +344,7 @@ export const AdminWhatsAppInboxView: React.FC<{
                     {title.slice(0, 2)}
                     {/* 24h Window Indicator Dot */}
                     <span
-                      className={`absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--card)] ${
+                      className={`absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full border border-[var(--card)] ${
                         conv.isWindowActive ? "bg-emerald-500" : "bg-zinc-400"
                       }`}
                       title={conv.isWindowActive ? "24h Window Active" : "24h Window Expired"}
@@ -383,7 +383,7 @@ export const AdminWhatsAppInboxView: React.FC<{
 
                   {/* Unread badge */}
                   {conv.unreadCount > 0 && (
-                    <span className="ml-1 shrink-0 px-1.5 py-0.5 rounded-full bg-emerald-500 text-white font-mono text-[10px] font-bold">
+                    <span className="ml-1 shrink-0 px-1.5 py-0.5 rounded-[4px] bg-[var(--foreground)] text-[var(--background)] font-mono text-[10px] font-semibold">
                       {conv.unreadCount}
                     </span>
                   )}
@@ -424,16 +424,16 @@ export const AdminWhatsAppInboxView: React.FC<{
             </div>
 
             {/* 24-Hour Customer Window Status Badge */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               {activeConversation.isWindowActive ? (
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[11px] font-medium">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>24h Window Active (Replies Enabled)</span>
+                <div className="flex items-center gap-2 px-2.5 py-1 rounded-[5px] border border-[var(--border)] bg-[var(--background)] text-xs text-[var(--muted-foreground)]">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+                  <span className="text-[11px] font-medium text-[var(--foreground)]">24h window active</span>
                 </div>
               ) : (
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] bg-zinc-500/10 border border-zinc-500/20 text-zinc-600 dark:text-zinc-400 text-[11px] font-medium">
-                  <Clock size={12} />
-                  <span>24h Window Expired</span>
+                <div className="flex items-center gap-2 px-2.5 py-1 rounded-[5px] border border-[var(--border)] bg-[var(--background)] text-xs text-[var(--muted-foreground)]">
+                  <span className="h-2 w-2 rounded-full bg-[var(--muted-foreground)]/40 shrink-0" />
+                  <span className="text-[11px]">24h window expired</span>
                 </div>
               )}
             </div>

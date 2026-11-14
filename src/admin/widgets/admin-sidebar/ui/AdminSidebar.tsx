@@ -83,10 +83,10 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
               <span>WhatsApp Inbox</span>
             </div>
             {inboxUnreadCount > 0 && (
-              <span className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+              <span className={`font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded-[4px] ${
                 currentTab === "inbox"
                   ? "bg-[var(--background)] text-[var(--foreground)]"
-                  : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25"
+                  : "bg-[var(--accent)] text-[var(--foreground)] border border-[var(--border)]"
               }`}>
                 {inboxUnreadCount}
               </span>
