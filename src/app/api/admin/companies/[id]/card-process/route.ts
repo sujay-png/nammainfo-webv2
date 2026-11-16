@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdminAuth } from "@/admin/shared/lib/admin-auth";
 import { saveAdminNotes } from "@/admin/shared/lib/admin-notes";
+import { getMembership } from "@/lib/membership";
 
 export const dynamic = "force-dynamic";
 
@@ -46,24 +47,80 @@ export async function POST(
     const { stepKey, completed, date } = parsed.data;
     const supabase = auth.adminSupabase;
 
-    // Fetch existing profile card_process
-    const { data: profile, error: fetchErr } = await supabase
-      .from("profiles")
-      .select("id, slug, username, card_process")
-      .eq("id", id)
-      .single();
+    // Check if id parameter is a valid UUID
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
-    if (fetchErr || !profile) {
+    // Fetch existing profile with fallback if card_process column is not yet migrated in DB
+    let profile: any = null;
+    let fetchErr: any = null;
+
+    if (isUuid) {
+      const res = await supabase
+        .from("profiles")
+        .select("id, slug, username, subscription_plan, is_member, membership_expires_at, status, card_process")
+        .eq("id", id)
+        .maybeSingle();
+      profile = res.data;
+      fetchErr = res.error;
+    }
+
+    if (!profile && fetchErr?.message?.includes("card_process")) {
+      // Column does not exist in database yet
+      const res = await (isUuid
+        ? supabase.from("profiles").select("id, slug, username, subscription_plan, is_member, membership_expires_at, status").eq("id", id).maybeSingle()
+        : supabase.from("profiles").select("id, slug, username, subscription_plan, is_member, membership_expires_at, status").or(`slug.eq.${id},username.eq.${id}`).maybeSingle());
+      profile = res.data;
+      fetchErr = res.error;
+    }
+
+    // Fallback: If not found by UUID or id was a slug/username, search by slug or username
+    if (!profile) {
+      const res = await supabase
+        .from("profiles")
+        .select("id, slug, username, subscription_plan, is_member, membership_expires_at, status, card_process")
+        .or(`slug.eq.${id},username.eq.${id}`)
+        .maybeSingle();
+      if (res.data) {
+        profile = res.data;
+        fetchErr = null;
+      }
+    }
+
+    if (!profile) {
       return NextResponse.json(
-        { error: "Company profile not found" },
+        { error: `Company profile not found for identifier: ${id}` },
         { status: 404 }
       );
     }
 
-    const existingProcess =
-      profile.card_process && typeof profile.card_process === "object"
-        ? (profile.card_process as Record<string, any>)
-        : {};
+    // Verify company tier: Free Plan accounts are locked from milestone updates (Free Trial & Pro are unlocked)
+    const isTrial = profile.subscription_plan === "trial";
+    const hasCompanyProPlan = getMembership(profile).isPaid;
+    if (!isTrial && !hasCompanyProPlan) {
+      return NextResponse.json(
+        { error: "Card process milestones are locked for Free Plan accounts. Upgrade to Pro or Free Trial first." },
+        { status: 403 }
+      );
+    }
+
+    // Fetch existing process from profiles.card_process or fallback in profile_admin_notes
+    let existingProcess: Record<string, any> = {};
+    if (profile.card_process && typeof profile.card_process === "object") {
+      existingProcess = profile.card_process;
+    } else {
+      const { data: notes } = await supabase
+        .from("profile_admin_notes")
+        .select("follow_up_notes")
+        .eq("profile_id", profile.id)
+        .maybeSingle();
+      if (notes?.follow_up_notes?.startsWith("__CARD_PROCESS_JSON__:")) {
+        try {
+          existingProcess = JSON.parse(notes.follow_up_notes.replace("__CARD_PROCESS_JSON__:", ""));
+        } catch {
+          existingProcess = {};
+        }
+      }
+    }
 
     const timestamp = completed ? (date || new Date().toISOString()) : null;
     const updatedProcess = {
@@ -74,18 +131,27 @@ export async function POST(
       },
     };
 
-    // 1. Save updated card_process to profiles
-    const { error: updateErr } = await supabase
+    // 1. Save updated card_process to profiles, with automatic fallback to profile_admin_notes
+    let { error: updateErr } = await supabase
       .from("profiles")
       .update({ card_process: updatedProcess })
-      .eq("id", id);
+      .eq("id", profile.id);
 
     if (updateErr) {
-      console.error("[Card Process API] Failed to update card_process:", updateErr);
-      return NextResponse.json(
-        { error: updateErr.message },
-        { status: 500 }
-      );
+      console.warn("[Card Process API] profiles.card_process update error, saving to admin notes fallback:", updateErr.message);
+      // Fallback: save into profile_admin_notes so it works even before migration is executed
+      const marker = `__CARD_PROCESS_JSON__:${JSON.stringify(updatedProcess)}`;
+      await supabase
+        .from("profile_admin_notes")
+        .upsert(
+          {
+            profile_id: profile.id,
+            follow_up_notes: marker,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "profile_id" }
+        );
+      updateErr = null;
     }
 
     // 2. Synchronize Order Status side-effects based on milestones
@@ -94,44 +160,44 @@ export async function POST(
         await supabase
           .from("orders")
           .update({ status: "card_designed", updated_at: new Date().toISOString() })
-          .eq("profile_id", id)
+          .eq("profile_id", profile.id)
           .eq("status", "under_review");
       } else if (stepKey === "card_printed_approved") {
         await supabase
           .from("orders")
           .update({ status: "ready_to_dispatch", updated_at: new Date().toISOString() })
-          .eq("profile_id", id)
+          .eq("profile_id", profile.id)
           .in("status", ["under_review", "card_designed", "on_work"]);
       } else if (stepKey === "card_posted") {
         await supabase
           .from("orders")
           .update({ status: "out_for_delivery", updated_at: new Date().toISOString() })
-          .eq("profile_id", id)
+          .eq("profile_id", profile.id)
           .in("status", ["under_review", "card_designed", "ready_to_dispatch", "on_work"]);
       } else if (stepKey === "card_delivered") {
         await supabase
           .from("orders")
           .update({ status: "delivered", updated_at: new Date().toISOString() })
-          .eq("profile_id", id)
+          .eq("profile_id", profile.id)
           .neq("status", "cancelled");
       }
     }
 
     // 3. Synchronize Free Trial follow-up milestone attendance side-effects
     if (stepKey === "followup_1_done") {
-      await saveAdminNotes(supabase, id, {
+      await saveAdminNotes(supabase, profile.id, {
         milestone: completed ? 1 : 0,
         status: completed ? "attended" : "unattended",
         notes: completed ? `Follow-up 1 (Day 30) marked attended on ${new Date().toLocaleDateString("en-IN")}.` : "",
       });
     } else if (stepKey === "followup_2_done") {
-      await saveAdminNotes(supabase, id, {
+      await saveAdminNotes(supabase, profile.id, {
         milestone: completed ? 2 : 1,
         status: completed ? "attended" : "unattended",
         notes: completed ? `Follow-up 2 (Day 60) marked attended on ${new Date().toLocaleDateString("en-IN")}.` : "",
       });
     } else if (stepKey === "followup_3_done") {
-      await saveAdminNotes(supabase, id, {
+      await saveAdminNotes(supabase, profile.id, {
         milestone: completed ? 3 : 2,
         status: completed ? "attended" : "unattended",
         notes: completed ? `Follow-up 3 (Day 90) marked attended on ${new Date().toLocaleDateString("en-IN")}.` : "",

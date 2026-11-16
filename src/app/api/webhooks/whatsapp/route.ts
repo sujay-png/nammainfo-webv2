@@ -113,14 +113,14 @@ export async function POST(request: NextRequest) {
               const last10 = phone.slice(-10);
               const { data: profileMatch } = await admin
                 .from("profiles")
-                .select("full_name, company_name, phone")
+                .select("owner_name, business_name, phone")
                 .or(`phone.eq.${phone},phone.ilike.%${last10}`)
                 .limit(1)
                 .maybeSingle();
 
               if (profileMatch) {
-                matchedCompanyName = profileMatch.company_name || null;
-                matchedContactName = profileMatch.full_name || profilePushName;
+                matchedCompanyName = profileMatch.business_name || null;
+                matchedContactName = profileMatch.owner_name || profilePushName;
               }
             } catch (lookupErr) {
               console.warn("[WhatsApp Webhook] Profile lookup error:", lookupErr);

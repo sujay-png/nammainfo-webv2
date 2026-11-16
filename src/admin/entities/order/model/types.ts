@@ -52,11 +52,21 @@ export interface OrderStats {
   totalOrders: number;
   underReviewCount: number;
   inProductionCount: number;
+  cardDesignedCount?: number;
+  readyToDispatchCount?: number;
+  outForDeliveryCount?: number;
   deliveredCount: number;
   totalRevenue: number;
 }
 
-export type OrderFilterTab = "all" | "under_review" | "on_work" | "delivered";
+export type OrderFilterTab =
+  | "all"
+  | "under_review"
+  | "card_designed"
+  | "ready_to_dispatch"
+  | "out_for_delivery"
+  | "delivered"
+  | "on_work";
 
 export interface OrderFilters {
   search: string;

@@ -273,6 +273,14 @@ export async function GET(request: Request) {
 
       const completion = calculateProfileCompletion(p);
 
+      let cardProcess = (p.card_process && typeof p.card_process === "object") ? p.card_process : {};
+      if (Object.keys(cardProcess).length === 0 && n?.followUpNotes?.startsWith("__CARD_PROCESS_JSON__:")) {
+        try {
+          cardProcess = JSON.parse(n.followUpNotes.replace("__CARD_PROCESS_JSON__:", ""));
+        } catch {}
+      }
+      const followUpNotesClean = n?.followUpNotes?.startsWith("__CARD_PROCESS_JSON__:") ? "" : (n?.followUpNotes ?? (p.follow_up_notes || ""));
+
       return {
         id: p.id,
         businessName: p.business_name || p.username || "Unnamed Business",
@@ -294,7 +302,7 @@ export async function GET(request: Request) {
         avatarUrl: p.avatar_url,
         logoUrl: p.logo_url,
         followUpStatus: n?.followUpStatus ?? ((p.follow_up_status as "unattended" | "attended") || "unattended"),
-        followUpNotes: n?.followUpNotes ?? (p.follow_up_notes || ""),
+        followUpNotes: followUpNotesClean,
 
         // 100-Day Free Trial details
         trialStatus: p.trial_status || "none",
@@ -307,7 +315,7 @@ export async function GET(request: Request) {
           n?.trialFollowUpStatus ?? ((p.trial_follow_up_status as "unattended" | "attended") || "unattended"),
         trialFollowUpNotes: n?.trialFollowUpNotes ?? (p.trial_follow_up_notes || ""),
         profileCompletionPercentage: completion.percentage,
-        cardProcess: (p.card_process && typeof p.card_process === "object") ? p.card_process : {},
+        cardProcess,
         employees: mappedEmployees,
       };
     });

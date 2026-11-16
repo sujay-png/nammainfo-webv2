@@ -72,9 +72,10 @@ export const CompaniesTable: React.FC<CompaniesTableProps> = ({
               const isUnread = Boolean(viewedCompanyIds && !viewedCompanyIds.has(company.id));
               const validity = getDaysRemaining(company.membershipExpiresAt, company.subscriptionPlan);
               const isExpired =
-                (company.subscriptionPlan === "pro" || company.subscriptionPlan === "trial") &&
                 !validity.isLifetime &&
-                (validity.isExpired || (company.status === "expired" && !company.membershipExpiresAt));
+                (validity.isExpired ||
+                  company.status === "expired" ||
+                  (company.membershipExpiresAt ? new Date(company.membershipExpiresAt).getTime() <= Date.now() : false));
 
               return (
                 <tr
@@ -150,14 +151,18 @@ export const CompaniesTable: React.FC<CompaniesTableProps> = ({
                   <td className="px-4 py-3.5 whitespace-nowrap">
                     <Badge
                       variant={
-                        company.subscriptionPlan === "pro"
+                        isExpired
+                          ? "free"
+                          : company.subscriptionPlan === "pro"
                           ? "pro"
                           : company.subscriptionPlan === "trial"
                           ? "trial"
                           : "free"
                       }
                     >
-                      {company.subscriptionPlan === "pro"
+                      {isExpired
+                        ? "Free"
+                        : company.subscriptionPlan === "pro"
                         ? "Pro"
                         : company.subscriptionPlan === "trial"
                         ? "Free Trial"
@@ -172,7 +177,7 @@ export const CompaniesTable: React.FC<CompaniesTableProps> = ({
 
                   {/* Validity (Days remaining only - no duplicate joining date) */}
                   <td className="px-4 py-3.5 whitespace-nowrap">
-                    {company.subscriptionPlan === "free" ? (
+                    {company.subscriptionPlan === "free" && !isExpired ? (
                       <span className="font-mono text-[11px] text-[var(--muted-foreground)]">
                         N/A
                       </span>
@@ -193,10 +198,10 @@ export const CompaniesTable: React.FC<CompaniesTableProps> = ({
 
                   {/* Status (Dynamic: Active / Renew / Expired / N/A) */}
                   <td className="px-4 py-3.5 whitespace-nowrap">
-                    {company.subscriptionPlan === "free" ? (
-                      <Badge variant="na">N/A</Badge>
-                    ) : isExpired ? (
+                    {isExpired ? (
                       <Badge variant="expired">Expired</Badge>
+                    ) : company.subscriptionPlan === "free" ? (
+                      <Badge variant="na">N/A</Badge>
                     ) : validity.isEndingSoon ? (
                       <Badge variant="renew">Renew</Badge>
                     ) : (
@@ -278,23 +283,27 @@ export const CompaniesTable: React.FC<CompaniesTableProps> = ({
                 <div className="flex items-center gap-2 shrink-0">
                   <Badge
                     variant={
-                      company.subscriptionPlan === "pro"
+                      isExpired
+                        ? "free"
+                        : company.subscriptionPlan === "pro"
                         ? "pro"
                         : company.subscriptionPlan === "trial"
                         ? "trial"
                         : "free"
                     }
                   >
-                    {company.subscriptionPlan === "pro"
+                    {isExpired
+                      ? "Free"
+                      : company.subscriptionPlan === "pro"
                       ? "Pro"
                       : company.subscriptionPlan === "trial"
                       ? "Free Trial"
                       : "Free"}
                   </Badge>
-                  {company.subscriptionPlan === "free" ? (
-                    <Badge variant="na">N/A</Badge>
-                  ) : isExpired ? (
+                  {isExpired ? (
                     <Badge variant="expired">Expired</Badge>
+                  ) : company.subscriptionPlan === "free" ? (
+                    <Badge variant="na">N/A</Badge>
                   ) : validity.isEndingSoon ? (
                     <Badge variant="renew">Renew</Badge>
                   ) : (

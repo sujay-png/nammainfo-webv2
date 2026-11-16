@@ -181,6 +181,28 @@ export const AdminWhatsAppInboxView: React.FC<{
     }
   };
 
+  const renderMessageContent = (content: string, isInbound: boolean) => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = content.split(urlRegex);
+
+    return parts.map((part, i) => {
+      if (part.match(urlRegex)) {
+        return (
+          <a
+            key={i}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#53bdeb] underline underline-offset-2 break-all font-medium hover:text-[#70c9f1] transition-colors"
+          >
+            {part}
+          </a>
+        );
+      }
+      return part;
+    });
+  };
+
   // Handle send message
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -273,23 +295,23 @@ export const AdminWhatsAppInboxView: React.FC<{
   };
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
+    <div className="flex h-full w-full min-h-0 overflow-hidden bg-[#0b141a] text-[#e9edef]">
       {/* ─────────────────────────────────────────────────────────────
           LEFT PANEL: Conversations List & Search
       ───────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col w-80 lg:w-96 h-full border-r border-[var(--border)] bg-[var(--card)] shrink-0">
+      <div className="flex flex-col w-80 lg:w-96 h-full min-h-0 border-r border-[#222e35] bg-[#111b21] shrink-0">
         {/* Left Header */}
-        <div className="p-4 border-b border-[var(--border)] space-y-3">
+        <div className="p-4 border-b border-[#222e35] space-y-3 bg-[#111b21]">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <MessageSquare size={16} className="text-[var(--foreground)]" />
-              <h2 className="font-headline text-sm font-bold text-[var(--foreground)] tracking-tight">
+              <MessageSquare size={16} className="text-[#00a884]" />
+              <h2 className="font-headline text-sm font-bold text-[#e9edef] tracking-tight">
                 WhatsApp Inbox
               </h2>
             </div>
             <button
               onClick={() => fetchConversations()}
-              className="p-1.5 rounded-[5px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors cursor-pointer"
+              className="p-1.5 rounded-[5px] text-[#8696a0] hover:text-[#e9edef] hover:bg-[#202c33] transition-colors cursor-pointer"
               title="Refresh inbox"
             >
               <RefreshCw size={14} className={loadingConversations ? "animate-spin" : ""} />
@@ -298,27 +320,27 @@ export const AdminWhatsAppInboxView: React.FC<{
 
           {/* Search Bar */}
           <div className="relative">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]" />
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#8696a0]" />
             <input
               type="text"
               placeholder="Search by name, company, or phone..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 rounded-[5px] bg-[var(--background)] border border-[var(--border)] text-xs text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:border-[var(--foreground)]"
+              className="w-full pl-8 pr-3 py-1.5 rounded-[5px] bg-[#202c33] border border-[#2a3942] text-xs text-[#e9edef] placeholder:text-[#8696a0] focus:outline-none focus:border-[#00a884]"
             />
           </div>
         </div>
 
         {/* Conversation List Scroll Area */}
-        <div className="flex-1 overflow-y-auto divide-y divide-[var(--border)]/50">
+        <div className="flex-1 overflow-y-auto divide-y divide-[#222e35]">
           {loadingConversations ? (
-            <div className="flex flex-col items-center justify-center p-8 text-xs text-[var(--muted-foreground)] gap-2">
-              <Loader2 size={18} className="animate-spin text-[var(--foreground)]" />
+            <div className="flex flex-col items-center justify-center p-8 text-xs text-[#8696a0] gap-2">
+              <Loader2 size={18} className="animate-spin text-[#00a884]" />
               <span>Loading WhatsApp chats…</span>
             </div>
           ) : filteredConversations.length === 0 ? (
-            <div className="p-6 text-center text-xs text-[var(--muted-foreground)] space-y-1">
-              <p className="font-semibold text-[var(--foreground)]">No conversations found</p>
+            <div className="p-6 text-center text-xs text-[#8696a0] space-y-1">
+              <p className="font-semibold text-[#e9edef]">No conversations found</p>
               <p className="text-[11px]">
                 {searchQuery ? "Try a different search term" : "Incoming WhatsApp messages will appear here automatically"}
               </p>
@@ -327,7 +349,6 @@ export const AdminWhatsAppInboxView: React.FC<{
             filteredConversations.map((conv) => {
               const isSelected = selectedPhone === conv.phoneNumber;
               const title = conv.companyName || conv.contactName || `+${conv.phoneNumber}`;
-              const subName = conv.companyName && conv.contactName ? conv.contactName : `+${conv.phoneNumber}`;
 
               return (
                 <button
@@ -335,17 +356,17 @@ export const AdminWhatsAppInboxView: React.FC<{
                   onClick={() => setSelectedPhone(conv.phoneNumber)}
                   className={`w-full text-left p-3.5 flex items-start gap-3 transition-colors cursor-pointer ${
                     isSelected
-                      ? "bg-[var(--accent)]"
-                      : "hover:bg-[var(--accent)]/50"
+                      ? "bg-[#2a3942]"
+                      : "hover:bg-[#202c33]/70"
                   }`}
                 >
                   {/* Initials Avatar */}
-                  <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-[5px] bg-[var(--border)] font-mono text-xs font-bold text-[var(--foreground)] uppercase">
+                  <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-[5px] bg-[#202c33] border border-[#2a3942] font-mono text-xs font-bold text-[#e9edef] uppercase">
                     {title.slice(0, 2)}
                     {/* Online Indicator Dot */}
                     {conv.isWindowActive && (
                       <span
-                        className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-500 border border-[var(--card)]"
+                        className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-[#00a884] border-2 border-[#111b21]"
                         title="Online"
                       />
                     )}
@@ -354,36 +375,38 @@ export const AdminWhatsAppInboxView: React.FC<{
                   {/* Thread Summary */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-1">
-                      <h3 className="font-semibold text-xs text-[var(--foreground)] truncate">
-                        {title}
-                      </h3>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <h3 className="font-semibold text-xs text-[#e9edef] truncate">
+                          {title}
+                        </h3>
+                        {conv.companyName && conv.contactName && (
+                          <span className="text-[10px] text-[#8696a0] truncate shrink font-normal">
+                            • {conv.contactName}
+                          </span>
+                        )}
+                      </div>
                       {conv.lastMessage.createdAt && (
-                        <span className="font-mono text-[10px] text-[var(--muted-foreground)] shrink-0">
+                        <span className="font-mono text-[10px] text-[#8696a0] shrink-0 ml-1">
                           {formatTime(conv.lastMessage.createdAt)}
                         </span>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)] mt-0.5">
-                      {conv.companyName && conv.contactName && (
-                        <span className="text-[10px] font-medium text-[var(--foreground)] truncate">
-                          {subName} •
-                        </span>
+                    <p className="text-[11px] text-[#8696a0] truncate mt-1">
+                      {conv.lastMessage.direction === "outbound" && (
+                        <span className="font-medium text-[#e9edef]/80">You: </span>
                       )}
-                      <span className="truncate">
-                        {conv.lastMessage.messageType === "image" && "📷 Photo"}
-                        {conv.lastMessage.messageType === "document" && "📄 Document"}
-                        {(conv.lastMessage.messageType === "voice" || conv.lastMessage.messageType === "audio") && "🎙️ Voice message"}
-                        {conv.lastMessage.messageType === "text" && (conv.lastMessage.content || "Message")}
-                        {!["image", "document", "voice", "audio", "text"].includes(conv.lastMessage.messageType) &&
-                          (conv.lastMessage.content || "Message")}
-                      </span>
-                    </div>
+                      {conv.lastMessage.messageType === "image" && "📷 Photo"}
+                      {conv.lastMessage.messageType === "document" && "📄 Document"}
+                      {(conv.lastMessage.messageType === "voice" || conv.lastMessage.messageType === "audio") && "🎙️ Voice message"}
+                      {!["image", "document", "voice", "audio"].includes(conv.lastMessage.messageType) &&
+                        (conv.lastMessage.content || "Message")}
+                    </p>
                   </div>
 
                   {/* Unread badge */}
                   {conv.unreadCount > 0 && (
-                    <span className="ml-1 shrink-0 px-1.5 py-0.5 rounded-[4px] bg-[var(--foreground)] text-[var(--background)] font-mono text-[10px] font-semibold">
+                    <span className="ml-1 shrink-0 px-1.5 py-0.5 rounded-[4px] bg-[#00a884] text-[#111b21] font-mono text-[10px] font-bold">
                       {conv.unreadCount}
                     </span>
                   )}
@@ -398,25 +421,25 @@ export const AdminWhatsAppInboxView: React.FC<{
           RIGHT PANEL: Active Chat Thread & Compose
       ───────────────────────────────────────────────────────────── */}
       {selectedPhone && activeConversation ? (
-        <div className="flex flex-1 flex-col h-full min-w-0 bg-[var(--background)]">
+        <div className="flex flex-1 flex-col h-full min-h-0 min-w-0 bg-[var(--background)]">
           {/* Top Bar Header */}
-          <div className="h-16 px-6 border-b border-[var(--border)] bg-[var(--card)] flex items-center justify-between shrink-0">
+          <div className="h-16 px-6 border-b border-[#222e35] bg-[#202c33] flex items-center justify-between shrink-0">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[5px] bg-[var(--accent)] font-mono text-xs font-bold uppercase text-[var(--foreground)]">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[5px] bg-[#2a3942] border border-[#2f3b43] font-mono text-xs font-bold uppercase text-[#e9edef]">
                 {(activeConversation.companyName || activeConversation.contactName || activeConversation.phoneNumber).slice(0, 2)}
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <h3 className="font-headline text-sm font-bold text-[var(--foreground)] truncate">
+                  <h3 className="font-headline text-sm font-bold text-[#e9edef] truncate">
                     {activeConversation.companyName || activeConversation.contactName || `+${activeConversation.phoneNumber}`}
                   </h3>
                   {activeConversation.companyName && activeConversation.contactName && (
-                    <span className="px-1.5 py-0.2 rounded-[3px] bg-[var(--accent)] text-[10px] font-medium text-[var(--muted-foreground)]">
+                    <span className="px-1.5 py-0.5 rounded-[3px] bg-[#2a3942] text-[10px] font-medium text-[#8696a0]">
                       {activeConversation.contactName}
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-2 font-mono text-[11px] text-[var(--muted-foreground)] mt-0.5">
+                <div className="flex items-center gap-2 font-mono text-[11px] text-[#8696a0] mt-0.5">
                   <Phone size={10} />
                   <span>+{activeConversation.phoneNumber}</span>
                 </div>
@@ -426,25 +449,25 @@ export const AdminWhatsAppInboxView: React.FC<{
             {/* Online Status Badge */}
             <div className="flex items-center gap-2">
               {activeConversation.isWindowActive && (
-                <div className="flex items-center gap-2 px-2.5 py-1 rounded-[5px] border border-[var(--border)] bg-[var(--background)] text-xs text-[var(--muted-foreground)]">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
-                  <span className="text-[11px] font-medium text-[var(--foreground)]">Online</span>
+                <div className="flex items-center gap-2 px-2.5 py-1 rounded-[5px] border border-[#2a3942] bg-[#111b21] text-xs text-[#8696a0]">
+                  <span className="h-2 w-2 rounded-full bg-[#00a884] shrink-0" />
+                  <span className="text-[11px] font-medium text-[#e9edef]">Online</span>
                 </div>
               )}
             </div>
           </div>
 
           {/* Messages Scroll Area */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          <div className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6 space-y-4 bg-[#0b141a]">
             {loadingMessages ? (
-              <div className="flex items-center justify-center h-full text-xs text-[var(--muted-foreground)] gap-2">
-                <Loader2 size={18} className="animate-spin text-[var(--foreground)]" />
+              <div className="flex items-center justify-center h-full text-xs text-[#8696a0] gap-2">
+                <Loader2 size={18} className="animate-spin text-[#00a884]" />
                 <span>Loading messages…</span>
               </div>
             ) : messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-center text-xs text-[var(--muted-foreground)] space-y-2">
-                <MessageSquare size={32} className="text-[var(--border)]" />
-                <p className="font-semibold text-[var(--foreground)]">No messages yet</p>
+              <div className="flex flex-col items-center justify-center h-full text-center text-xs text-[#8696a0] space-y-2">
+                <MessageSquare size={32} className="text-[#222e35]" />
+                <p className="font-semibold text-[#e9edef]">No messages yet</p>
                 <p className="max-w-xs text-[11px]">
                   Send a message below to start chatting with this customer on WhatsApp.
                 </p>
@@ -461,7 +484,7 @@ export const AdminWhatsAppInboxView: React.FC<{
                     {/* Date Divider Pill */}
                     {showDateLabel && (
                       <div className="flex justify-center my-3">
-                        <span className="px-3 py-1 rounded-[4px] bg-[var(--accent)] border border-[var(--border)] text-[10px] font-mono font-medium text-[var(--muted-foreground)]">
+                        <span className="px-3 py-1 rounded-[5px] bg-[#182229] border border-[#222e35] text-[10px] font-mono font-medium text-[#8696a0] shadow-sm">
                           {formatDateLabel(msg.created_at)}
                         </span>
                       </div>
@@ -470,10 +493,10 @@ export const AdminWhatsAppInboxView: React.FC<{
                     {/* Chat Bubble */}
                     <div className={`flex w-full ${isInbound ? "justify-start" : "justify-end"}`}>
                       <div
-                        className={`max-w-[75%] md:max-w-[65%] rounded-[5px] p-3 text-xs shadow-sm space-y-1.5 ${
+                        className={`max-w-[85%] sm:max-w-[540px] rounded-[5px] p-3 text-xs shadow-sm space-y-2 break-words ${
                           isInbound
-                            ? "bg-[var(--card)] border border-[var(--border)] text-[var(--foreground)]"
-                            : "bg-[var(--foreground)] text-[var(--background)]"
+                            ? "bg-[#202c33] border border-[#222e35] text-[#e9edef]"
+                            : "bg-[#005c4b] border border-[#005c4b] text-[#e9edef]"
                         }`}
                       >
                         {/* 1. Image message */}
@@ -585,24 +608,45 @@ export const AdminWhatsAppInboxView: React.FC<{
 
                         {/* 4. Text / Fallback message */}
                         {!["image", "document", "audio", "voice"].includes(msg.message_type) && (
-                          <p className="whitespace-pre-wrap leading-relaxed font-sans">{msg.content}</p>
+                          <div className="space-y-2">
+                            <p className="whitespace-pre-wrap leading-relaxed font-sans break-words text-[#e9edef]">
+                              {renderMessageContent(msg.content || "", isInbound)}
+                            </p>
+                            {msg.message_type === "template" && (() => {
+                              const urlMatch = msg.content?.match(/https?:\/\/[^\s]+/);
+                              const targetUrl = urlMatch ? urlMatch[0] : (activeConversation.companyName ? `https://nammainfo.in/${activeConversation.companyName.toLowerCase()}` : "https://nammainfo.in");
+                              return (
+                                <div className="pt-2 border-t border-white/10 flex items-center justify-center">
+                                  <a
+                                    href={targetUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1.5 py-1 px-3 rounded-[4px] text-xs font-semibold text-[#53bdeb] hover:bg-white/10 transition-colors cursor-pointer w-full justify-center"
+                                  >
+                                    <ExternalLink size={13} />
+                                    <span>view your profile</span>
+                                  </a>
+                                </div>
+                              );
+                            })()}
+                          </div>
                         )}
 
                         {/* Footer: Timestamp and status tick */}
                         <div
-                          className={`flex items-center justify-end gap-1 text-[10px] font-mono mt-1 ${
-                            isInbound ? "text-[var(--muted-foreground)]" : "text-[var(--background)]/80"
+                          className={`flex items-center justify-end gap-1.5 text-[10px] font-mono mt-1 ${
+                            isInbound ? "text-[#8696a0]" : "text-[#e9edef]/70"
                           }`}
                         >
                           <span>{formatTime(msg.created_at)}</span>
                           {isOutbound && (
-                            <span>
-                              {msg.status === "read" && <CheckCheck size={13} className="text-sky-300" />}
-                              {msg.status === "delivered" && <CheckCheck size={13} />}
-                              {msg.status === "sent" && <Check size={13} />}
+                            <span className="inline-flex items-center">
+                              {msg.status === "read" && <CheckCheck size={14} className="text-[#53bdeb]" />}
+                              {msg.status === "delivered" && <CheckCheck size={14} className="text-[#8696a0]" />}
+                              {msg.status === "sent" && <Check size={14} className="text-[#8696a0]" />}
                               {msg.status === "failed" && (
                                 <span title={msg.error_message || "Send failed"}>
-                                  <AlertCircle size={13} className="text-rose-400" />
+                                  <AlertCircle size={14} className="text-rose-400" />
                                 </span>
                               )}
                             </span>
@@ -619,15 +663,15 @@ export const AdminWhatsAppInboxView: React.FC<{
 
           {/* Attachment Preview Chip (Before sending) */}
           {selectedFile && (
-            <div className="px-6 py-2 bg-[var(--card)] border-t border-[var(--border)] flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs text-[var(--foreground)]">
+            <div className="px-6 py-2 bg-[#202c33] border-t border-[#222e35] flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs text-[#e9edef]">
                 {selectedFile.type.startsWith("image/") ? (
-                  <ImageIcon size={14} className="text-emerald-500" />
+                  <ImageIcon size={14} className="text-[#00a884]" />
                 ) : (
-                  <FileText size={14} className="text-rose-500" />
+                  <FileText size={14} className="text-rose-400" />
                 )}
                 <span className="font-medium truncate max-w-sm">{selectedFile.name}</span>
-                <span className="text-[10px] font-mono text-[var(--muted-foreground)]">
+                <span className="text-[10px] font-mono text-[#8696a0]">
                   ({(selectedFile.size / 1024).toFixed(0)} KB)
                 </span>
               </div>
@@ -637,7 +681,7 @@ export const AdminWhatsAppInboxView: React.FC<{
                   setSelectedFile(null);
                   if (fileInputRef.current) fileInputRef.current.value = "";
                 }}
-                className="text-[var(--muted-foreground)] hover:text-rose-500 p-1 rounded-[3px] transition-colors cursor-pointer"
+                className="text-[#8696a0] hover:text-rose-400 p-1 rounded-[3px] transition-colors cursor-pointer"
               >
                 <X size={14} />
               </button>
@@ -647,7 +691,7 @@ export const AdminWhatsAppInboxView: React.FC<{
           {/* Bottom Input Composer */}
           <form
             onSubmit={handleSendMessage}
-            className="p-4 border-t border-[var(--border)] bg-[var(--card)] flex items-end gap-2 shrink-0"
+            className="p-3 md:p-4 border-t border-[#222e35] bg-[#202c33] flex items-end gap-2 shrink-0"
           >
             {/* Hidden file input */}
             <input
@@ -666,7 +710,7 @@ export const AdminWhatsAppInboxView: React.FC<{
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="p-2 rounded-[5px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors cursor-pointer shrink-0"
+              className="p-2 rounded-[5px] text-[#8696a0] hover:text-[#e9edef] hover:bg-[#2a3942] transition-colors cursor-pointer shrink-0"
               title="Attach PDF document or photo"
             >
               <Paperclip size={18} />
@@ -680,7 +724,7 @@ export const AdminWhatsAppInboxView: React.FC<{
                 onKeyDown={handleKeyDown}
                 placeholder="Type a message..."
                 rows={1}
-                className="w-full resize-none rounded-[5px] bg-[var(--background)] border border-[var(--border)] p-2.5 text-xs text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:border-[var(--foreground)] max-h-32"
+                className="w-full resize-none rounded-[5px] bg-[#2a3942] border border-[#2f3b43] p-2.5 text-xs text-[#e9edef] placeholder:text-[#8696a0] focus:outline-none focus:border-[#00a884] max-h-32"
               />
             </div>
 
@@ -688,7 +732,7 @@ export const AdminWhatsAppInboxView: React.FC<{
             <button
               type="submit"
               disabled={sending || (!inputText.trim() && !selectedFile)}
-              className="h-9 px-4 rounded-[5px] bg-[var(--foreground)] text-[var(--background)] font-medium text-xs flex items-center gap-1.5 hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0"
+              className="h-[38px] px-4 rounded-[5px] bg-[#00a884] text-[#111b21] font-semibold text-xs flex items-center gap-1.5 hover:bg-[#02906f] transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0"
             >
               {sending || uploadingMedia ? (
                 <Loader2 size={14} className="animate-spin" />

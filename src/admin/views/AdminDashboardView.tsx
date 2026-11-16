@@ -236,15 +236,15 @@ export const AdminDashboardView: React.FC = () => {
 
       const validity = getDaysRemaining(c.membershipExpiresAt, c.subscriptionPlan);
       const isExp =
-        (c.subscriptionPlan === "pro" || c.subscriptionPlan === "trial") &&
         !validity.isLifetime &&
-        (validity.isExpired || (c.status === "expired" && !c.membershipExpiresAt));
+        (validity.isExpired ||
+          c.status === "expired" ||
+          (c.membershipExpiresAt ? new Date(c.membershipExpiresAt).getTime() <= Date.now() : false));
 
       if (filters.tab === "trial") {
-        if (c.subscriptionPlan !== "trial") return false;
+        if (c.subscriptionPlan !== "trial" || isExp) return false;
       } else if (filters.tab === "pro") {
-        if (c.subscriptionPlan !== "pro") return false;
-        if (isExp) return false;
+        if (c.subscriptionPlan !== "pro" || isExp) return false;
       } else if (filters.tab === "expired") {
         if (!isExp) return false;
       }
@@ -355,11 +355,11 @@ export const AdminDashboardView: React.FC = () => {
           onOrderCountUpdate={(cnt) => setPendingOrdersCount(cnt)}
         />
       ) : currentTab === "inbox" ? (
-        <div className="flex flex-1 flex-col h-screen overflow-hidden min-w-0">
+        <div className="flex flex-1 flex-col h-full min-h-0 min-w-0 overflow-hidden">
           <AdminWhatsAppInboxView onUnreadCountUpdate={setInboxUnreadCount} />
         </div>
       ) : currentTab === "staff" ? (
-        <div className="flex flex-1 flex-col h-screen overflow-y-auto min-w-0">
+        <div className="flex flex-1 flex-col h-full min-h-0 min-w-0 overflow-y-auto">
           <StaffAccountsView />
         </div>
       ) : (

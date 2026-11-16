@@ -4,6 +4,31 @@ import type { OrderStatus, OrderType, DesignMode, AdminOrder, OrderStats } from 
 
 export const dynamic = "force-dynamic";
 
+function deriveDynamicOrderStatus(rawStatus: string, cardProcess?: any): OrderStatus {
+  if (rawStatus === "cancelled") return "cancelled";
+  if (!cardProcess || typeof cardProcess !== "object") {
+    return (rawStatus as OrderStatus) || "under_review";
+  }
+
+  if (cardProcess.card_delivered?.completed) {
+    return "delivered";
+  }
+  if (cardProcess.card_posted?.completed) {
+    return "out_for_delivery";
+  }
+  if (cardProcess.card_printed_approved?.completed) {
+    return "ready_to_dispatch";
+  }
+  if (cardProcess.customer_responded_designing?.completed) {
+    return "card_designed";
+  }
+  if (cardProcess.greetings_sent?.completed) {
+    return "under_review";
+  }
+
+  return (rawStatus as OrderStatus) || "under_review";
+}
+
 export async function GET(request: Request) {
   const auth = await requireStaffAuth(request);
   if (!auth.authorized) {
@@ -26,14 +51,14 @@ export async function GET(request: Request) {
 
     const rawOrders = ordersData || [];
 
-    // 2. Fetch associated profiles for business & customer details
+    // 2. Fetch associated profiles for business & customer details (including dynamic card_process)
     const profileIds = Array.from(new Set(rawOrders.map((o: any) => o.profile_id).filter(Boolean)));
     const profileMap = new Map<string, any>();
 
     if (profileIds.length > 0) {
       const { data: profiles, error: profilesError } = await supabase
         .from("profiles")
-        .select("id, business_name, owner_name, email, phone, avatar_url, logo_url, username, slug")
+        .select("id, business_name, owner_name, email, phone, avatar_url, logo_url, username, slug, card_process")
         .in("id", profileIds);
 
       if (!profilesError && profiles) {
@@ -43,10 +68,11 @@ export async function GET(request: Request) {
       }
     }
 
-    // 3. Transform to clean AdminOrder model
+    // 3. Transform to clean AdminOrder model with dynamic fulfillment status
     const orders: AdminOrder[] = rawOrders.map((o: any) => {
       const profile = profileMap.get(o.profile_id);
       const shipping = (o.shipping_address || {}) as any;
+      const computedStatus = deriveDynamicOrderStatus(o.status, profile?.card_process);
 
       return {
         id: o.id,
@@ -60,7 +86,7 @@ export async function GET(request: Request) {
         cardQuantity: Number(o.card_quantity || 1),
         unitPrice: Number(o.unit_price || 0),
         totalAmount: Number(o.total_amount || 0),
-        status: (o.status as OrderStatus) || "under_review",
+        status: computedStatus,
         designUrl: o.design_url || null,
         designMode: (o.design_mode as DesignMode) || "team_assist",
         shippingAddress: {
@@ -83,13 +109,20 @@ export async function GET(request: Request) {
 
     // 4. Calculate KPI statistics
     let underReviewCount = 0;
+    let cardDesignedCount = 0;
+    let readyToDispatchCount = 0;
+    let outForDeliveryCount = 0;
     let inProductionCount = 0;
     let deliveredCount = 0;
     let totalRevenue = 0;
 
     for (const ord of orders) {
       if (ord.status === "under_review") underReviewCount++;
-      else if (ord.status === "on_work") inProductionCount++;
+      else if (ord.status === "card_designed" || ord.status === "on_work") {
+        cardDesignedCount++;
+        inProductionCount++;
+      } else if (ord.status === "ready_to_dispatch") readyToDispatchCount++;
+      else if (ord.status === "out_for_delivery") outForDeliveryCount++;
       else if (ord.status === "delivered") deliveredCount++;
 
       totalRevenue += ord.totalAmount;
@@ -99,6 +132,9 @@ export async function GET(request: Request) {
       totalOrders: orders.length,
       underReviewCount,
       inProductionCount,
+      cardDesignedCount,
+      readyToDispatchCount,
+      outForDeliveryCount,
       deliveredCount,
       totalRevenue,
     };

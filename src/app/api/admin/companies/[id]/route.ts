@@ -19,18 +19,19 @@ export async function GET(
     const { id } = params;
     const supabase = auth.adminSupabase;
 
-    // 1. Fetch profile and employees in parallel for instant response
-    const [profileRes, employeesRes] = await Promise.all([
-      supabase.from("profiles").select("*").eq("id", id).single(),
-      supabase
-        .from("employees")
-        .select("*")
-        .eq("owner_id", id)
-        .order("created_at", { ascending: true }),
-    ]);
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
-    const p = profileRes.data;
-    if (profileRes.error || !p) {
+    // 1. Fetch profile (by UUID or slug/username)
+    let profileQuery = supabase.from("profiles").select("*");
+    if (isUuid) {
+      profileQuery = profileQuery.eq("id", id);
+    } else {
+      profileQuery = profileQuery.or(`slug.eq.${id},username.eq.${id}`);
+    }
+
+    const { data: p, error: profileErr } = await profileQuery.maybeSingle();
+
+    if (profileErr || !p) {
       return NextResponse.json(
         { error: "Company not found" },
         { status: 404 }
@@ -44,8 +45,15 @@ export async function GET(
       );
     }
 
-    if (employeesRes.error) {
-      console.warn("[Admin API] Failed fetching employees:", employeesRes.error.message);
+    // Fetch employees by profile id
+    const { data: rawEmployees, error: employeesError } = await supabase
+      .from("employees")
+      .select("*")
+      .eq("owner_id", p.id)
+      .order("created_at", { ascending: true });
+
+    if (employeesError) {
+      console.warn("[Admin API] Failed fetching employees:", employeesError.message);
     }
 
     // Free Trial & Pro Determination (consistent with companies list endpoint)
@@ -58,7 +66,6 @@ export async function GET(
       ? "pro"
       : "free";
 
-    const rawEmployees = employeesRes.data;
     const employees: AdminEmployee[] = (rawEmployees || []).map((e: any) => {
       let empPlan: "free" | "pro" | "trial";
       if (e.plan) {
@@ -144,6 +151,22 @@ export async function GET(
       }
     }
 
+    let cardProcess = (p.card_process && typeof p.card_process === "object") ? p.card_process : {};
+    if (Object.keys(cardProcess).length === 0) {
+      const { data: adminNotes } = await supabase
+        .from("profile_admin_notes")
+        .select("follow_up_notes")
+        .eq("profile_id", p.id)
+        .maybeSingle();
+      if (adminNotes?.follow_up_notes?.startsWith("__CARD_PROCESS_JSON__:")) {
+        try {
+          cardProcess = JSON.parse(adminNotes.follow_up_notes.replace("__CARD_PROCESS_JSON__:", ""));
+        } catch {
+          cardProcess = {};
+        }
+      }
+    }
+
     const company: CompanyWithEmployees = {
       id: p.id,
       businessName: p.business_name || p.username || "Unnamed Business",
@@ -164,7 +187,7 @@ export async function GET(
       createdAt: p.created_at,
       avatarUrl: p.avatar_url,
       logoUrl: p.logo_url,
-      cardProcess: (p.card_process && typeof p.card_process === "object") ? p.card_process : {},
+      cardProcess,
       employees,
 
       // 100-Day Free Trial details

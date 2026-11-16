@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdminAuth } from "@/admin/shared/lib/admin-auth";
+import { requireStaffAuth } from "@/admin/shared/lib/admin-auth";
 import { createAdminClient } from "@/supabase/admin";
 import {
   formatWhatsAppPhone,
@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
  * Returns the chat history for a phone number and marks inbound messages as read.
  */
 export async function GET(request: NextRequest) {
-  const authCheck = await requireAdminAuth(request);
+  const authCheck = await requireStaffAuth(request);
   if (!authCheck.authorized) {
     return authCheck.response;
   }
@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
   }
 
   const phone = formatWhatsAppPhone(phoneParam);
+  const last10 = phone.slice(-10);
 
   try {
     const admin = createAdminClient();
@@ -33,7 +34,7 @@ export async function GET(request: NextRequest) {
     const { data: messages, error } = await admin
       .from("whatsapp_messages")
       .select("*")
-      .eq("phone_number", phone)
+      .or(`phone_number.eq.${phone},phone_number.ilike.%${last10},phone_number.eq.+${phone}`)
       .order("created_at", { ascending: true })
       .limit(300);
 
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
     await admin
       .from("whatsapp_messages")
       .update({ is_read: true })
-      .eq("phone_number", phone)
+      .or(`phone_number.eq.${phone},phone_number.ilike.%${last10},phone_number.eq.+${phone}`)
       .eq("direction", "inbound")
       .eq("is_read", false);
 
@@ -65,7 +66,7 @@ export async function GET(request: NextRequest) {
  * Sends a message (text or media) to customer via WhatsApp Cloud API.
  */
 export async function POST(request: NextRequest) {
-  const authCheck = await requireAdminAuth(request);
+  const authCheck = await requireStaffAuth(request);
   if (!authCheck.authorized) {
     return authCheck.response;
   }
@@ -85,7 +86,7 @@ export async function POST(request: NextRequest) {
     const last10 = phone.slice(-10);
     const { data: profile } = await admin
       .from("profiles")
-      .select("full_name, company_name")
+      .select("owner_name, business_name")
       .or(`phone.eq.${phone},phone.ilike.%${last10}`)
       .limit(1)
       .maybeSingle();
@@ -125,8 +126,8 @@ export async function POST(request: NextRequest) {
       .insert({
         meta_message_id: sendResult.messageId || null,
         phone_number: phone,
-        contact_name: profile?.full_name || null,
-        company_name: profile?.company_name || null,
+        contact_name: profile?.owner_name || null,
+        company_name: profile?.business_name || null,
         direction: "outbound",
         message_type: type,
         content: type === "text" ? text.trim() : (mediaCaption || text || (type === "document" ? mediaFilename : type)),
@@ -139,20 +140,19 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (insertError) {
-      console.warn("[WhatsApp Messages POST] Saved to WhatsApp but failed local DB insert:", insertError);
+      console.warn("[WhatsApp Messages POST] Insert record error:", insertError);
     }
 
     return NextResponse.json({
       success: true,
       messageId: sendResult.messageId,
-      message: inserted,
+      message: inserted || null,
     });
   } catch (err) {
     console.error("[WhatsApp Messages POST] Exception:", err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Failed to process message send" },
+      { error: err instanceof Error ? err.message : "Failed to process message" },
       { status: 500 }
     );
   }
 }
-

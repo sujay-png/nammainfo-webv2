@@ -29,7 +29,7 @@ interface OrderDetailModalProps {
   order: AdminOrder | null;
   isOpen: boolean;
   onClose: () => void;
-  onUpdateStatus: (orderId: string, status: OrderStatus) => Promise<void>;
+  onUpdateStatus?: (orderId: string, status: OrderStatus) => Promise<void>;
   onDeleteOrder: (orderId: string) => Promise<void>;
 }
 
@@ -37,23 +37,12 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   order,
   isOpen,
   onClose,
-  onUpdateStatus,
   onDeleteOrder,
 }) => {
   const [updating, setUpdating] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   if (!order) return null;
-
-  const handleStatusChange = async (newStatus: OrderStatus) => {
-    if (newStatus === order.status) return;
-    setUpdating(true);
-    try {
-      await onUpdateStatus(order.id, newStatus);
-    } finally {
-      setUpdating(false);
-    }
-  };
 
   const handleDelete = async () => {
     if (!confirm("Are you sure you want to delete this order? This action cannot be undone.")) return;
@@ -87,6 +76,64 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     minute: "2-digit",
   });
 
+  const getFulfillmentInfo = (status: OrderStatus) => {
+    switch (status) {
+      case "under_review":
+        return {
+          step: 1,
+          label: "Under Review",
+          description: "Order placed. Customer requirements gathered and specs under review.",
+        };
+      case "card_designed":
+      case "on_work":
+        return {
+          step: 2,
+          label: "Card Designed",
+          description: "Design completed and queued for physical NFC card printing.",
+        };
+      case "ready_to_dispatch":
+        return {
+          step: 3,
+          label: "Ready for Dispatch",
+          description: "Physical card printed and customer design approved for courier dispatch.",
+        };
+      case "out_for_delivery":
+        return {
+          step: 4,
+          label: "Out for Delivery",
+          description: "Dispatched via courier (delivery within 5–7 working days).",
+        };
+      case "delivered":
+        return {
+          step: 5,
+          label: "Delivered",
+          description: "Physical card delivered to customer doorstep.",
+        };
+      case "cancelled":
+        return {
+          step: 0,
+          label: "Cancelled",
+          description: "Order has been cancelled.",
+        };
+      default:
+        return {
+          step: 1,
+          label: status,
+          description: "Fulfillment in progress.",
+        };
+    }
+  };
+
+  const currentFulfillment = getFulfillmentInfo(order.status);
+
+  const STAGES = [
+    { key: "under_review", step: 1, label: "Under Review" },
+    { key: "card_designed", step: 2, label: "Card Designed" },
+    { key: "ready_to_dispatch", step: 3, label: "Ready to Dispatch" },
+    { key: "out_for_delivery", step: 4, label: "Out for Delivery" },
+    { key: "delivered", step: 5, label: "Delivered" },
+  ];
+
   return (
     <Modal
       isOpen={isOpen}
@@ -96,80 +143,65 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       maxWidth="3xl"
     >
       <div className="space-y-6 text-xs text-[var(--foreground)]">
-        {/* Status Lifecycle Selector */}
-        <div className="space-y-2 rounded-[5px] border border-[var(--border)] bg-[var(--accent)]/30 p-4">
+        {/* Fulfillment Status Display (Dynamically updated from Company Lifecycle Milestones) */}
+        <div className="space-y-3 rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4">
           <div className="flex items-center justify-between">
-            <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-              Fulfillment Status
-            </span>
-            {updating && (
-              <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-[var(--muted-foreground)]">
-                <Loader2 size={12} className="animate-spin" />
-                <span>Updating status...</span>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+                Fulfillment Status
               </span>
-            )}
+              <span className="rounded-[4px] border border-[var(--border)] bg-[var(--accent)] px-2 py-0.5 font-mono text-[10px] font-semibold text-[var(--foreground)] uppercase">
+                {currentFulfillment.label}
+              </span>
+            </div>
+            <span className="text-[11px] text-[var(--muted-foreground)] font-mono">
+              Stage {currentFulfillment.step} of 5
+            </span>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 pt-1">
-            {/* Step 1: Under Review */}
-            <button
-              disabled={updating}
-              onClick={() => handleStatusChange("under_review")}
-              className={`p-3 rounded-[5px] border text-left transition-all ${
-                order.status === "under_review"
-                  ? "bg-[var(--foreground)] text-[var(--background)] border-[var(--foreground)]"
-                  : "border-[var(--border)] bg-[var(--card)] hover:bg-[var(--accent)] text-[var(--foreground)]"
-              }`}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span className="font-mono text-[9px] uppercase tracking-wider opacity-70">Step 1</span>
-                <Clock size={13} />
-              </div>
-              <p className="font-semibold text-xs">Under Review</p>
-              <p className="text-[10px] opacity-75 mt-0.5 leading-snug">
-                Customer can update design
-              </p>
-            </button>
+          {/* Stepper Pipeline Indicators */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 pt-1">
+            {STAGES.map((s) => {
+              const isPast = currentFulfillment.step > s.step;
+              const isCurrent = currentFulfillment.step === s.step;
+              return (
+                <div
+                  key={s.key}
+                  className={`rounded-[5px] border p-2 text-center transition-all ${
+                    isCurrent
+                      ? "border-[var(--foreground)] bg-[var(--foreground)] text-[var(--background)] shadow-xs"
+                      : isPast
+                      ? "border-[var(--border)] bg-[var(--accent)] text-[var(--foreground)]"
+                      : "border-[var(--border)]/60 bg-[var(--card)] text-[var(--muted-foreground)] opacity-50"
+                  }`}
+                >
+                  <div className="flex items-center justify-center gap-1 mb-0.5">
+                    {isPast ? (
+                      <Check size={11} strokeWidth={2.8} />
+                    ) : (
+                      <span className="font-mono text-[9px] uppercase opacity-75">
+                        #{s.step}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[10px] font-semibold truncate leading-tight">
+                    {s.label}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
 
-            {/* Step 2: In Production */}
-            <button
-              disabled={updating}
-              onClick={() => handleStatusChange("on_work")}
-              className={`p-3 rounded-[5px] border text-left transition-all ${
-                order.status === "on_work"
-                  ? "bg-blue-600 text-white border-blue-600"
-                  : "border-[var(--border)] bg-[var(--card)] hover:bg-[var(--accent)] text-[var(--foreground)]"
-              }`}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span className="font-mono text-[9px] uppercase tracking-wider opacity-70">Step 2</span>
-                <Cpu size={13} />
-              </div>
-              <p className="font-semibold text-xs">In Production</p>
-              <p className="text-[10px] opacity-75 mt-0.5 leading-snug">
-                Card printing & NFC chip locked
+          <div className="rounded-[4px] border border-[var(--border)] bg-[var(--accent)]/50 p-2.5 flex items-start gap-2">
+            <Clock size={13} className="text-[var(--muted-foreground)] shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <p className="text-xs font-medium text-[var(--foreground)]">
+                {currentFulfillment.description}
               </p>
-            </button>
-
-            {/* Step 3: Delivered */}
-            <button
-              disabled={updating}
-              onClick={() => handleStatusChange("delivered")}
-              className={`p-3 rounded-[5px] border text-left transition-all ${
-                order.status === "delivered"
-                  ? "bg-emerald-600 text-white border-emerald-600"
-                  : "border-[var(--border)] bg-[var(--card)] hover:bg-[var(--accent)] text-[var(--foreground)]"
-              }`}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span className="font-mono text-[9px] uppercase tracking-wider opacity-70">Step 3</span>
-                <CheckCircle2 size={13} />
-              </div>
-              <p className="font-semibold text-xs">Delivered</p>
-              <p className="text-[10px] opacity-75 mt-0.5 leading-snug">
-                Order complete & fulfilled
+              <p className="text-[11px] text-[var(--muted-foreground)]">
+                Status updates dynamically as milestones are completed in the company&apos;s <strong>Status</strong> tab in company details.
               </p>
-            </button>
+            </div>
           </div>
         </div>
 

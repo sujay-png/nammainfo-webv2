@@ -121,6 +121,15 @@ select {
   .text-balance {
     text-wrap: balance;
   }
+
+  /* Utility to hide scrollbars completely across all modern browsers */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
 }
 
 @keyframes fadeInUp {

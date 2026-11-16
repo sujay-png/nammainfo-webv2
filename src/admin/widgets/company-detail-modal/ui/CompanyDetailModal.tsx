@@ -15,6 +15,7 @@ import {
   QrCode,
   Copy,
   Download,
+  Lock,
 } from "lucide-react";
 import { Modal } from "@/admin/shared/ui/Modal";
 import { Badge } from "@/admin/shared/ui/Badge";
@@ -83,11 +84,20 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
   // State for toggling lifecycle milestone
   const [togglingMilestoneKey, setTogglingMilestoneKey] = useState<string | null>(null);
 
+  // State for milestone confirmation modal
+  const [confirmStepModal, setConfirmStepModal] = useState<{
+    stepKey: string;
+    title: string;
+    targetCompleted: boolean;
+  } | null>(null);
+
   // Instantly initialize form values & details from company props (0ms wait)
   useEffect(() => {
     if (company && isOpen) {
       if (initialTab) {
         setActiveTab(initialTab);
+      } else if (company.subscriptionPlan === "free") {
+        setActiveTab("overview");
       } else {
         setActiveTab("status");
       }
@@ -149,8 +159,10 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
 
   const validity = getDaysRemaining(current.membershipExpiresAt, current.subscriptionPlan);
   const isExpired =
-    (current.subscriptionPlan === "pro" || current.subscriptionPlan === "trial") &&
-    (!validity.isLifetime && (validity.isExpired || (current.status === "expired" && !current.membershipExpiresAt)));
+    !validity.isLifetime &&
+    (validity.isExpired ||
+      current.status === "expired" ||
+      (current.membershipExpiresAt ? new Date(current.membershipExpiresAt).getTime() <= Date.now() : false));
   const teamCount = current.employees?.length || 0;
 
   // Helper: exactly 1 year later (e.g. 2026-10-21 -> 2027-10-21)
@@ -401,12 +413,44 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
     }
   };
 
-  const LIFECYCLE_STEPS = [
+  // Lifecycle steps for Direct Pro Plan (starts at Pro active, then all card manufacturing and delivery milestones)
+  const PRO_LIFECYCLE_STEPS = [
+    {
+      key: "pro_active",
+      title: "Pro active",
+      description: "Customer upgraded to commercial Pro plan",
+      isAuto: true,
+      fallbackDate: current.subscriptionStartedAt || current.createdAt,
+    },
+    {
+      key: "customer_responded_designing",
+      title: "Customer responded and card being designed",
+      description: "Customer requirements gathered and card design is in progress",
+    },
+    {
+      key: "card_printed_approved",
+      title: "Card printed customer approved ready for dispatch",
+      description: "Physical card printed and customer design approved",
+    },
+    {
+      key: "card_posted",
+      title: "Card posted",
+      description: "Dispatched via courier (delivery within 5–7 working days)",
+    },
+    {
+      key: "card_delivered",
+      title: "Card delivered",
+      description: "Physical card delivered to customer (admin marked or customer confirmed)",
+    },
+  ];
+
+  // Lifecycle steps for 100-Day Free Trial (onboarding greeting, card fulfillment, 30/60/90-day follow-ups, and eventual Pro activation)
+  const TRIAL_LIFECYCLE_STEPS = [
     {
       key: "greetings_sent",
       title: "Greetings message sent",
       description: "Welcome WhatsApp greeting sent upon Free Trial onboarding",
-      isAuto: current.subscriptionPlan === "trial",
+      isAuto: true,
       fallbackDate: current.trialApprovedAt || current.subscriptionStartedAt || current.createdAt,
     },
     {
@@ -448,10 +492,14 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
       key: "pro_active",
       title: "Pro active",
       description: "Customer upgraded to commercial Pro plan",
-      isAuto: current.subscriptionPlan === "pro",
-      fallbackDate: current.subscriptionStartedAt || current.createdAt,
+      isAuto: false,
+      fallbackDate: current.subscriptionStartedAt,
     },
   ];
+
+  const activeSteps = current.subscriptionPlan === "pro"
+    ? PRO_LIFECYCLE_STEPS
+    : TRIAL_LIFECYCLE_STEPS;
 
   return (
     <>
@@ -498,14 +546,18 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
             <div className="shrink-0">
               <Badge
                 variant={
-                  current.subscriptionPlan === "pro"
+                  isExpired
+                    ? "free"
+                    : current.subscriptionPlan === "pro"
                     ? "pro"
                     : current.subscriptionPlan === "trial"
                     ? "trial"
                     : "free"
                 }
               >
-                {current.subscriptionPlan === "pro"
+                {isExpired
+                  ? "Free Plan (Expired)"
+                  : current.subscriptionPlan === "pro"
                   ? "Pro Plan"
                   : current.subscriptionPlan === "trial"
                   ? "Free Trial"
@@ -514,21 +566,24 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
             </div>
           </div>
 
-          {/* Tab Navigation */}
-          <div className="flex border-b border-[var(--border)] overflow-x-auto no-scrollbar gap-1">
+          {/* Tab Navigation with sleek overflow and hidden horizontal scrollbar */}
+          <div className="flex border-b border-[var(--border)] overflow-x-auto no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden gap-0.5 sm:gap-1">
             <button
               onClick={() => setActiveTab("status")}
-              className={`border-b-2 px-3.5 py-2 text-xs font-semibold uppercase tracking-wider transition-all whitespace-nowrap ${
+              className={`border-b-2 px-3 py-2 text-xs font-semibold uppercase tracking-wider transition-all whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === "status"
                   ? "border-[var(--foreground)] text-[var(--foreground)]"
                   : "border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
               }`}
             >
-              Status
+              <span>Status</span>
+              {(current.subscriptionPlan === "free" || isExpired) && (
+                <Lock size={11} className="text-[var(--muted-foreground)]" />
+              )}
             </button>
             <button
               onClick={() => setActiveTab("overview")}
-              className={`border-b-2 px-3.5 py-2 text-xs font-semibold uppercase tracking-wider transition-all whitespace-nowrap ${
+              className={`border-b-2 px-3 py-2 text-xs font-semibold uppercase tracking-wider transition-all whitespace-nowrap ${
                 activeTab === "overview"
                   ? "border-[var(--foreground)] text-[var(--foreground)]"
                   : "border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
@@ -539,7 +594,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
             {!readOnly && (
               <button
                 onClick={() => setActiveTab("subscription")}
-                className={`border-b-2 px-3.5 py-2 text-xs font-semibold uppercase tracking-wider transition-all whitespace-nowrap ${
+                className={`border-b-2 px-3 py-2 text-xs font-semibold uppercase tracking-wider transition-all whitespace-nowrap ${
                   activeTab === "subscription"
                     ? "border-[var(--foreground)] text-[var(--foreground)]"
                     : "border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
@@ -550,7 +605,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
             )}
             <button
               onClick={() => setActiveTab("employees")}
-              className={`border-b-2 px-3.5 py-2 text-xs font-semibold uppercase tracking-wider transition-all whitespace-nowrap ${
+              className={`border-b-2 px-3 py-2 text-xs font-semibold uppercase tracking-wider transition-all whitespace-nowrap ${
                 activeTab === "employees"
                   ? "border-[var(--foreground)] text-[var(--foreground)]"
                   : "border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
@@ -560,7 +615,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
             </button>
             <button
               onClick={() => setActiveTab("qrcodes")}
-              className={`border-b-2 px-3.5 py-2 text-xs font-semibold uppercase tracking-wider transition-all whitespace-nowrap flex items-center gap-1.5 ${
+              className={`border-b-2 px-3 py-2 text-xs font-semibold uppercase tracking-wider transition-all whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === "qrcodes"
                   ? "border-[var(--foreground)] text-[var(--foreground)]"
                   : "border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
@@ -571,88 +626,168 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
             </button>
           </div>
 
-          {/* Tab 0: Lifecycle Status Stepper */}
+          {/* Tab 0: Lifecycle Status Stepper (Locked for Free Plan & Expired, Unlocked for Active Free Trial & Pro) */}
           {activeTab === "status" && (
             <div className="space-y-4">
-              <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4 space-y-4">
-                <div>
-                  <h4 className="font-headline text-xs font-bold uppercase tracking-wider text-[var(--foreground)]">
-                    Lifecycle & Card Production Status
-                  </h4>
-                  <p className="text-[11px] text-[var(--muted-foreground)] mt-0.5">
-                    Track and update customer onboarding milestones, physical card production, doorstep delivery, and scheduled follow-ups.
-                  </p>
-                </div>
+              {(current.subscriptionPlan === "free" || isExpired) ? (
+                <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-6 text-center space-y-4">
+                  <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-[5px] bg-[var(--accent)] text-[var(--foreground)] border border-[var(--border)]">
+                    <Lock size={18} />
+                  </div>
+                  <div className="space-y-1 max-w-md mx-auto">
+                    <h4 className="font-headline text-base font-bold text-[var(--foreground)]">
+                      Card Production & Lifecycle Locked
+                    </h4>
+                    <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
+                      {isExpired
+                        ? "This company's subscription has expired and reverted to the Free Plan. Physical NFC card manufacturing, dispatch pipeline, and milestone tracking are locked for expired accounts."
+                        : "This company is currently on the Free Plan. Physical NFC card manufacturing, dispatch pipeline, and milestone tracking are locked for free tier accounts."}
+                    </p>
+                  </div>
 
-                {/* Vertical Checklist Stepper */}
-                <div className="relative pl-6 space-y-5 before:absolute before:left-[11px] before:top-3 before:bottom-3 before:w-[2px] before:bg-[var(--border)]">
-                  {LIFECYCLE_STEPS.map((step) => {
-                    const stepData = current.cardProcess?.[step.key];
-                    const isCompleted = Boolean(stepData?.completed || (step.isAuto && stepData?.completed !== false));
-                    const timestamp = stepData?.updated_at || (step.isAuto ? step.fallbackDate : null);
-                    const formattedDate = formatStepTimestamp(timestamp);
-                    const isToggling = togglingMilestoneKey === step.key;
+                  {!readOnly && (
+                    <div className="pt-1">
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="sm"
+                        onClick={() => setActiveTab("subscription")}
+                      >
+                        {isExpired ? "Renew in Subscription & Validity" : "Upgrade to Pro or Free Trial"}
+                      </Button>
+                    </div>
+                  )}
 
-                    return (
-                      <div key={step.key} className="relative flex items-start gap-3.5 group">
-                        {/* Checkbox / Circle Node */}
-                        <button
-                          type="button"
-                          onClick={() => handleToggleMilestoneStep(step.key, !isCompleted)}
-                          disabled={readOnly || isToggling}
-                          className={`absolute -left-[24px] top-0.5 flex h-6 w-6 items-center justify-center rounded-full border transition-all cursor-pointer ${
-                            isCompleted
-                              ? "border-[var(--foreground)] bg-[var(--foreground)] text-[var(--background)] shadow-xs"
-                              : "border-[var(--border)] bg-[var(--background)] hover:border-[var(--foreground)]"
-                          }`}
-                          title={isCompleted ? "Click to mark incomplete" : "Click to mark completed"}
-                        >
-                          {isToggling ? (
-                            <Loader2 size={12} className="animate-spin text-[var(--foreground)]" />
-                          ) : isCompleted ? (
-                            <Check size={13} strokeWidth={2.6} />
-                          ) : (
-                            <div className="h-1.5 w-1.5 rounded-full bg-[var(--muted-foreground)]/40 group-hover:bg-[var(--foreground)]" />
-                          )}
-                        </button>
+                  {/* Locked Pipeline Preview */}
+                  <div className="pt-5 border-t border-[var(--border)] text-left space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[10px] uppercase font-semibold tracking-wider text-[var(--muted-foreground)]">
+                        Workflow Pipeline (Locked Preview)
+                      </span>
+                      <span className="rounded-[4px] border border-[var(--border)] bg-[var(--accent)] px-2 py-0.5 font-mono text-[9px] uppercase font-semibold text-[var(--muted-foreground)] flex items-center gap-1">
+                        <Lock size={10} />
+                        <span>Requires Active Pro or Free Trial</span>
+                      </span>
+                    </div>
 
-                        {/* Text and Completion Date */}
-                        <div
-                          className="min-w-0 flex-1 cursor-pointer select-none"
-                          onClick={() => !readOnly && !isToggling && handleToggleMilestoneStep(step.key, !isCompleted)}
-                        >
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span
-                              className={`text-xs font-semibold tracking-tight transition-colors ${
-                                isCompleted
-                                  ? "text-[var(--foreground)]"
-                                  : "text-[var(--muted-foreground)] group-hover:text-[var(--foreground)]"
-                              }`}
-                            >
+                    <div className="relative space-y-5 opacity-40 select-none pointer-events-none before:absolute before:left-[15px] before:top-4 before:bottom-4 before:w-[2px] before:bg-[var(--border)]">
+                      {PRO_LIFECYCLE_STEPS.map((step, idx) => (
+                        <div key={step.key} className="relative flex items-start gap-4">
+                          <div className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)] font-mono text-xs font-semibold">
+                            {idx + 1}
+                          </div>
+                          <div className="min-w-0 flex-1 pt-0.5">
+                            <p className="text-xs font-semibold text-[var(--foreground)]">
                               {step.title}
-                            </span>
-                            {isCompleted && (
-                              <span className="rounded-[4px] px-1.5 py-0.2 text-[9px] font-mono font-medium border border-[var(--border)] bg-[var(--accent)] text-[var(--foreground)]">
-                                Done
+                            </p>
+                            <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                              {step.description}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-5">
+                  <div>
+                    <h4 className="font-headline text-xs font-bold uppercase tracking-wider text-[var(--foreground)]">
+                      {current.subscriptionPlan === "pro"
+                        ? "Pro Plan Card Production & Dispatch"
+                        : "Free Trial Lifecycle & Card Production"}
+                    </h4>
+                    <p className="text-[11px] text-[var(--muted-foreground)] mt-0.5">
+                      {current.subscriptionPlan === "pro"
+                        ? "Track active Pro plan physical card manufacturing, courier dispatch, and customer delivery confirmation."
+                        : "Track welcome WhatsApp greeting, card manufacturing, doorstep courier delivery, and scheduled 30/60/90-day follow-ups."}
+                    </p>
+                  </div>
+
+                  {/* Vertical Checklist Stepper with generous breathing space */}
+                  <div className="relative space-y-6 before:absolute before:left-[15px] before:top-4 before:bottom-4 before:w-[2px] before:bg-[var(--border)]">
+                    {activeSteps.map((step) => {
+                      const stepData = current.cardProcess?.[step.key];
+                      const isCompleted = Boolean(stepData?.completed || (step.isAuto && stepData?.completed !== false));
+                      const timestamp = stepData?.updated_at || (step.isAuto ? step.fallbackDate : null);
+                      const formattedDate = formatStepTimestamp(timestamp);
+                      const isToggling = togglingMilestoneKey === step.key;
+
+                      return (
+                        <div key={step.key} className="relative flex items-start gap-4 group">
+                          {/* Checkbox / Circle Node */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (readOnly || isToggling) return;
+                              setConfirmStepModal({
+                                stepKey: step.key,
+                                title: step.title,
+                                targetCompleted: !isCompleted,
+                              });
+                            }}
+                            disabled={readOnly || isToggling}
+                            className={`relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-all cursor-pointer ${
+                              isCompleted
+                                ? "border-[var(--foreground)] bg-[var(--foreground)] text-[var(--background)] shadow-xs"
+                                : "border-[var(--border)] bg-[var(--background)] hover:border-[var(--foreground)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                            }`}
+                            title={isCompleted ? "Click to revert" : "Click to mark completed"}
+                          >
+                            {isToggling ? (
+                              <Loader2 size={13} className="animate-spin text-[var(--foreground)]" />
+                            ) : isCompleted ? (
+                              <Check size={14} strokeWidth={2.6} />
+                            ) : (
+                              <div className="h-2 w-2 rounded-full bg-[var(--muted-foreground)]/40 group-hover:bg-[var(--foreground)] transition-colors" />
+                            )}
+                          </button>
+
+                          {/* Text and Completion Date with ample breathing space */}
+                          <div
+                            className="min-w-0 flex-1 pt-0.5 cursor-pointer select-none"
+                            onClick={() => {
+                              if (readOnly || isToggling) return;
+                              setConfirmStepModal({
+                                stepKey: step.key,
+                                title: step.title,
+                                targetCompleted: !isCompleted,
+                              });
+                            }}
+                          >
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span
+                                className={`text-xs sm:text-sm font-semibold tracking-tight transition-colors ${
+                                  isCompleted
+                                    ? "text-[var(--foreground)]"
+                                    : "text-[var(--muted-foreground)] group-hover:text-[var(--foreground)]"
+                                }`}
+                              >
+                                {step.title}
                               </span>
+                              {isCompleted && (
+                                <span className="rounded-[4px] px-1.5 py-0.5 text-[9px] font-mono font-medium border border-[var(--border)] bg-[var(--accent)] text-[var(--foreground)]">
+                                  Done
+                                </span>
+                              )}
+                            </div>
+
+                            <p className="text-xs text-[var(--muted-foreground)] mt-0.5 leading-relaxed">
+                              {step.description}
+                            </p>
+
+                            {isCompleted && formattedDate && (
+                              <p className="font-mono text-[10px] text-[var(--muted-foreground)] mt-1 font-medium">
+                                {formattedDate}
+                              </p>
                             )}
                           </div>
-
-                          <p className="text-[11px] text-[var(--muted-foreground)] mt-0.5 leading-relaxed">
-                            {step.description}
-                          </p>
-
-                          {isCompleted && formattedDate && (
-                            <p className="font-mono text-[10px] text-[var(--muted-foreground)] mt-1 font-medium">
-                              {formattedDate}
-                            </p>
-                          )}
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -1146,6 +1281,54 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
           )}
         </div>
       </Modal>
+
+      {/* Milestone Step Confirmation Modal */}
+      {confirmStepModal && (
+        <Modal
+          isOpen={Boolean(confirmStepModal)}
+          onClose={() => !togglingMilestoneKey && setConfirmStepModal(null)}
+          maxWidth="sm"
+        >
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <h4 className="font-headline text-base font-bold text-[var(--foreground)]">
+                {confirmStepModal.targetCompleted ? "Confirm Milestone" : "Revert Milestone"}
+              </h4>
+              <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
+                {confirmStepModal.targetCompleted
+                  ? `Are you sure you want to mark "${confirmStepModal.title}" as completed? This will stamp the milestone with the current date & time and automatically synchronize physical card fulfillment.`
+                  : `Are you sure you want to revert "${confirmStepModal.title}" to incomplete?`}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border)]">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setConfirmStepModal(null)}
+                disabled={Boolean(togglingMilestoneKey)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                isLoading={togglingMilestoneKey === confirmStepModal.stepKey}
+                onClick={async () => {
+                  const targetKey = confirmStepModal.stepKey;
+                  const targetCompleted = confirmStepModal.targetCompleted;
+                  setConfirmStepModal(null);
+                  await handleToggleMilestoneStep(targetKey, targetCompleted);
+                }}
+              >
+                {confirmStepModal.targetCompleted ? "Yes, Mark Completed" : "Yes, Revert"}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </>
   );
 };

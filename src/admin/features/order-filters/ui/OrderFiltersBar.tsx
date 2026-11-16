@@ -24,7 +24,9 @@ export const OrderFiltersBar: React.FC<OrderFiltersBarProps> = ({
   const tabs: { id: OrderFilterTab; label: string }[] = [
     { id: "all", label: "All" },
     { id: "under_review", label: "Under Review" },
-    { id: "on_work", label: "In Production" },
+    { id: "card_designed", label: "Card Designed" },
+    { id: "ready_to_dispatch", label: "Ready to Dispatch" },
+    { id: "out_for_delivery", label: "Out for Delivery" },
     { id: "delivered", label: "Delivered" },
   ];
 

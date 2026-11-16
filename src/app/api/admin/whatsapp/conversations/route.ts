@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdminAuth } from "@/admin/shared/lib/admin-auth";
+import { requireStaffAuth } from "@/admin/shared/lib/admin-auth";
 import { createAdminClient } from "@/supabase/admin";
+import { formatWhatsAppPhone } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ export interface WhatsAppConversationSummary {
 }
 
 export async function GET(request: NextRequest) {
-  const authCheck = await requireAdminAuth(request);
+  const authCheck = await requireStaffAuth(request);
   if (!authCheck.authorized) {
     return authCheck.response;
   }
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
   try {
     const admin = createAdminClient();
 
-    // Fetch the recent 500 messages to aggregate into conversation threads
+    // Fetch the recent messages to aggregate into conversation threads
     const { data: messages, error } = await admin
       .from("whatsapp_messages")
       .select("*")
@@ -47,7 +48,7 @@ export async function GET(request: NextRequest) {
     const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
     for (const msg of messages || []) {
-      const phone = msg.phone_number;
+      const phone = formatWhatsAppPhone(msg.phone_number);
       if (!conversationsMap.has(phone)) {
         conversationsMap.set(phone, {
           phoneNumber: phone,
@@ -90,6 +91,34 @@ export async function GET(request: NextRequest) {
 
     const conversations = Array.from(conversationsMap.values());
 
+    // Enrich conversations with missing contactName or companyName from profiles
+    const missingInfoConvs = conversations.filter((c) => !c.contactName || !c.companyName);
+    if (missingInfoConvs.length > 0) {
+      try {
+        const phoneQueries = missingInfoConvs.flatMap((c) => {
+          const last10 = c.phoneNumber.slice(-10);
+          return [`phone.eq.${c.phoneNumber}`, `phone.ilike.%${last10}`];
+        });
+        const { data: profiles } = await admin
+          .from("profiles")
+          .select("owner_name, business_name, phone")
+          .or(phoneQueries.join(","));
+
+        if (profiles && profiles.length > 0) {
+          for (const conv of missingInfoConvs) {
+            const last10 = conv.phoneNumber.slice(-10);
+            const matched = profiles.find((p) => p.phone && (p.phone.includes(last10) || p.phone === conv.phoneNumber));
+            if (matched) {
+              if (!conv.contactName) conv.contactName = matched.owner_name || null;
+              if (!conv.companyName) conv.companyName = matched.business_name || null;
+            }
+          }
+        }
+      } catch (enrichErr) {
+        console.warn("[WhatsApp Conversations API] Profile enrichment warning:", enrichErr);
+      }
+    }
+
     return NextResponse.json({ conversations });
   } catch (err) {
     console.error("[WhatsApp Conversations API] Exception:", err);
@@ -99,4 +128,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-

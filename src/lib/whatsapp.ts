@@ -129,13 +129,13 @@ export async function sendWhatsAppTemplate({
       if (!contact) {
         const { data: profile } = await admin
           .from("profiles")
-          .select("owner_name, full_name, business_name, company_name")
+          .select("owner_name, business_name")
           .or(`phone.eq.${formatted},phone.ilike.%${last10}`)
           .limit(1)
           .maybeSingle();
         if (profile) {
-          contact = profile.owner_name || profile.full_name || null;
-          company = profile.business_name || profile.company_name || null;
+          contact = profile.owner_name || null;
+          company = profile.business_name || null;
         }
       }
 
@@ -144,7 +144,15 @@ export async function sendWhatsAppTemplate({
         if (templateName === "trial_approved") {
           const cardSlug = bodyParameters[0] || "";
           const name = bodyParameters[1] || contact || "Valued Customer";
-          summary = `Greetings ${name}! Your 100-Day Free Trial is now active. Your digital card is live at nammainfo.in/${cardSlug}`;
+          const profileLink = cardSlug ? `https://nammainfo.in/${cardSlug}` : "https://nammainfo.in";
+          summary = `Hey ${name},\nGreetings from nammainfo.in\nThank you for showing interest in NFC & QR Code based smart visiting card.\nWe are delighted to inform you that your 100 days free trial is approved and you can use all pro features.\nthanks again for the support.\nWe believe you ll like what we have created for you.\n\nHappy networking.\n\n${profileLink}\n\nRequesting you to send us your visiting card design along with your company logo soft copy so that we can issue your smart card. NO DESIGNS? NO WORRY. let us know and we ll design one for you.\n\nEagerly waiting for your response.`;
+        } else if (templateName === "trial_extended") {
+          const name = bodyParameters[0] || contact || "Valued Customer";
+          const businessName = bodyParameters[1] || company || "your business";
+          const days = bodyParameters[2] || "30";
+          const cardSlug = bodyParameters[3] || "";
+          const profileLink = cardSlug ? `https://nammainfo.in/${cardSlug}` : "https://nammainfo.in";
+          summary = `Hey ${name},\nGreat news! Your free trial for ${businessName} has been extended by ${days} days.\nYou can continue using all pro features.\n\n${profileLink}\n\nHappy networking!`;
         } else {
           summary = `Template: ${templateName}`;
         }

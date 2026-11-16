@@ -110,8 +110,12 @@ export const AdminOrdersView: React.FC<AdminOrdersViewProps> = ({
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
       // 1. Status Filter
-      if (filters.tab !== "all" && order.status !== filters.tab) {
-        return false;
+      if (filters.tab !== "all") {
+        if (filters.tab === "card_designed") {
+          if (order.status !== "card_designed" && order.status !== "on_work") return false;
+        } else if (order.status !== filters.tab) {
+          return false;
+        }
       }
 
       // 2. Search Filter
