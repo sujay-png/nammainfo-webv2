@@ -78,9 +78,23 @@ export async function POST(
     // Check current status so we never override manual admin suspensions
     const { data: currentProfile } = await supabase
       .from("profiles")
-      .select("status, slug, username, phone, owner_name, business_name, subscription_plan")
+      .select("status, slug, username, phone, owner_name, business_name, subscription_plan, card_process")
       .eq("id", id)
       .single();
+
+    // Auto-update card_process milestone when switching to trial or pro
+    if (parsed.data.subscriptionPlan === "trial" || parsed.data.subscriptionPlan === "pro") {
+      const nowIso = new Date().toISOString();
+      const existingProcess = (currentProfile?.card_process && typeof currentProfile.card_process === "object") ? currentProfile.card_process : {};
+      const updatedProcess = { ...existingProcess };
+      if (parsed.data.subscriptionPlan === "trial" && !updatedProcess.greetings_sent?.completed) {
+        updatedProcess.greetings_sent = { completed: true, updated_at: nowIso };
+      }
+      if (parsed.data.subscriptionPlan === "pro" && !updatedProcess.pro_active?.completed) {
+        updatedProcess.pro_active = { completed: true, updated_at: nowIso };
+      }
+      updates.card_process = updatedProcess;
+    }
 
     if (currentProfile && currentProfile.status !== "suspended") {
       if (parsed.data.subscriptionPlan === "free") {
@@ -104,6 +118,10 @@ export async function POST(
 
     if (updateError?.message?.includes("primary_card_count")) {
       delete updates.primary_card_count;
+      ({ error: updateError } = await supabase.from("profiles").update(updates).eq("id", id));
+    }
+    if (updateError?.message?.includes("card_process")) {
+      delete updates.card_process;
       ({ error: updateError } = await supabase.from("profiles").update(updates).eq("id", id));
     }
 
@@ -147,6 +165,8 @@ export async function POST(
         languageCode: "en_IN",
         bodyParameters: [cardSlug, recipientName],
         buttonParameters: [cardSlug],
+        contactName: recipientName,
+        companyName: currentProfile.business_name || (currentProfile as any).company_name || null,
       }).catch((waErr) => {
         console.error("[Admin Validity] WhatsApp notification error:", waErr);
       });

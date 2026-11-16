@@ -48,27 +48,56 @@ export async function GET(
       console.warn("[Admin API] Failed fetching employees:", employeesRes.error.message);
     }
 
+    // Free Trial & Pro Determination (consistent with companies list endpoint)
+    const isTrial = p.subscription_plan === "trial";
+    const hasCompanyProPlan = getMembership(p).isPaid;
+
+    const plan: SubscriptionPlanType = isTrial
+      ? "trial"
+      : hasCompanyProPlan
+      ? "pro"
+      : "free";
+
     const rawEmployees = employeesRes.data;
-    const employees: AdminEmployee[] = (rawEmployees || []).map((e: any) => ({
-      id: e.id,
-      ownerId: e.owner_id,
-      name: e.name,
-      designation: e.designation,
-      email: e.email,
-      phone: e.phone,
-      slug: e.slug,
-      avatarUrl: e.avatar_url,
-      coverUrl: e.cover_url,
-      isActive: e.is_active ?? true,
-      isPremium: Boolean(e.is_premium),
-      subscriptionStartedAt: e.subscription_started_at || e.created_at,
-      subscriptionExpiresAt: e.subscription_expires_at || p.membership_expires_at,
-      status: e.status || (e.is_active ? (e.is_premium ? "active" : "unassigned") : "suspended"),
-      createdAt: e.created_at,
-    }));
+    const employees: AdminEmployee[] = (rawEmployees || []).map((e: any) => {
+      let empPlan: "free" | "pro" | "trial";
+      if (e.plan) {
+        empPlan = e.plan;
+      } else if (e.status === "unassigned") {
+        empPlan = "free";
+      } else if (plan === "pro") {
+        empPlan = "pro";
+      } else if (plan === "trial") {
+        empPlan = "trial";
+      } else {
+        empPlan = "free";
+      }
+
+      const isPremium = empPlan !== "free";
+      const isActive = e.is_active ?? true;
+
+      return {
+        id: e.id,
+        ownerId: e.owner_id,
+        name: e.name,
+        designation: e.designation,
+        email: e.email,
+        phone: e.phone,
+        slug: e.slug,
+        avatarUrl: e.avatar_url,
+        coverUrl: e.cover_url,
+        isActive,
+        isPremium,
+        plan: empPlan,
+        subscriptionStartedAt: e.subscription_started_at || p.subscription_started_at || e.created_at,
+        subscriptionExpiresAt: e.subscription_expires_at || p.membership_expires_at,
+        status: e.status || (isActive ? (isPremium ? "active" : "unassigned") : "suspended"),
+        createdAt: e.created_at,
+      };
+    });
 
     // Employee IDs quota & issued count (only active premium employees)
-    const premiumEmployees = employees.filter((e) => e.isPremium);
+    const premiumEmployees = employees.filter((e) => e.isPremium && e.isActive);
     const premEmpCount = premiumEmployees.length;
     const purchasedCount = (p.purchased_id_count && p.purchased_id_count > premEmpCount) 
       ? Number(p.purchased_id_count) 
@@ -89,20 +118,6 @@ export async function GET(
         }
       }
     }
-
-    const now = Date.now();
-    const hasValidEmpExpiry = Boolean(latestEmployeeExpiry && new Date(latestEmployeeExpiry).getTime() > now);
-
-    // Free Trial & Pro Determination (consistent with companies list endpoint)
-    void hasValidEmpExpiry;
-    const isTrial = p.subscription_plan === "trial";
-    const hasCompanyProPlan = getMembership(p).isPaid;
-
-    const plan: SubscriptionPlanType = isTrial
-      ? "trial"
-      : hasCompanyProPlan
-      ? "pro"
-      : "free";
 
     // Primary card count: if company is on Pro or Trial, 1 primary card
     const primaryCardCount = plan === "pro" || plan === "trial" ? 1 : 0;
@@ -149,6 +164,7 @@ export async function GET(
       createdAt: p.created_at,
       avatarUrl: p.avatar_url,
       logoUrl: p.logo_url,
+      cardProcess: (p.card_process && typeof p.card_process === "object") ? p.card_process : {},
       employees,
 
       // 100-Day Free Trial details

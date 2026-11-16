@@ -1,3 +1,5 @@
+import { createAdminClient } from "@/supabase/admin";
+
 /**
  * Meta WhatsApp Cloud API helper for transactional notifications.
  */
@@ -8,6 +10,9 @@ interface SendTemplateParams {
   languageCode?: string;
   bodyParameters?: (string | number)[];
   buttonParameters?: (string | number)[];
+  contactName?: string;
+  companyName?: string;
+  summaryText?: string;
 }
 
 export async function sendWhatsAppTemplate({
@@ -16,6 +21,9 @@ export async function sendWhatsAppTemplate({
   languageCode = "en_IN",
   bodyParameters = [],
   buttonParameters = [],
+  contactName,
+  companyName,
+  summaryText,
 }: SendTemplateParams): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
@@ -111,6 +119,52 @@ export async function sendWhatsAppTemplate({
 
     const messageId = data?.messages?.[0]?.id;
     console.log(`[WhatsApp] Template '${templateName}' sent to ${formatted}, ID: ${messageId}`);
+
+    // Persist outbound notification to whatsapp_messages table so it appears in the admin WhatsApp chat inbox
+    try {
+      const admin = createAdminClient();
+      const last10 = formatted.slice(-10);
+      let contact = contactName || null;
+      let company = companyName || null;
+      if (!contact) {
+        const { data: profile } = await admin
+          .from("profiles")
+          .select("owner_name, full_name, business_name, company_name")
+          .or(`phone.eq.${formatted},phone.ilike.%${last10}`)
+          .limit(1)
+          .maybeSingle();
+        if (profile) {
+          contact = profile.owner_name || profile.full_name || null;
+          company = profile.business_name || profile.company_name || null;
+        }
+      }
+
+      let summary = summaryText;
+      if (!summary) {
+        if (templateName === "trial_approved") {
+          const cardSlug = bodyParameters[0] || "";
+          const name = bodyParameters[1] || contact || "Valued Customer";
+          summary = `Greetings ${name}! Your 100-Day Free Trial is now active. Your digital card is live at nammainfo.in/${cardSlug}`;
+        } else {
+          summary = `Template: ${templateName}`;
+        }
+      }
+
+      await admin.from("whatsapp_messages").insert({
+        meta_message_id: messageId || null,
+        phone_number: formatted,
+        contact_name: contact,
+        company_name: company,
+        direction: "outbound",
+        message_type: "template",
+        content: summary,
+        status: "sent",
+        is_read: true,
+      });
+    } catch (dbErr) {
+      console.warn("[WhatsApp] Failed to save outbound template message to DB:", dbErr);
+    }
+
     return { success: true, messageId };
   } catch (err) {
     console.error("[WhatsApp] Network exception sending message:", err);

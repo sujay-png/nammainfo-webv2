@@ -14,6 +14,7 @@ import {
   CreditCard,
   ExternalLink,
   Trash2,
+  Truck,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -23,7 +24,7 @@ interface OrderItem {
   card_quantity: number;
   unit_price: number;
   total_amount: number;
-  status: "under_review" | "on_work" | "delivered" | "cancelled";
+  status: "under_review" | "on_work" | "card_designed" | "ready_to_dispatch" | "out_for_delivery" | "delivered" | "cancelled";
   design_url: string | null;
   design_mode: "uploaded" | "team_assist";
   shipping_address: {
@@ -36,6 +37,7 @@ interface OrderItem {
   };
   razorpay_payment_id: string | null;
   created_at: string;
+  updated_at?: string;
 }
 
 interface UserOrdersModalProps {
@@ -53,7 +55,30 @@ export default function UserOrdersModal({
   const [loading, setLoading] = useState(true);
   const [uploadingForId, setUploadingForId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeliveryOrderId, setConfirmDeliveryOrderId] = useState<string | null>(null);
+  const [deliveringId, setDeliveringId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
+
+  const handleConfirmDelivery = async (orderId: string) => {
+    setDeliveringId(orderId);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/user/orders/deliver", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "Failed to confirm delivery");
+      setMessage({ text: "Card confirmed as delivered! Enjoy sharing your profile.", type: "success" });
+      setConfirmDeliveryOrderId(null);
+      await fetchOrders();
+    } catch (err: any) {
+      setMessage({ text: err.message || "Failed to confirm delivery", type: "error" });
+    } finally {
+      setDeliveringId(null);
+    }
+  };
 
   const handleDeleteOrder = async (orderId: string) => {
     if (!confirm("Are you sure you want to cancel and remove this order?")) return;
@@ -232,19 +257,31 @@ export default function UserOrdersModal({
                     {/* Status Badge */}
                     <div>
                       {order.status === "under_review" && (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/25 font-mono text-[10px] font-semibold uppercase tracking-wider">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/25 font-mono text-[10px] font-semibold uppercase tracking-wider">
                           <Clock size={12} />
                           <span>Under Review</span>
                         </span>
                       )}
-                      {order.status === "on_work" && (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/25 font-mono text-[10px] font-semibold uppercase tracking-wider">
+                      {(order.status === "card_designed" || order.status === "on_work") && (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/25 font-mono text-[10px] font-semibold uppercase tracking-wider">
                           <CreditCard size={12} />
-                          <span>In Production</span>
+                          <span>{order.status === "card_designed" ? "Card Designed" : "In Production"}</span>
+                        </span>
+                      )}
+                      {order.status === "ready_to_dispatch" && (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25 font-mono text-[10px] font-semibold uppercase tracking-wider">
+                          <Truck size={12} />
+                          <span>Ready to Dispatch</span>
+                        </span>
+                      )}
+                      {order.status === "out_for_delivery" && (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-500/25 font-mono text-[10px] font-semibold uppercase tracking-wider">
+                          <Truck size={12} />
+                          <span>Out for Delivery</span>
                         </span>
                       )}
                       {order.status === "delivered" && (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25 font-mono text-[10px] font-semibold uppercase tracking-wider">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25 font-mono text-[10px] font-semibold uppercase tracking-wider">
                           <CheckCircle2 size={12} />
                           <span>Delivered</span>
                         </span>
@@ -252,8 +289,8 @@ export default function UserOrdersModal({
                     </div>
                   </div>
 
-                  {/* Status explanation & re-upload card */}
-                  <div className="rounded-xl bg-[var(--background)] p-3 border border-[var(--border)] text-xs space-y-2">
+                  {/* Status explanation & actions */}
+                  <div className="rounded-[5px] bg-[var(--background)] p-3 border border-[var(--border)] text-xs space-y-2">
                     {order.status === "under_review" && (
                       <div className="space-y-2">
                         <p className="text-[var(--muted-foreground)] leading-relaxed">
@@ -270,7 +307,7 @@ export default function UserOrdersModal({
                               type="button"
                               onClick={() => handleDeleteOrder(order.id)}
                               disabled={deletingId === order.id}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-rose-500/30 text-rose-600 hover:bg-rose-500/10 text-xs font-semibold transition cursor-pointer"
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[5px] border border-rose-500/30 text-rose-600 hover:bg-rose-500/10 text-xs font-semibold transition cursor-pointer"
                               title="Cancel & remove this order"
                             >
                               {deletingId === order.id ? (
@@ -281,7 +318,7 @@ export default function UserOrdersModal({
                               <span>Cancel</span>
                             </button>
 
-                            <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold cursor-pointer hover:opacity-90 active:scale-[0.98] transition-all">
+                            <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold cursor-pointer hover:opacity-90 active:scale-[0.98] transition-all">
                               {uploadingForId === order.id ? (
                                 <Loader2 size={13} className="animate-spin" />
                               ) : (
@@ -305,21 +342,50 @@ export default function UserOrdersModal({
                       </div>
                     )}
 
-                    {order.status === "on_work" && (
+                    {(order.status === "card_designed" || order.status === "on_work") && (
                       <div className="flex items-center justify-between text-sky-700 dark:text-sky-300">
                         <p className="leading-relaxed">
                           Your card is actively being printed and encoded. Design changes are now locked.
                         </p>
-                        <span className="inline-flex items-center gap-1 shrink-0 font-mono text-[10px] font-semibold uppercase tracking-wider bg-sky-500/10 px-2 py-0.5 rounded-md border border-sky-500/20">
+                        <span className="inline-flex items-center gap-1 shrink-0 font-mono text-[10px] font-semibold uppercase tracking-wider bg-sky-500/10 px-2 py-0.5 rounded-[4px] border border-sky-500/20">
                           <Lock size={11} />
                           <span>Locked</span>
                         </span>
                       </div>
                     )}
 
+                    {order.status === "ready_to_dispatch" && (
+                      <div className="flex items-center justify-between text-indigo-700 dark:text-indigo-300">
+                        <p className="leading-relaxed">
+                          Card printed and approved. Packaged and ready for dispatch.
+                        </p>
+                      </div>
+                    )}
+
+                    {order.status === "out_for_delivery" && (
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                        <div>
+                          <p className="text-[var(--foreground)] font-medium">
+                            Card posted and out for delivery.
+                          </p>
+                          <p className="text-[11px] text-[var(--muted-foreground)] mt-0.5">
+                            Delivery within 5–7 working days
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeliveryOrderId(order.id)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold hover:opacity-90 transition cursor-pointer self-start sm:self-auto"
+                        >
+                          <CheckCircle2 size={13} />
+                          <span>Delivered</span>
+                        </button>
+                      </div>
+                    )}
+
                     {order.status === "delivered" && (
                       <p className="text-emerald-700 dark:text-emerald-300 font-medium">
-                        Your custom NFC card has been delivered to your doorstep. Tap it on any smartphone to instantly share your profile!
+                        Your custom NFC card has been delivered{order.updated_at ? ` on ${new Date(order.updated_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}` : ""}. Tap it on any smartphone to instantly share your profile!
                       </p>
                     )}
                   </div>
@@ -339,6 +405,45 @@ export default function UserOrdersModal({
           )}
         </div>
       </div>
+
+      {/* Confirmation Dialog for Delivery */}
+      {confirmDeliveryOrderId && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-sm rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-5 shadow-2xl space-y-4">
+            <div className="space-y-1 text-center">
+              <h4 className="font-headline text-sm font-bold text-[var(--foreground)]">
+                Confirm Card Delivery
+              </h4>
+              <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
+                Did you receive your physical smart card?
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDeliveryOrderId(null)}
+                disabled={Boolean(deliveringId)}
+                className="rounded-[5px] border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleConfirmDelivery(confirmDeliveryOrderId)}
+                disabled={Boolean(deliveringId)}
+                className="inline-flex items-center gap-1.5 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] px-4 py-1.5 text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer"
+              >
+                {deliveringId ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  <CheckCircle2 size={13} />
+                )}
+                <span>Yes, Delivered</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

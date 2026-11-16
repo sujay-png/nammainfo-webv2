@@ -11,6 +11,7 @@ import {
   Search,
   Loader2,
   Check,
+  CheckCircle2,
   QrCode,
   Copy,
   Download,
@@ -27,6 +28,7 @@ import {
   fetchCompanyDetails,
   updateCompanyValidity,
   updateEmployeeValidity,
+  updateCompanyCardProcessStep,
   invalidateCompanyDetailsCache,
 } from "@/admin/entities/company/api/company-api";
 import type {
@@ -45,7 +47,7 @@ interface CompanyDetailModalProps {
   onUpdateCompany?: (updated: Partial<Company> & { id: string }) => void;
   onDeleteRequest?: (company: Company) => void;
   readOnly?: boolean;
-  initialTab?: "overview" | "subscription" | "employees" | "qrcodes";
+  initialTab?: "status" | "overview" | "subscription" | "employees" | "qrcodes";
 }
 
 export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
@@ -61,7 +63,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
   const [details, setDetails] = useState<CompanyWithEmployees | null>(null);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"overview" | "subscription" | "employees" | "qrcodes">("overview");
+  const [activeTab, setActiveTab] = useState<"status" | "overview" | "subscription" | "employees" | "qrcodes">("status");
 
   // Plan and Date Form state for Company
   const [editPlan, setEditPlan] = useState<SubscriptionPlanType>("free");
@@ -78,11 +80,16 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
   // State for updating an individual employee plan
   const [updatingEmpId, setUpdatingEmpId] = useState<string | null>(null);
 
+  // State for toggling lifecycle milestone
+  const [togglingMilestoneKey, setTogglingMilestoneKey] = useState<string | null>(null);
+
   // Instantly initialize form values & details from company props (0ms wait)
   useEffect(() => {
     if (company && isOpen) {
       if (initialTab) {
         setActiveTab(initialTab);
+      } else {
+        setActiveTab("status");
       }
       const activePlan: SubscriptionPlanType = company.subscriptionPlan || "free";
       setEditPlan(activePlan);
@@ -279,20 +286,21 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
     }
   };
 
-  // Individual employee plan toggle (Free Plan vs Pro Plan)
-  const handleEmployeePlanChange = async (employeeId: string, newPlan: "pro" | "free") => {
-    if (newPlan === "pro" && current.subscriptionPlan === "free") {
-      alert("This company is currently on the Free Plan. Please upgrade the company to Pro Plan or Free Trial first in the 'Subscription & Plan' tab before assigning Pro cards to team members.");
+  // Individual employee plan toggle (Free Plan vs Pro Plan vs Free Trial)
+  const handleEmployeePlanChange = async (employeeId: string, newPlan: "pro" | "trial" | "free") => {
+    if (newPlan !== "free" && current.subscriptionPlan === "free") {
+      alert("This company is currently on the Free Plan. Please upgrade the company to Pro Plan or Free Trial first in the 'Subscription & Validity' tab before assigning card plans to team members.");
       return;
     }
 
     setUpdatingEmpId(employeeId);
     try {
-      const isPremium = newPlan === "pro";
+      const isPremium = newPlan !== "free";
       const start = isPremium ? (current.subscriptionStartedAt || new Date().toISOString()) : null;
       const expiry = isPremium ? (current.membershipExpiresAt || `${calculateOneYearLater(new Date().toISOString().split("T")[0])}T23:59:59.000Z`) : null;
 
       await updateEmployeeValidity(employeeId, {
+        plan: newPlan,
         isPremium,
         subscriptionStartedAt: start,
         subscriptionExpiresAt: expiry,
@@ -302,6 +310,7 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
         e.id === employeeId
           ? {
               ...e,
+              plan: newPlan,
               isPremium,
               subscriptionStartedAt: start,
               subscriptionExpiresAt: expiry,
@@ -334,6 +343,115 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
       setUpdatingEmpId(null);
     }
   };
+
+  // Toggle individual lifecycle process milestone step
+  const handleToggleMilestoneStep = async (stepKey: string, completed: boolean) => {
+    if (readOnly) return;
+    setTogglingMilestoneKey(stepKey);
+    const nowIso = new Date().toISOString();
+    const existingProcess = current.cardProcess || {};
+    const updatedProcess = {
+      ...existingProcess,
+      [stepKey]: {
+        completed,
+        updated_at: completed ? nowIso : null,
+      },
+    };
+
+    // Optimistic UI update
+    setDetails((prev) => (prev ? { ...prev, cardProcess: updatedProcess } : null));
+
+    try {
+      const res = await updateCompanyCardProcessStep(current.id, stepKey, completed, completed ? nowIso : undefined);
+      const finalProcess = res.cardProcess || updatedProcess;
+      setDetails((prev) => (prev ? { ...prev, cardProcess: finalProcess } : null));
+
+      if (onUpdateCompany) {
+        onUpdateCompany({
+          id: current.id,
+          cardProcess: finalProcess,
+        });
+      }
+
+      onRefresh?.({ silent: true });
+    } catch (err: any) {
+      alert(`Failed to update milestone: ${err.message}`);
+      setDetails((prev) => (prev ? { ...prev, cardProcess: existingProcess } : null));
+    } finally {
+      setTogglingMilestoneKey(null);
+    }
+  };
+
+  const formatStepTimestamp = (updatedAt?: string | null) => {
+    if (!updatedAt) return "";
+    try {
+      const d = new Date(updatedAt);
+      if (isNaN(d.getTime())) return "";
+      return `Updated on ${d.toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })}, ${d.toLocaleTimeString("en-IN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      })}`;
+    } catch {
+      return "";
+    }
+  };
+
+  const LIFECYCLE_STEPS = [
+    {
+      key: "greetings_sent",
+      title: "Greetings message sent",
+      description: "Welcome WhatsApp greeting sent upon Free Trial onboarding",
+      isAuto: current.subscriptionPlan === "trial",
+      fallbackDate: current.trialApprovedAt || current.subscriptionStartedAt || current.createdAt,
+    },
+    {
+      key: "customer_responded_designing",
+      title: "Customer responded and card being designed",
+      description: "Customer requirements gathered and card design is in progress",
+    },
+    {
+      key: "card_printed_approved",
+      title: "Card printed customer approved ready for dispatch",
+      description: "Physical card printed and customer design approved",
+    },
+    {
+      key: "card_posted",
+      title: "Card posted",
+      description: "Dispatched via courier (delivery within 5–7 working days)",
+    },
+    {
+      key: "card_delivered",
+      title: "Card delivered",
+      description: "Physical card delivered to customer (admin marked or customer confirmed)",
+    },
+    {
+      key: "followup_1_done",
+      title: "After 30 days 1st follow-up done",
+      description: "Day 30 milestone check-in and usage feedback",
+    },
+    {
+      key: "followup_2_done",
+      title: "After 60 days second follow-up done",
+      description: "Day 60 milestone check-in and review",
+    },
+    {
+      key: "followup_3_done",
+      title: "After 90 days third follow-up done",
+      description: "Day 90 milestone check-in prior to expiration",
+    },
+    {
+      key: "pro_active",
+      title: "Pro active",
+      description: "Customer upgraded to commercial Pro plan",
+      isAuto: current.subscriptionPlan === "pro",
+      fallbackDate: current.subscriptionStartedAt || current.createdAt,
+    },
+  ];
 
   return (
     <>
@@ -399,6 +517,16 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
           {/* Tab Navigation */}
           <div className="flex border-b border-[var(--border)] overflow-x-auto no-scrollbar gap-1">
             <button
+              onClick={() => setActiveTab("status")}
+              className={`border-b-2 px-3.5 py-2 text-xs font-semibold uppercase tracking-wider transition-all whitespace-nowrap ${
+                activeTab === "status"
+                  ? "border-[var(--foreground)] text-[var(--foreground)]"
+                  : "border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+              }`}
+            >
+              Status
+            </button>
+            <button
               onClick={() => setActiveTab("overview")}
               className={`border-b-2 px-3.5 py-2 text-xs font-semibold uppercase tracking-wider transition-all whitespace-nowrap ${
                 activeTab === "overview"
@@ -442,6 +570,91 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
               <span>QR Codes & URLs ({1 + teamCount})</span>
             </button>
           </div>
+
+          {/* Tab 0: Lifecycle Status Stepper */}
+          {activeTab === "status" && (
+            <div className="space-y-4">
+              <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4 space-y-4">
+                <div>
+                  <h4 className="font-headline text-xs font-bold uppercase tracking-wider text-[var(--foreground)]">
+                    Lifecycle & Card Production Status
+                  </h4>
+                  <p className="text-[11px] text-[var(--muted-foreground)] mt-0.5">
+                    Track and update customer onboarding milestones, physical card production, doorstep delivery, and scheduled follow-ups.
+                  </p>
+                </div>
+
+                {/* Vertical Checklist Stepper */}
+                <div className="relative pl-6 space-y-5 before:absolute before:left-[11px] before:top-3 before:bottom-3 before:w-[2px] before:bg-[var(--border)]">
+                  {LIFECYCLE_STEPS.map((step) => {
+                    const stepData = current.cardProcess?.[step.key];
+                    const isCompleted = Boolean(stepData?.completed || (step.isAuto && stepData?.completed !== false));
+                    const timestamp = stepData?.updated_at || (step.isAuto ? step.fallbackDate : null);
+                    const formattedDate = formatStepTimestamp(timestamp);
+                    const isToggling = togglingMilestoneKey === step.key;
+
+                    return (
+                      <div key={step.key} className="relative flex items-start gap-3.5 group">
+                        {/* Checkbox / Circle Node */}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleMilestoneStep(step.key, !isCompleted)}
+                          disabled={readOnly || isToggling}
+                          className={`absolute -left-[24px] top-0.5 flex h-6 w-6 items-center justify-center rounded-full border transition-all cursor-pointer ${
+                            isCompleted
+                              ? "border-[var(--foreground)] bg-[var(--foreground)] text-[var(--background)] shadow-xs"
+                              : "border-[var(--border)] bg-[var(--background)] hover:border-[var(--foreground)]"
+                          }`}
+                          title={isCompleted ? "Click to mark incomplete" : "Click to mark completed"}
+                        >
+                          {isToggling ? (
+                            <Loader2 size={12} className="animate-spin text-[var(--foreground)]" />
+                          ) : isCompleted ? (
+                            <Check size={13} strokeWidth={2.6} />
+                          ) : (
+                            <div className="h-1.5 w-1.5 rounded-full bg-[var(--muted-foreground)]/40 group-hover:bg-[var(--foreground)]" />
+                          )}
+                        </button>
+
+                        {/* Text and Completion Date */}
+                        <div
+                          className="min-w-0 flex-1 cursor-pointer select-none"
+                          onClick={() => !readOnly && !isToggling && handleToggleMilestoneStep(step.key, !isCompleted)}
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={`text-xs font-semibold tracking-tight transition-colors ${
+                                isCompleted
+                                  ? "text-[var(--foreground)]"
+                                  : "text-[var(--muted-foreground)] group-hover:text-[var(--foreground)]"
+                              }`}
+                            >
+                              {step.title}
+                            </span>
+                            {isCompleted && (
+                              <span className="rounded-[4px] px-1.5 py-0.2 text-[9px] font-mono font-medium border border-[var(--border)] bg-[var(--accent)] text-[var(--foreground)]">
+                                Done
+                              </span>
+                            )}
+                          </div>
+
+                          <p className="text-[11px] text-[var(--muted-foreground)] mt-0.5 leading-relaxed">
+                            {step.description}
+                          </p>
+
+                          {isCompleted && formattedDate && (
+                            <p className="font-mono text-[10px] text-[var(--muted-foreground)] mt-1 font-medium">
+                              {formattedDate}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Tab 1: Overview & Metadata */}
           {activeTab === "overview" && (
@@ -756,21 +969,33 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
                           <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-[var(--border)] shrink-0">
                             {readOnly ? (
                               <span className="px-2 py-0.5 rounded-[4px] border border-[var(--border)] bg-[var(--accent)] font-mono text-[10px] font-semibold text-[var(--foreground)]">
-                                {emp.isPremium && current.subscriptionPlan !== "free" ? "Pro Card" : "Free Plan"}
+                                {emp.plan === "trial"
+                                  ? "Free Trial"
+                                  : emp.isPremium && current.subscriptionPlan !== "free"
+                                  ? "Pro Card"
+                                  : "Free Plan"}
                               </span>
                             ) : (
                               <div className="flex items-center gap-2">
                                 <select
-                                  value={emp.isPremium && current.subscriptionPlan !== "free" ? "pro" : "free"}
-                                  onChange={(e) => handleEmployeePlanChange(emp.id, e.target.value as "pro" | "free")}
+                                  value={
+                                    emp.plan ||
+                                    (emp.isPremium
+                                      ? (current.subscriptionPlan === "trial" ? "trial" : "pro")
+                                      : "free")
+                                  }
+                                  onChange={(e) =>
+                                    handleEmployeePlanChange(emp.id, e.target.value as "pro" | "trial" | "free")
+                                  }
                                   disabled={updatingEmpId === emp.id}
                                   className={`rounded-[5px] border px-2.5 py-1 text-xs font-semibold outline-none cursor-pointer transition-all ${
-                                    emp.isPremium && current.subscriptionPlan !== "free"
+                                    (emp.plan || (emp.isPremium ? (current.subscriptionPlan === "trial" ? "trial" : "pro") : "free")) !== "free"
                                       ? "border-[var(--border)] bg-[var(--accent)] text-[var(--foreground)] font-semibold"
                                       : "border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] focus:border-[var(--foreground)]"
                                   }`}
                                 >
                                   <option value="pro" className="bg-[#18181b] text-gray-100 font-medium">Pro Plan (Team Card)</option>
+                                  <option value="trial" className="bg-[#18181b] text-gray-100 font-medium">Free Trial (100-Day)</option>
                                   <option value="free" className="bg-[#18181b] text-gray-300 font-medium">Free Plan (No Card)</option>
                                 </select>
                                 {updatingEmpId === emp.id && (

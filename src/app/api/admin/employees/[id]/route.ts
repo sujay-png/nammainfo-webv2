@@ -4,6 +4,7 @@ import { requireAdminAuth } from "@/admin/shared/lib/admin-auth";
 
 const updateEmployeeSchema = z.object({
   isPremium: z.boolean().optional(),
+  plan: z.enum(["free", "pro", "trial"]).optional(),
   subscriptionStartedAt: z.string().nullable().optional(),
   subscriptionExpiresAt: z.string().nullable().optional(),
   status: z.enum(["active", "suspended", "unassigned"]).optional(),
@@ -31,11 +32,28 @@ export async function POST(
     }
 
     const updates: Record<string, any> = {};
-    if (parsed.data.isPremium !== undefined) {
-      updates.is_premium = parsed.data.isPremium;
-      if (!parsed.data.isPremium) {
+    if (parsed.data.plan !== undefined) {
+      updates.plan = parsed.data.plan;
+      if (parsed.data.plan === "free") {
+        updates.is_premium = false;
+        updates.status = "unassigned";
         updates.subscription_started_at = null;
         updates.subscription_expires_at = null;
+      } else {
+        updates.is_premium = true;
+        updates.status = "active";
+      }
+    }
+    if (parsed.data.isPremium !== undefined && parsed.data.plan === undefined) {
+      updates.is_premium = parsed.data.isPremium;
+      if (!parsed.data.isPremium) {
+        updates.plan = "free";
+        updates.status = "unassigned";
+        updates.subscription_started_at = null;
+        updates.subscription_expires_at = null;
+      } else {
+        updates.plan = "pro";
+        updates.status = "active";
       }
     }
     if (parsed.data.subscriptionStartedAt !== undefined) {
@@ -50,10 +68,15 @@ export async function POST(
     }
 
     const supabase = auth.adminSupabase;
-    const { error: updateError } = await supabase
+    let { error: updateError } = await supabase
       .from("employees")
       .update(updates)
       .eq("id", id);
+
+    if (updateError?.message?.includes("plan")) {
+      delete updates.plan;
+      ({ error: updateError } = await supabase.from("employees").update(updates).eq("id", id));
+    }
 
     if (updateError) {
       console.error("[Admin API] Failed to update employee:", updateError);

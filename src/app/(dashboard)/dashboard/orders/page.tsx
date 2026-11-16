@@ -15,7 +15,6 @@ import {
   Upload,
   RefreshCw,
   Truck,
-  Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -27,7 +26,7 @@ interface OrderItem {
   card_quantity: number;
   unit_price: number;
   total_amount: number;
-  status: "under_review" | "on_work" | "delivered" | "cancelled";
+  status: "under_review" | "on_work" | "card_designed" | "ready_to_dispatch" | "out_for_delivery" | "delivered" | "cancelled";
   design_url: string | null;
   design_mode: "uploaded" | "team_assist";
   shipping_address: {
@@ -40,6 +39,7 @@ interface OrderItem {
   };
   razorpay_payment_id: string | null;
   created_at: string;
+  updated_at?: string;
 }
 
 export default function CardOrdersPage() {
@@ -49,7 +49,30 @@ export default function CardOrdersPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [uploadingForId, setUploadingForId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeliveryOrderId, setConfirmDeliveryOrderId] = useState<string | null>(null);
+  const [deliveringId, setDeliveringId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
+
+  const handleConfirmDelivery = async (orderId: string) => {
+    setDeliveringId(orderId);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/user/orders/deliver", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "Failed to confirm delivery");
+      setMessage({ text: "Card confirmed as delivered! Enjoy sharing your profile.", type: "success" });
+      setConfirmDeliveryOrderId(null);
+      await fetchOrders();
+    } catch (err: any) {
+      setMessage({ text: err.message || "Failed to confirm delivery", type: "error" });
+    } finally {
+      setDeliveringId(null);
+    }
+  };
 
   const fetchOrders = async (isManualRefresh = false) => {
     if (isManualRefresh) setRefreshing(true);
@@ -241,7 +264,7 @@ export default function CardOrdersPage() {
               href="/dashboard/home"
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold shadow-sm hover:opacity-90 active:scale-[0.98] transition-all"
             >
-              <Sparkles size={14} />
+              <CreditCard size={14} />
               <span>Go to Dashboard</span>
             </Link>
           </div>
@@ -282,66 +305,119 @@ export default function CardOrdersPage() {
                   {/* Status Badge */}
                   <div>
                     {order.status === "under_review" && (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/25 font-mono text-[10px] font-semibold uppercase tracking-wider">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/25 font-mono text-[10px] font-semibold uppercase tracking-wider">
                         <Clock size={12} />
                         <span>Under Review</span>
                       </span>
                     )}
-                    {order.status === "on_work" && (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/25 font-mono text-[10px] font-semibold uppercase tracking-wider">
-                        <Loader2 size={12} className="animate-spin" />
-                        <span>In Production</span>
+                    {(order.status === "card_designed" || order.status === "on_work") && (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/25 font-mono text-[10px] font-semibold uppercase tracking-wider">
+                        <CreditCard size={12} />
+                        <span>{order.status === "card_designed" ? "Card Designed" : "In Production"}</span>
+                      </span>
+                    )}
+                    {order.status === "ready_to_dispatch" && (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25 font-mono text-[10px] font-semibold uppercase tracking-wider">
+                        <Truck size={12} />
+                        <span>Ready to Dispatch</span>
+                      </span>
+                    )}
+                    {order.status === "out_for_delivery" && (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-500/25 font-mono text-[10px] font-semibold uppercase tracking-wider">
+                        <Truck size={12} />
+                        <span>Out for Delivery</span>
                       </span>
                     )}
                     {order.status === "delivered" && (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25 font-mono text-[10px] font-semibold uppercase tracking-wider">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25 font-mono text-[10px] font-semibold uppercase tracking-wider">
                         <CheckCircle2 size={12} />
                         <span>Delivered</span>
                       </span>
                     )}
                     {order.status === "cancelled" && (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/25 font-mono text-[10px] font-semibold uppercase tracking-wider">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/25 font-mono text-[10px] font-semibold uppercase tracking-wider">
                         <span>Cancelled</span>
                       </span>
                     )}
                   </div>
                 </div>
 
-                {/* 3-Step Fulfillment Progress */}
+                {/* Out for delivery banner with Delivered action button */}
+                {order.status === "out_for_delivery" && (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-[5px] bg-blue-500/10 border border-blue-500/20 text-xs">
+                    <div className="space-y-0.5">
+                      <p className="font-semibold text-[var(--foreground)]">
+                        Your custom NFC card has been dispatched!
+                      </p>
+                      <p className="text-[11px] text-[var(--muted-foreground)]">
+                        Delivery within 5–7 working days to your destination address.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDeliveryOrderId(order.id)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold hover:opacity-90 transition cursor-pointer self-start sm:self-auto shadow-xs"
+                    >
+                      <CheckCircle2 size={13} />
+                      <span>Delivered</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* 4-Step Fulfillment Progress */}
                 {order.status !== "cancelled" && (
                   <div className="space-y-2 pt-1">
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-4 gap-2">
                       <div
-                        className={`p-2 rounded-xl border text-center transition-all ${
+                        className={`p-2 rounded-[5px] border text-center transition-all ${
                           order.status === "under_review" ||
+                          order.status === "card_designed" ||
                           order.status === "on_work" ||
+                          order.status === "ready_to_dispatch" ||
+                          order.status === "out_for_delivery" ||
                           order.status === "delivered"
                             ? "bg-[var(--accent)] border-[var(--primary)] text-[var(--foreground)]"
                             : "border-[var(--border)] text-[var(--muted-foreground)] opacity-50"
                         }`}
                       >
                         <span className="block font-mono text-[9px] uppercase tracking-wider">Step 1</span>
-                        <span className="text-[11px] font-semibold block mt-0.5">Order Placed</span>
+                        <span className="text-[11px] font-semibold block mt-0.5">Ordered</span>
                       </div>
                       <div
-                        className={`p-2 rounded-xl border text-center transition-all ${
-                          order.status === "on_work" || order.status === "delivered"
+                        className={`p-2 rounded-[5px] border text-center transition-all ${
+                          order.status === "card_designed" ||
+                          order.status === "on_work" ||
+                          order.status === "ready_to_dispatch" ||
+                          order.status === "out_for_delivery" ||
+                          order.status === "delivered"
                             ? "bg-[var(--accent)] border-[var(--primary)] text-[var(--foreground)]"
                             : "border-[var(--border)] text-[var(--muted-foreground)] opacity-50"
                         }`}
                       >
                         <span className="block font-mono text-[9px] uppercase tracking-wider">Step 2</span>
-                        <span className="text-[11px] font-semibold block mt-0.5">NFC Encoding</span>
+                        <span className="text-[11px] font-semibold block mt-0.5">Designed</span>
                       </div>
                       <div
-                        className={`p-2 rounded-xl border text-center transition-all ${
+                        className={`p-2 rounded-[5px] border text-center transition-all ${
+                          order.status === "ready_to_dispatch" ||
+                          order.status === "out_for_delivery" ||
+                          order.status === "delivered"
+                            ? "bg-[var(--accent)] border-[var(--primary)] text-[var(--foreground)]"
+                            : "border-[var(--border)] text-[var(--muted-foreground)] opacity-50"
+                        }`}
+                      >
+                        <span className="block font-mono text-[9px] uppercase tracking-wider">Step 3</span>
+                        <span className="text-[11px] font-semibold block mt-0.5">Dispatched</span>
+                      </div>
+                      <div
+                        className={`p-2 rounded-[5px] border text-center transition-all ${
                           order.status === "delivered"
                             ? "bg-emerald-500/10 border-emerald-500 text-emerald-600"
                             : "border-[var(--border)] text-[var(--muted-foreground)] opacity-50"
                         }`}
                       >
-                        <span className="block font-mono text-[9px] uppercase tracking-wider">Step 3</span>
-                        <span className="text-[11px] font-semibold block mt-0.5">Doorstep Delivery</span>
+                        <span className="block font-mono text-[9px] uppercase tracking-wider">Step 4</span>
+                        <span className="text-[11px] font-semibold block mt-0.5">Delivered</span>
                       </div>
                     </div>
                   </div>
@@ -483,6 +559,45 @@ export default function CardOrdersPage() {
           })
         )}
       </div>
+
+      {/* Confirmation Dialog for Delivery */}
+      {confirmDeliveryOrderId && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-sm rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-5 shadow-2xl space-y-4">
+            <div className="space-y-1 text-center">
+              <h4 className="font-headline text-sm font-bold text-[var(--foreground)]">
+                Confirm Card Delivery
+              </h4>
+              <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
+                Did you receive your physical smart card?
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDeliveryOrderId(null)}
+                disabled={Boolean(deliveringId)}
+                className="rounded-[5px] border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleConfirmDelivery(confirmDeliveryOrderId)}
+                disabled={Boolean(deliveringId)}
+                className="inline-flex items-center gap-1.5 rounded-[5px] bg-[var(--primary)] text-[var(--primary-foreground)] px-4 py-1.5 text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer"
+              >
+                {deliveringId ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  <CheckCircle2 size={13} />
+                )}
+                <span>Yes, Delivered</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

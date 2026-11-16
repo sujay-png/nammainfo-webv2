@@ -38,6 +38,7 @@ export interface Company {
   trialFollowUpNotes?: string | null;
   profileCompletionPercentage?: number;
   role?: "user" | "admin" | "designer" | null;
+  cardProcess?: Record<string, { completed?: boolean; updated_at?: string | null }>;
   employees?: AdminEmployee[];
 }
 

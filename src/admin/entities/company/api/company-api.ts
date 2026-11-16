@@ -140,6 +140,7 @@ export async function updateEmployeeValidity(
   employeeId: string,
   updates: {
     isPremium?: boolean;
+    plan?: "free" | "pro" | "trial";
     subscriptionStartedAt?: string | null;
     subscriptionExpiresAt?: string | null;
     status?: string;
@@ -157,6 +158,28 @@ export async function updateEmployeeValidity(
   }
 
   invalidateCompanyDetailsCache();
+  return res.json();
+}
+
+export async function updateCompanyCardProcessStep(
+  companyId: string,
+  stepKey: string,
+  completed: boolean,
+  date?: string
+): Promise<{ success: boolean; cardProcess: any }> {
+  const res = await fetch(`/api/admin/companies/${companyId}/card-process`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ stepKey, completed, date }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || "Failed to update milestone");
+  }
+
+  invalidateCompanyDetailsCache(companyId);
+  invalidateCompaniesCache();
   return res.json();
 }
 

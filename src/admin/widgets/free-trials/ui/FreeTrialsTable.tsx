@@ -30,50 +30,62 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 interface FollowUpSchedule {
   daysActive: number;
-  currentCycle: number; // 1 to 5 (current 20-day interval)
-  displayMilestone: number; // which follow-up number to display (1 to 5)
+  attendedMilestone: number; // 0 to 3 (3 follow-up milestones: Day 30, Day 60, Day 90)
+  displayMilestone: number; // which follow-up number to display (1 to 3)
   nextDate: Date;
   daysToNextDate: number;
   isAttended: boolean;
-  status: "unattended" | "attended";
+  statusLabel: string;
+  attendedDateString: string | null;
 }
 
 function calculateFollowUpSchedule(
   startedAtString: string | null | undefined,
-  attendedMilestone: number = 0
+  cardProcess?: Record<string, any>,
+  fallbackMilestone: number = 0
 ): FollowUpSchedule {
   const started = startedAtString ? new Date(startedAtString).getTime() : Date.now();
   const now = Date.now();
   // 1-based day count (Day 1 of 100 on the first day)
   const daysActive = Math.min(100, Math.max(1, Math.floor((now - started) / DAY_MS) + 1));
 
-  // Current 20-day cycle: Days 1-20 -> 1, Days 21-40 -> 2, etc.
-  const currentCycle = Math.min(5, Math.floor((daysActive - 1) / 20) + 1);
+  let attendedMilestone = 0;
+  let attendedDateString: string | null = null;
 
-  // If attendedMilestone is >= currentCycle, the current cycle has already been completed!
-  const isCurrentAttended = attendedMilestone >= currentCycle;
-
-  let displayMilestone: number;
-  if (!isCurrentAttended) {
-    // Current cycle is pending attendance
-    displayMilestone = currentCycle;
-  } else {
-    // Current cycle was attended, target is the next milestone
-    displayMilestone = Math.min(5, currentCycle + 1);
+  if (cardProcess?.followup_3_done?.completed) {
+    attendedMilestone = 3;
+    attendedDateString = cardProcess.followup_3_done.updated_at;
+  } else if (cardProcess?.followup_2_done?.completed) {
+    attendedMilestone = 2;
+    attendedDateString = cardProcess.followup_2_done.updated_at;
+  } else if (cardProcess?.followup_1_done?.completed) {
+    attendedMilestone = 1;
+    attendedDateString = cardProcess.followup_1_done.updated_at;
+  } else if (fallbackMilestone > 0) {
+    attendedMilestone = Math.min(3, fallbackMilestone);
   }
 
-  const targetDay = displayMilestone * 20;
+  const isAttended = attendedMilestone > 0;
+  let statusLabel = "Unattended";
+  if (attendedMilestone === 1) statusLabel = "Attended (Follow-up 1)";
+  else if (attendedMilestone === 2) statusLabel = "Attended (Follow-up 2)";
+  else if (attendedMilestone === 3) statusLabel = "Attended (Follow-up 3)";
+
+  // Total 3 follow-ups: Day 30, Day 60, Day 90
+  const displayMilestone = Math.min(3, attendedMilestone + 1);
+  const targetDay = displayMilestone === 1 ? 30 : displayMilestone === 2 ? 60 : 90;
   const nextDate = new Date(started + targetDay * DAY_MS);
   const daysToNextDate = targetDay - daysActive;
 
   return {
     daysActive,
-    currentCycle,
+    attendedMilestone,
     displayMilestone,
     nextDate,
     daysToNextDate,
-    isAttended: isCurrentAttended,
-    status: isCurrentAttended ? "attended" : "unattended",
+    isAttended,
+    statusLabel,
+    attendedDateString,
   };
 }
 
@@ -86,9 +98,12 @@ export const FreeTrialsTable: React.FC<FreeTrialsTableProps> = ({
   // Filter companies that are actively or previously on Free Trial
   const trialList = companies.filter((c) => c.subscriptionPlan === "trial");
 
+  // Filtering & Sorting State
+  const [categoryFilter, setCategoryFilter] = useState<"unattended" | "attended" | "all">("unattended");
+  const [sortBy, setSortBy] = useState<"next_due" | "a_z" | "z_a">("next_due");
+
   // Local state for follow-up notes & status per company
   const [followUpNotes, setFollowUpNotes] = useState<Record<string, string>>({});
-  const [followUpStatuses, setFollowUpStatuses] = useState<Record<string, "unattended" | "attended">>({});
 
   // Extend Modal State
   const [extendTarget, setExtendTarget] = useState<Company | null>(null);
@@ -104,12 +119,51 @@ export const FreeTrialsTable: React.FC<FreeTrialsTableProps> = ({
   const getNote = (c: Company) =>
     followUpNotes[c.id] !== undefined ? followUpNotes[c.id] : c.trialFollowUpNotes || "";
 
-  const getStatus = (c: Company, schedule: FollowUpSchedule): "unattended" | "attended" => {
-    if (followUpStatuses[c.id] !== undefined) {
-      return followUpStatuses[c.id];
+  const listWithSchedules = React.useMemo(() => {
+    return trialList.map((company) => {
+      const schedule = calculateFollowUpSchedule(
+        company.subscriptionStartedAt,
+        company.cardProcess,
+        company.trialFollowUpMilestone || 0
+      );
+      return { company, schedule };
+    });
+  }, [trialList]);
+
+  const unattendedCount = React.useMemo(
+    () => listWithSchedules.filter((item) => !item.schedule.isAttended).length,
+    [listWithSchedules]
+  );
+  const attendedCount = React.useMemo(
+    () => listWithSchedules.filter((item) => item.schedule.isAttended).length,
+    [listWithSchedules]
+  );
+
+  const displayedList = React.useMemo(() => {
+    let list = [...listWithSchedules];
+
+    if (categoryFilter === "unattended") {
+      list = list.filter((item) => !item.schedule.isAttended);
+    } else if (categoryFilter === "attended") {
+      list = list.filter((item) => item.schedule.isAttended);
     }
-    return schedule.status;
-  };
+
+    list.sort((a, b) => {
+      if (sortBy === "a_z") {
+        return a.company.businessName.localeCompare(b.company.businessName);
+      }
+      if (sortBy === "z_a") {
+        return b.company.businessName.localeCompare(a.company.businessName);
+      }
+      // "next_due": unattended first, then lowest daysToNextDate
+      if (a.schedule.isAttended !== b.schedule.isAttended) {
+        return a.schedule.isAttended ? 1 : -1;
+      }
+      return a.schedule.daysToNextDate - b.schedule.daysToNextDate;
+    });
+
+    return list;
+  }, [listWithSchedules, categoryFilter, sortBy]);
 
   const handleOpenNoteModal = (company: Company) => {
     setNoteModalTarget(company);
@@ -122,14 +176,14 @@ export const FreeTrialsTable: React.FC<FreeTrialsTableProps> = ({
     try {
       const schedule = calculateFollowUpSchedule(
         noteModalTarget.subscriptionStartedAt,
+        noteModalTarget.cardProcess,
         noteModalTarget.trialFollowUpMilestone || 0
       );
-      const status = getStatus(noteModalTarget, schedule);
 
       await updateTrialFollowUp(noteModalTarget.id, {
-        status,
+        status: schedule.isAttended ? "attended" : "unattended",
         notes: noteModalText.trim(),
-        milestone: status === "attended" ? schedule.currentCycle : noteModalTarget.trialFollowUpMilestone || 0,
+        milestone: schedule.attendedMilestone,
       });
 
       setFollowUpNotes((prev) => ({ ...prev, [noteModalTarget.id]: noteModalText.trim() }));
@@ -139,31 +193,6 @@ export const FreeTrialsTable: React.FC<FreeTrialsTableProps> = ({
       alert(`Failed to save note: ${err.message}`);
     } finally {
       setIsSavingNote(false);
-    }
-  };
-
-  const handleStatusChange = async (company: Company, newStatus: "unattended" | "attended") => {
-    const schedule = calculateFollowUpSchedule(
-      company.subscriptionStartedAt,
-      company.trialFollowUpMilestone || 0
-    );
-
-    const updatedMilestone =
-      newStatus === "attended"
-        ? schedule.currentCycle
-        : Math.max(0, schedule.currentCycle - 1);
-
-    setFollowUpStatuses((prev) => ({ ...prev, [company.id]: newStatus }));
-
-    try {
-      await updateTrialFollowUp(company.id, {
-        status: newStatus,
-        notes: getNote(company),
-        milestone: updatedMilestone,
-      });
-      onRefresh();
-    } catch (err: any) {
-      alert(`Failed to update follow-up status: ${err.message}`);
     }
   };
 
@@ -214,6 +243,60 @@ export const FreeTrialsTable: React.FC<FreeTrialsTableProps> = ({
 
   return (
     <div className="space-y-4">
+      {/* Filters & Sorting Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        {/* Category Pills (matching card orders aesthetic) */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+          <button
+            type="button"
+            onClick={() => setCategoryFilter("unattended")}
+            className={`px-3 py-1.5 rounded-[5px] text-xs font-semibold uppercase tracking-wider transition-colors cursor-pointer border ${
+              categoryFilter === "unattended"
+                ? "bg-[var(--foreground)] text-[var(--background)] border-[var(--foreground)]"
+                : "bg-[var(--card)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] border-[var(--border)]"
+            }`}
+          >
+            Unattended ({unattendedCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setCategoryFilter("attended")}
+            className={`px-3 py-1.5 rounded-[5px] text-xs font-semibold uppercase tracking-wider transition-colors cursor-pointer border ${
+              categoryFilter === "attended"
+                ? "bg-[var(--foreground)] text-[var(--background)] border-[var(--foreground)]"
+                : "bg-[var(--card)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] border-[var(--border)]"
+            }`}
+          >
+            Attended ({attendedCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setCategoryFilter("all")}
+            className={`px-3 py-1.5 rounded-[5px] text-xs font-semibold uppercase tracking-wider transition-colors cursor-pointer border ${
+              categoryFilter === "all"
+                ? "bg-[var(--foreground)] text-[var(--background)] border-[var(--foreground)]"
+                : "bg-[var(--card)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] border-[var(--border)]"
+            }`}
+          >
+            All ({trialList.length})
+          </button>
+        </div>
+
+        {/* Sort Dropdown */}
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-[11px] font-mono uppercase tracking-wider text-[var(--muted-foreground)]">Sort:</span>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as "next_due" | "a_z" | "z_a")}
+            className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-xs font-medium text-[var(--foreground)] outline-none cursor-pointer focus:border-[var(--foreground)]"
+          >
+            <option value="next_due">Next Follow-up Due</option>
+            <option value="a_z">A – Z</option>
+            <option value="z_a">Z – A</option>
+          </select>
+        </div>
+      </div>
+
       {/* Main Table */}
       <div className="overflow-hidden rounded-[5px] border border-[var(--border)] bg-[var(--card)] shadow-card">
         <div className="overflow-x-auto">
@@ -229,134 +312,137 @@ export const FreeTrialsTable: React.FC<FreeTrialsTableProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
-              {trialList.map((company) => {
-                const validity = getDaysRemaining(company.membershipExpiresAt, company.subscriptionPlan);
-                const schedule = calculateFollowUpSchedule(
-                  company.subscriptionStartedAt,
-                  company.trialFollowUpMilestone || 0
-                );
-                const currentStatus = getStatus(company, schedule);
-                const extensionDays = company.trialExtensionDays || 0;
-                const noteText = getNote(company);
+              {displayedList.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-5 py-10 text-center text-xs text-[var(--muted-foreground)]">
+                    No {categoryFilter === "all" ? "" : categoryFilter} free trial companies found.
+                  </td>
+                </tr>
+              ) : (
+                displayedList.map(({ company, schedule }) => {
+                  const validity = getDaysRemaining(company.membershipExpiresAt, company.subscriptionPlan);
+                  const extensionDays = company.trialExtensionDays || 0;
+                  const noteText = getNote(company);
 
-                // WhatsApp clean URL
-                const rawPhone = company.phone ? company.phone.replace(/[^0-9]/g, "") : null;
-                const waUrl = rawPhone ? `https://wa.me/${rawPhone.startsWith("91") ? rawPhone : `91${rawPhone}`}` : null;
+                  // WhatsApp clean URL
+                  const rawPhone = company.phone ? company.phone.replace(/[^0-9]/g, "") : null;
+                  const waUrl = rawPhone ? `https://wa.me/${rawPhone.startsWith("91") ? rawPhone : `91${rawPhone}`}` : null;
 
-                return (
-                  <tr
-                    key={company.id}
-                    className="transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800/50"
-                  >
-                    {/* Company Info */}
-                    <td className="px-5 py-3.5">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[5px] bg-[var(--accent)] font-headline text-xs font-bold text-[var(--foreground)] border border-[var(--border)]">
-                          {company.avatarUrl ? (
-                            <img
-                              src={company.avatarUrl}
-                              alt=""
-                              className="h-full w-full rounded-[5px] object-cover"
-                            />
-                          ) : (
-                            company.businessName.charAt(0).toUpperCase()
-                          )}
-                        </div>
-                        <div className="min-w-0">
-                          <button
-                            onClick={() => onSelectCompany(company)}
-                            className="text-left font-semibold text-[var(--foreground)] hover:underline truncate block max-w-[190px]"
-                          >
-                            {company.businessName}
-                          </button>
-                          <div className="flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)]">
-                            <span className="truncate max-w-[120px]">Owner: {company.ownerName}</span>
-                            {company.username && (
-                              <a
-                                href={`/${company.username}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-0.5 text-[var(--foreground)] hover:underline"
-                                title="Open digital card"
-                              >
-                                <ExternalLink size={10} />
-                              </a>
+                  return (
+                    <tr
+                      key={company.id}
+                      className="transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800/50"
+                    >
+                      {/* Company Info */}
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[5px] bg-[var(--accent)] font-headline text-xs font-bold text-[var(--foreground)] border border-[var(--border)]">
+                            {company.avatarUrl ? (
+                              <img
+                                src={company.avatarUrl}
+                                alt=""
+                                className="h-full w-full rounded-[5px] object-cover"
+                              />
+                            ) : (
+                              company.businessName.charAt(0).toUpperCase()
                             )}
                           </div>
+                          <div className="min-w-0">
+                            <button
+                              onClick={() => onSelectCompany(company)}
+                              className="text-left font-semibold text-[var(--foreground)] hover:underline truncate block max-w-[190px]"
+                            >
+                              {company.businessName}
+                            </button>
+                            <div className="flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)]">
+                              <span className="truncate max-w-[120px]">Owner: {company.ownerName}</span>
+                              {company.username && (
+                                <a
+                                  href={`/${company.username}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-0.5 text-[var(--foreground)] hover:underline"
+                                  title="Open digital card"
+                                >
+                                  <ExternalLink size={10} />
+                                </a>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </td>
+                      </td>
 
-                    {/* 100-Day Countdown */}
-                    <td className="px-4 py-3.5 whitespace-nowrap">
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-1.5">
+                      {/* 100-Day Countdown */}
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`font-mono text-xs font-bold ${
+                                validity.isExpired
+                                  ? "text-rose-500"
+                                  : validity.days <= 15
+                                  ? "text-amber-500"
+                                  : "text-[var(--foreground)]"
+                              }`}
+                            >
+                              {validity.isExpired ? "Trial Expired" : `${validity.days} days left`}
+                            </span>
+                            {extensionDays > 0 && (
+                              <span className="inline-flex items-center px-1.5 py-0.2 rounded font-mono text-[9px] font-semibold bg-[var(--accent)] text-[var(--foreground)] border border-[var(--border)]">
+                                +{extensionDays}d
+                              </span>
+                            )}
+                          </div>
+                          <p className="font-mono text-[10px] text-[var(--muted-foreground)]">
+                            Day {schedule.daysActive} of 100 • Exp: {formatDate(company.membershipExpiresAt)}
+                          </p>
+                        </div>
+                      </td>
+
+                      {/* Dynamic Next Follow-up Date (3 follow-ups total) */}
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <Calendar size={12} className="text-[var(--muted-foreground)] shrink-0" />
+                            <span className="font-semibold text-xs text-[var(--foreground)]">
+                              {formatDate(schedule.nextDate.toISOString())}
+                            </span>
+                          </div>
+                          <p className="font-mono text-[10px] text-[var(--muted-foreground)]">
+                            {schedule.daysToNextDate > 0
+                              ? `Due in ${schedule.daysToNextDate} days`
+                              : schedule.daysToNextDate === 0
+                              ? "Due today"
+                              : `Overdue by ${Math.abs(schedule.daysToNextDate)} days`}{" "}
+                            • Follow-up {schedule.displayMilestone} of 3
+                          </p>
+                        </div>
+                      </td>
+
+                      {/* Attendance Status (Auto updated from Company Status Tab with Date below) */}
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <div className="space-y-0.5">
                           <span
-                            className={`font-mono text-xs font-bold ${
-                              validity.isExpired
-                                ? "text-rose-500"
-                                : validity.days <= 15
-                                ? "text-amber-500"
-                                : "text-[var(--foreground)]"
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] font-mono text-[10px] font-semibold ${
+                              schedule.isAttended
+                                ? "border border-[var(--border)] bg-[var(--accent)] text-[var(--foreground)]"
+                                : "border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)]"
                             }`}
                           >
-                            {validity.isExpired ? "Trial Expired" : `${validity.days} days left`}
+                            {schedule.isAttended ? (
+                              <Check size={11} strokeWidth={2.5} />
+                            ) : (
+                              <Clock size={11} />
+                            )}
+                            <span>{schedule.statusLabel}</span>
                           </span>
-                          {extensionDays > 0 && (
-                            <span className="inline-flex items-center px-1.5 py-0.2 rounded font-mono text-[9px] font-semibold bg-[var(--accent)] text-[var(--foreground)] border border-[var(--border)]">
-                              +{extensionDays}d
-                            </span>
+                          {schedule.attendedDateString && (
+                            <p className="font-mono text-[10px] text-[var(--muted-foreground)]">
+                              {formatDate(schedule.attendedDateString)}
+                            </p>
                           )}
                         </div>
-                        <p className="font-mono text-[10px] text-[var(--muted-foreground)]">
-                          Day {schedule.daysActive} of 100 • Exp: {formatDate(company.membershipExpiresAt)}
-                        </p>
-                      </div>
-                    </td>
-
-                    {/* Dynamic Next Follow-up Date */}
-                    <td className="px-4 py-3.5 whitespace-nowrap">
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-1.5">
-                          <Calendar size={12} className="text-[var(--muted-foreground)] shrink-0" />
-                          <span className="font-semibold text-xs text-[var(--foreground)]">
-                            {formatDate(schedule.nextDate.toISOString())}
-                          </span>
-                        </div>
-                        <p className="font-mono text-[10px] text-[var(--muted-foreground)]">
-                          {schedule.daysToNextDate > 0
-                            ? `Due in ${schedule.daysToNextDate} days`
-                            : schedule.daysToNextDate === 0
-                            ? "Due today"
-                            : `Overdue by ${Math.abs(schedule.daysToNextDate)} days`}{" "}
-                          • Follow-up {schedule.displayMilestone} of 5
-                        </p>
-                      </div>
-                    </td>
-
-                    {/* Clean Status Selector (Attended / Unattended) */}
-                    <td className="px-4 py-3.5 whitespace-nowrap">
-                      <div className="relative inline-flex items-center">
-                        <select
-                          value={currentStatus}
-                          onChange={(e) =>
-                            handleStatusChange(
-                              company,
-                              e.target.value as "unattended" | "attended"
-                            )
-                          }
-                          className={`appearance-none rounded-[5px] border pl-2.5 pr-6 py-1 text-xs font-mono font-medium outline-none transition-colors cursor-pointer ${
-                            currentStatus === "attended"
-                              ? "border-[var(--border)] bg-[var(--accent)] text-[var(--foreground)] font-semibold"
-                              : "border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:border-[var(--foreground)]/40"
-                          }`}
-                        >
-                          <option value="unattended">Unattended</option>
-                          <option value="attended">Attended</option>
-                        </select>
-                        <ChevronDown size={11} className="pointer-events-none absolute right-2 text-[var(--muted-foreground)]" />
-                      </div>
-                    </td>
+                      </td>
 
                     {/* Notes & Feedback Button */}
                     <td className="px-4 py-3.5 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
@@ -427,7 +513,7 @@ export const FreeTrialsTable: React.FC<FreeTrialsTableProps> = ({
                     </td>
                   </tr>
                 );
-              })}
+              }))}
             </tbody>
           </table>
         </div>

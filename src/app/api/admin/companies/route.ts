@@ -41,50 +41,28 @@ export async function GET(request: Request) {
     }
 
     const employeeMap = new Map<string, number>();
-    const premiumEmployeeMap = new Map<string, number>();
+    const rawEmployeeListMap = new Map<string, any[]>();
     const employeeExpiryMap = new Map<string, string>();
     const employeeStartMap = new Map<string, string>();
-    const employeeListMap = new Map<string, any[]>();
     if (employees) {
       for (const emp of employees) {
         const count = employeeMap.get(emp.owner_id) || 0;
         employeeMap.set(emp.owner_id, count + 1);
 
-        const list = employeeListMap.get(emp.owner_id) || [];
-        list.push({
-          id: emp.id,
-          ownerId: emp.owner_id,
-          name: emp.name,
-          designation: emp.designation,
-          email: emp.email,
-          phone: emp.phone,
-          slug: emp.slug,
-          avatarUrl: emp.avatar_url,
-          coverUrl: emp.cover_url,
-          isActive: emp.is_active ?? true,
-          isPremium: Boolean(emp.is_premium),
-          subscriptionStartedAt: emp.subscription_started_at || emp.created_at,
-          subscriptionExpiresAt: emp.subscription_expires_at,
-          status: emp.status || (emp.is_active ? (emp.is_premium ? "active" : "unassigned") : "suspended"),
-          createdAt: emp.created_at,
-        });
-        employeeListMap.set(emp.owner_id, list);
+        const list = rawEmployeeListMap.get(emp.owner_id) || [];
+        list.push(emp);
+        rawEmployeeListMap.set(emp.owner_id, list);
 
-        if (emp.is_premium) {
-          const premCount = premiumEmployeeMap.get(emp.owner_id) || 0;
-          premiumEmployeeMap.set(emp.owner_id, premCount + 1);
-
-          if (emp.subscription_expires_at) {
-            const currentExp = employeeExpiryMap.get(emp.owner_id);
-            if (!currentExp || new Date(emp.subscription_expires_at).getTime() > new Date(currentExp).getTime()) {
-              employeeExpiryMap.set(emp.owner_id, emp.subscription_expires_at);
-            }
+        if (emp.subscription_expires_at) {
+          const currentExp = employeeExpiryMap.get(emp.owner_id);
+          if (!currentExp || new Date(emp.subscription_expires_at).getTime() > new Date(currentExp).getTime()) {
+            employeeExpiryMap.set(emp.owner_id, emp.subscription_expires_at);
           }
-          if (emp.subscription_started_at) {
-            const currentStart = employeeStartMap.get(emp.owner_id);
-            if (!currentStart || new Date(emp.subscription_started_at).getTime() < new Date(currentStart).getTime()) {
-              employeeStartMap.set(emp.owner_id, emp.subscription_started_at);
-            }
+        }
+        if (emp.subscription_started_at) {
+          const currentStart = employeeStartMap.get(emp.owner_id);
+          if (!currentStart || new Date(emp.subscription_started_at).getTime() < new Date(currentStart).getTime()) {
+            employeeStartMap.set(emp.owner_id, emp.subscription_started_at);
           }
         }
       }
@@ -146,7 +124,6 @@ export async function GET(request: Request) {
     const companies: Company[] = customerProfiles.map((p: any) => {
       const n = notesMap.get(p.id);
       const assignedCount = employeeMap.get(p.id) || 0;
-      const premEmpCount = premiumEmployeeMap.get(p.id) || 0;
       const latestEmpExpiry = employeeExpiryMap.get(p.id);
       const hasValidEmpExpiry = Boolean(latestEmpExpiry && new Date(latestEmpExpiry).getTime() > now);
 
@@ -172,8 +149,50 @@ export async function GET(request: Request) {
       // 1. Primary Card: Pro and Free Trial plans both grant 1 primary card
       const primaryCardCount = plan === "pro" || plan === "trial" ? 1 : 0;
 
-      // 2. Team Cards: Only active premium team members count as team cards
-      const employeeCardsIssued = plan === "pro" || plan === "trial" ? premEmpCount : 0;
+      // Map raw employees with dynamic plan inheritance from company
+      const rawEmployees = rawEmployeeListMap.get(p.id) || [];
+      const mappedEmployees: any[] = rawEmployees.map((emp: any) => {
+        let empPlan: "free" | "pro" | "trial";
+        if (emp.plan) {
+          empPlan = emp.plan;
+        } else if (emp.status === "unassigned") {
+          empPlan = "free";
+        } else if (plan === "pro") {
+          empPlan = "pro";
+        } else if (plan === "trial") {
+          empPlan = "trial";
+        } else {
+          empPlan = "free";
+        }
+
+        const isPremium = empPlan !== "free";
+        const isActive = emp.is_active ?? true;
+
+        return {
+          id: emp.id,
+          ownerId: emp.owner_id,
+          name: emp.name,
+          designation: emp.designation,
+          email: emp.email,
+          phone: emp.phone,
+          slug: emp.slug,
+          avatarUrl: emp.avatar_url,
+          coverUrl: emp.cover_url,
+          isActive,
+          isPremium,
+          plan: empPlan,
+          subscriptionStartedAt: emp.subscription_started_at || p.subscription_started_at || emp.created_at,
+          subscriptionExpiresAt: emp.subscription_expires_at || p.membership_expires_at,
+          status: emp.status || (isActive ? (isPremium ? "active" : "unassigned") : "suspended"),
+          createdAt: emp.created_at,
+        };
+      });
+
+      // 2. Team Cards: All active premium/trial team members count as team cards
+      const activeTeamMembers = (plan === "pro" || plan === "trial")
+        ? mappedEmployees.filter((e) => e.isPremium && e.isActive)
+        : [];
+      const employeeCardsIssued = activeTeamMembers.length;
 
       // 3. Purchased ID Count
       const purchasedCount = (p.purchased_id_count && p.purchased_id_count > employeeCardsIssued) 
@@ -288,7 +307,8 @@ export async function GET(request: Request) {
           n?.trialFollowUpStatus ?? ((p.trial_follow_up_status as "unattended" | "attended") || "unattended"),
         trialFollowUpNotes: n?.trialFollowUpNotes ?? (p.trial_follow_up_notes || ""),
         profileCompletionPercentage: completion.percentage,
-        employees: employeeListMap.get(p.id) || [],
+        cardProcess: (p.card_process && typeof p.card_process === "object") ? p.card_process : {},
+        employees: mappedEmployees,
       };
     });
 

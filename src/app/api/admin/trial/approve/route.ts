@@ -42,6 +42,15 @@ export async function POST(request: Request) {
     const oneHundredDaysMs = 100 * 24 * 60 * 60 * 1000;
     const expiresAt = new Date(now.getTime() + oneHundredDaysMs).toISOString();
 
+    const existingCardProcess = (profile.card_process && typeof profile.card_process === "object") ? profile.card_process : {};
+    const updatedCardProcess = {
+      ...existingCardProcess,
+      greetings_sent: {
+        completed: true,
+        updated_at: now.toISOString(),
+      },
+    };
+
     const approval: Record<string, unknown> = {
       subscription_plan: "trial",
       is_member: true,
@@ -53,6 +62,7 @@ export async function POST(request: Request) {
       trial_status: "approved",
       trial_approved_at: now.toISOString(),
       trial_extension_days: 0,
+      card_process: updatedCardProcess,
     };
     let { error: updateErr } = await supabase.from("profiles").update(approval).eq("id", companyId);
     if (updateErr?.message?.includes("primary_card_count")) {
@@ -60,11 +70,15 @@ export async function POST(request: Request) {
       delete approval.primary_card_count;
       ({ error: updateErr } = await supabase.from("profiles").update(approval).eq("id", companyId));
     }
+    if (updateErr?.message?.includes("card_process")) {
+      delete approval.card_process;
+      ({ error: updateErr } = await supabase.from("profiles").update(approval).eq("id", companyId));
+    }
     if (!updateErr) {
       await saveAdminNotes(supabase, companyId, {
         milestone: 0,
         status: "unattended",
-        notes: `100-day Free Trial approved on ${now.toLocaleDateString("en-IN")}. Day 20 follow-up scheduled.`,
+        notes: `100-day Free Trial approved on ${now.toLocaleDateString("en-IN")}. Day 30 follow-up scheduled.`,
       });
     }
 
@@ -106,6 +120,8 @@ export async function POST(request: Request) {
         languageCode: "en_IN",
         bodyParameters: [cardSlug, recipientName],
         buttonParameters: [cardSlug],
+        contactName: recipientName,
+        companyName: profile.business_name || profile.company_name || null,
       }).catch((waErr) => {
         console.error("[Admin Trial Approve] WhatsApp notification error:", waErr);
       });

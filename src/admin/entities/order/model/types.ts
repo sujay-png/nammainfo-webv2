@@ -1,4 +1,4 @@
-export type OrderStatus = "under_review" | "on_work" | "delivered";
+export type OrderStatus = "under_review" | "on_work" | "card_designed" | "ready_to_dispatch" | "out_for_delivery" | "delivered" | "cancelled";
 export type OrderType = "pro_initial" | "team_addon" | "renewal";
 export type DesignMode = "uploaded" | "team_assist";
 

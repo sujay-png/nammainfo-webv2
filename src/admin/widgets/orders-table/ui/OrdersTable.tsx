@@ -12,6 +12,7 @@ import {
   CreditCard,
   ChevronRight,
   Eye,
+  Truck,
 } from "lucide-react";
 import type { AdminOrder, OrderStatus } from "@/admin/entities/order/model/types";
 
@@ -64,6 +65,13 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
             <span>Under Review</span>
           </span>
         );
+      case "card_designed":
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] bg-sky-500/10 text-sky-700 dark:text-sky-400 border border-sky-500/20 font-mono text-[10px] font-semibold uppercase tracking-wider">
+            <CreditCard size={11} />
+            <span>Card Designed</span>
+          </span>
+        );
       case "on_work":
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20 font-mono text-[10px] font-semibold uppercase tracking-wider">
@@ -71,11 +79,31 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
             <span>In Production</span>
           </span>
         );
+      case "ready_to_dispatch":
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20 font-mono text-[10px] font-semibold uppercase tracking-wider">
+            <Truck size={11} />
+            <span>Ready to Dispatch</span>
+          </span>
+        );
+      case "out_for_delivery":
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20 font-mono text-[10px] font-semibold uppercase tracking-wider">
+            <Truck size={11} />
+            <span>Out for Delivery</span>
+          </span>
+        );
       case "delivered":
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 font-mono text-[10px] font-semibold uppercase tracking-wider">
             <CheckCircle2 size={11} />
             <span>Delivered</span>
+          </span>
+        );
+      case "cancelled":
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20 font-mono text-[10px] font-semibold uppercase tracking-wider">
+            <span>Cancelled</span>
           </span>
         );
       default:
@@ -247,28 +275,13 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
                   {/* Quick Action Controller */}
                   <td className="px-5 py-3.5 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-2">
-                      {order.status === "under_review" && (
-                        <button
-                          onClick={(e) => onUpdateStatus(order.id, "on_work", e)}
-                          className="rounded-[5px] bg-[var(--foreground)] px-2.5 py-1 text-[11px] font-medium text-[var(--background)] hover:opacity-90 transition-opacity"
-                        >
-                          Start Production
-                        </button>
-                      )}
-                      {order.status === "on_work" && (
-                        <button
-                          onClick={(e) => onUpdateStatus(order.id, "delivered", e)}
-                          className="rounded-[5px] border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/20 transition-colors"
-                        >
-                          Mark Delivered
-                        </button>
-                      )}
                       <button
                         onClick={() => onSelectOrder(order)}
-                        className="rounded-[5px] p-1.5 text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] transition-colors"
+                        className="inline-flex items-center gap-1.5 rounded-[5px] border border-[var(--border)] bg-[var(--card)] px-2.5 py-1 text-[11px] font-medium text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors cursor-pointer"
                         title="View details"
                       >
-                        <ChevronRight size={15} />
+                        <Eye size={12} className="text-[var(--muted-foreground)]" />
+                        <span>View</span>
                       </button>
                     </div>
                   </td>
@@ -367,22 +380,12 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
                   )}
                 </div>
 
-                {order.status === "under_review" && (
-                  <button
-                    onClick={(e) => onUpdateStatus(order.id, "on_work", e)}
-                    className="rounded-[5px] bg-[var(--foreground)] px-3 py-1 text-[11px] font-medium text-[var(--background)]"
-                  >
-                    Start Production
-                  </button>
-                )}
-                {order.status === "on_work" && (
-                  <button
-                    onClick={(e) => onUpdateStatus(order.id, "delivered", e)}
-                    className="rounded-[5px] border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400"
-                  >
-                    Mark Delivered
-                  </button>
-                )}
+                <button
+                  onClick={() => onSelectOrder(order)}
+                  className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] px-3 py-1 text-[11px] font-medium text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors"
+                >
+                  View Details
+                </button>
               </div>
             </div>
           );

@@ -12,6 +12,7 @@ export interface AdminEmployee {
   coverUrl: string | null;
   isActive: boolean;
   isPremium: boolean;
+  plan?: "free" | "pro" | "trial";
   subscriptionStartedAt: string | null;
   subscriptionExpiresAt: string | null;
   status: EmployeeIdStatus;
