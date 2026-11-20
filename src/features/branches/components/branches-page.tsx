@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import EmployeeGate from "@/components/auth/owner-or-employee-gate";
 import UpgradeToProModal from "@/components/UpgradeToProModal";
+import BuyTeamCardsModal from "@/components/BuyTeamCardsModal";
 import { createClient } from "@/supabase/client";
 import { getCurrentUser } from "@/supabase/current-user";
 import { getMembership } from "@/lib/membership";
@@ -44,6 +45,7 @@ function OwnerBranchesPage() {
   const [editing, setEditing] = useState<Branch | "new" | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Branch | null>(null);
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [showBuyCards, setShowBuyCards] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -92,8 +94,17 @@ function OwnerBranchesPage() {
   const membership = getMembership(profile);
   const handle = profile.username;
 
+  // A branch is a secondary card, billed like a team member: it uses one
+  // of the card slots the owner bought (free trial: unlimited during the
+  // trial). Team members of a branch use slots too.
+  const isTrial = profile.subscription_plan === "trial";
+  const usedSlots = employees.length + branches.length;
+  const quota = Number(profile.purchased_id_count || 0);
+  const freeSlots = isTrial ? Infinity : Math.max(0, quota - usedSlots);
+
   function startAdd() {
     if (!membership.isPaid) return setShowUpgrade(true);
+    if (freeSlots <= 0) return setShowBuyCards(true);
     if (branches.length >= MAX_BRANCHES) return setMessage(`You can add up to ${MAX_BRANCHES} branches.`);
     setEditing("new");
   }
@@ -148,7 +159,8 @@ function OwnerBranchesPage() {
           <div>
             <h1 className="font-headline text-xl font-semibold">Branches</h1>
             <p className="font-mono text-[11px] text-[var(--muted-foreground)]">
-              {branches.length} {branches.length === 1 ? "branch" : "branches"} · one profile
+              {branches.length} {branches.length === 1 ? "branch" : "branches"} ·{" "}
+              {isTrial ? "free during your trial" : `${usedSlots} of ${quota} card slots used`}
             </p>
           </div>
         </div>
@@ -196,6 +208,10 @@ function OwnerBranchesPage() {
             Add a branch instead of a new profile. Each branch gets its own link, cover photo, phone, address and
             directions. Your about, gallery, testimonials, clients and bank details are shared from your main profile,
             so you edit them once.
+          </p>
+          <p className="mt-2 text-xs font-medium text-[var(--muted-foreground)]">
+            Each branch is one card, billed like a team member card. Branch team members are cards too. All your cards
+            are priced together: 1–4 cards ₹1,999 each, 5–24 ₹1,499, 25 or more ₹999 (per card, per year).
           </p>
           <ul className="mt-3 space-y-1.5 font-mono text-[11px] text-[var(--muted-foreground)]">
             <li>nammainfo.in/{handle ?? "abc"} · main profile</li>
@@ -348,6 +364,19 @@ function OwnerBranchesPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showBuyCards && (
+        <BuyTeamCardsModal
+          isOpen
+          profile={profile}
+          currentTeamCount={usedSlots}
+          onClose={() => setShowBuyCards(false)}
+          onSuccess={() => {
+            setShowBuyCards(false);
+            load();
+          }}
+        />
       )}
 
       {showUpgrade && <UpgradeToProModal isOpen profile={profile} onClose={() => setShowUpgrade(false)} onSuccess={load} />}

@@ -268,7 +268,7 @@ The browser talks to Supabase directly with the public anon key. So **the databa
 | `profiles` | One row per account: business details, username, plan fields, trial fields, `is_admin` / `role` | Anyone reads (public pages). Owner updates own row, **except protected fields** (trigger). Admins: all |
 | `cards` | A card per profile: `public_slug`, `is_active`, `tap_count` | Anyone reads. Taps only via `record_card_tap()` |
 | `employees` | Team members of a business; `user_id` + `login_enabled` for staff logins; `is_premium`, expiry; `branch_id` (NULL = main office) | Anyone reads (public team pages). Owner manages, **except billing fields and paid-slot limit** (trigger). Staff can only change their own photos |
-| `branches` | A business's other locations: `slug`, `name` and **override** columns (NULL = use the main profile) | Anyone reads active ones; owner reads all of theirs and manages them (paid plans, max 50, via `branches_guard`). Staff read; admins all |
+| `branches` | A business's other locations: `slug`, `name` and **override** columns (NULL = use the main profile) | Anyone reads active ones; owner reads all of theirs and manages them (each uses a card slot, via `branches_guard`). Staff read; admins all |
 | `connections` | Saved cards: `user_id` saved `connected_user_id` | Own rows. Writes via `save_card()` / `unsave_card()` |
 | `contacts` | Visitors who shared their details; card photo paths; category, note; `branch_id` (set automatically) | Owner sees all; staff see their own card's. Writes via `submit_contact()` / `submit_branch_contact()`; owners edit name, phone, email, category, note |
 | `card_upload_tickets` | One-time upload permissions for card photos | Server only (no policies) |
@@ -332,6 +332,7 @@ The same pattern guards `employees` (billing fields; adding a member needs a fre
 | `20261030_designer_role_and_staff.sql` | `role` column, `is_staff()`, staff read policies |
 | `20261030_security_lockdown.sql` | Guard triggers, `profile_admin_notes`, unique payment ids, `primary_card_count` |
 | `20261104_testimonials_clients_phone.sql` | `profiles.testimonials` and `profiles.clients` (jsonb arrays with size checks); `handle_new_user()` copies the sign-up phone into `profiles.phone` |
+| `20261120_branch_card_slots.sql` | Branches use card slots like team members: `secondary_cards_used()` (employees + branches), new `employees_protect_billing()` and `branches_guard()` |
 | `20261112_branches.sql` | `branches` table + RLS + `branches_guard`; `employees.branch_id` + `employees_branch_guard`; unique `(owner_id, slug)` for employees (skipped with a notice if duplicates exist); `contacts.branch_id` + `contacts_set_branch`; `submit_branch_contact()` |
 
 > **Known gap:** profiles are readable column-by-column by anyone, including email, phone, GST and bank details. That's intended for public cards, but the long-term fix is a public view with only display columns.
@@ -715,7 +716,7 @@ A visitor on a branch page is saved with `submit_branch_contact()`. It sets `nam
 
 ### Rules in the database
 
-`branches_guard` (not `SECURITY DEFINER`, so `is_customer_request()` sees the caller): paid plans only (same rule as `getMembership().isPaid`), at most 50 branches, the owner can't be changed, slug and name trimmed, `updated_at` set. Shape checks cap `services` / `products` at 100 items and 64 KB each. Branch photos go to `profile-media/<owner id>/branches/` through `processImage()` (cover ≤ 1600 × 900, ~220 KB; photo 400 × 400, ~60 KB; item photos ≤ 1000 px, ~120 KB).
+`branches_guard` (not `SECURITY DEFINER`, so `is_customer_request()` sees the caller): paid plans only (same rule as `getMembership().isPaid`), one free card slot per branch (since `20261120_branch_card_slots.sql`; trial accounts are not limited), the owner can't be changed, slug and name trimmed, `updated_at` set. Shape checks cap `services` / `products` at 100 items and 64 KB each. Branch photos go to `profile-media/<owner id>/branches/` through `processImage()` (cover ≤ 1600 × 900, ~220 KB; photo 400 × 400, ~60 KB; item photos ≤ 1000 px, ~120 KB).
 
 ### Not built yet
 
@@ -737,9 +738,19 @@ A paid business can give each staff member their own card at `nammainfo.in/<busi
 | Public employee card | `src/app/[slug]/[employee]/page.tsx`, `src/app/[slug]/[employee]/[member]/page.tsx`, `src/features/public-profile/components/employee-profile-view.tsx` | The employee's card, inside the business's branding (and branch details, for a branch member) |
 | Pricing | `src/lib/pricing.ts` | Volume pricing for team cards |
 
-### Slots: paying for team members
+### Slots: paying for team members and branches
 
-The owner buys **slots** (`profiles.purchased_id_count`); each team member uses one. The price per card depends on the total number of cards:
+Cards come in three levels, and every card is billed the same way:
+
+| Level | URL | What |
+| --- | --- | --- |
+| Primary | `nammainfo.in/abc` | The company |
+| Secondary | `nammainfo.in/abc/<x>` | A branch, or a main-office team member |
+| Tertiary | `nammainfo.in/abc/<branch>/<x>` | A team member of a branch |
+
+Only branches have their own team members; a team member can't have members under them, so there is no fourth level.
+
+The owner buys **slots** (`profiles.purchased_id_count`); each branch and each team member (main office or branch) uses one. The total for pricing is primary + branches + all team members. `countBranches()` (`src/features/branches/lib/card-count.ts`) adds branches wherever team members were counted: the Team page (slots, total, renewal), Branches page, Home, Settings, and the server's `create-order` route for `team_addon` and `renewal`. The database counts both with `secondary_cards_used(owner)`. Hidden branches still hold their slot; deleting a branch frees it. The price per card depends on the total number of cards:
 
 ```ts
 export function getCardUnitPrice(totalCards: number): number {
@@ -749,7 +760,7 @@ export function getCardUnitPrice(totalCards: number): number {
 }
 ```
 
-The Team page checks for a free slot before adding someone, and so does the database. The `employees_protect_billing` trigger (security lockdown migration) refuses an insert from a customer when the owner isn't on a paid plan or has used all slots. It also copies the owner's expiry onto the new member, and stops customers from editing billing fields (`is_premium`, dates, `status`) on existing members. The Team page turns that database error into a friendly "No available team card slots" message.
+The Team page checks for a free slot before adding someone, and so does the database. The `employees_protect_billing` trigger (security lockdown migration) refuses an insert from a customer when the owner isn't on a paid plan or has used all slots (team members **plus branches**, since `20261120`; `branches_guard` applies the same check to new branches; trial accounts are not limited). It also copies the owner's expiry onto the new member, and stops customers from editing billing fields (`is_premium`, dates, `status`) on existing members. The Team page turns that database error into a friendly "No available team card slots" message.
 
 ### Employee logins
 

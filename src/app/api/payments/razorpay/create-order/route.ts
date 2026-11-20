@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { getRazorpayClient } from "@/lib/razorpay";
+import { countBranches } from "@/features/branches/lib/card-count";
 import {
   calculateInitialProCost,
   calculatePrimaryCardAddonCost,
@@ -105,7 +106,9 @@ export async function POST(req: Request) {
         .select("id", { count: "exact", head: true })
         .eq("owner_id", user.id);
 
-      const currentTotal = primaryCards + (teamCount || 0);
+      // Branches use card slots too, and count towards the volume price.
+      const branchCount = await countBranches(supabase, user.id);
+      const currentTotal = primaryCards + (teamCount || 0) + branchCount;
       const res = calculateTeamAddonCost(currentTotal, Number(cardQuantity));
       calculation = {
         unitPrice: res.unitPrice,
@@ -119,7 +122,9 @@ export async function POST(req: Request) {
         .eq("owner_id", user.id)
         .neq("status", "cancelled");
 
-      const res = calculateRenewalCost(primaryCards, teamCount || 0);
+      // Every card renews: primary + team members + branches.
+      const branchCount = await countBranches(supabase, user.id);
+      const res = calculateRenewalCost(primaryCards, (teamCount || 0) + branchCount);
       calculation = {
         unitPrice: res.unitPrice,
         totalAmount: res.totalAmount,

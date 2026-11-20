@@ -100,7 +100,7 @@ export default function BuyTeamCardsModal({
         amount,
         currency: "INR",
         name: "Namma Info",
-        description: `Add ${quantity} Team Member Card(s)`,
+        description: `Add ${quantity} Team / Branch Card(s)`,
         order_id: razorpayOrderId,
         prefill: {
           name: profile.owner_name || "",
@@ -175,7 +175,7 @@ export default function BuyTeamCardsModal({
             </div>
             <div>
               <h3 className="font-headline text-lg font-bold text-[var(--foreground)]">
-                Add Team Member Cards
+                Add Team &amp; Branch Cards
               </h3>
               <p className="text-xs text-[var(--muted-foreground)]">
                 Physical NFC & digital ID card quota for employees
@@ -236,7 +236,7 @@ export default function BuyTeamCardsModal({
           <div className="flex items-center justify-between border-b border-[var(--border)] pb-2">
             <span className="text-[var(--muted-foreground)]">Current Organization Cards</span>
             <span className="font-mono font-medium text-[var(--foreground)]">
-              {currentTotal} ({primaryCards} Primary + {currentTeamCount} Team)
+              {currentTotal} ({primaryCards} Primary + {currentTeamCount} Team &amp; Branch)
             </span>
           </div>
 

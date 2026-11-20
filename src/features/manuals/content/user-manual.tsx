@@ -585,6 +585,21 @@ export default function UserManualContent() {
             you have and how many are used. To buy more, tap <strong>Buy More Team Cards</strong>, choose how many and pay. The price per card
             drops as your team grows.
           </p>
+          <p>
+            <strong>Branches use the same slots.</strong> Every branch is one card, and so is every team member of a branch. All your cards are
+            counted together (your main card + branches + all team members) and priced per card, per year:
+          </p>
+          <div className={s.tableWrap}>
+            <table>
+              <thead><tr><th>Total cards</th><th>Price per card, per year</th></tr></thead>
+              <tbody>
+                <tr><td>1 to 4</td><td>₹1,999</td></tr>
+                <tr><td>5 to 24</td><td>₹1,499</td></tr>
+                <tr><td>25 or more</td><td>₹999</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>Example: a company with 3 branches and 6 team members has 1 + 3 + 6 = 10 cards, so each card costs ₹1,499 a year.</p>
           <Screens
             shots={[
               { src: img("team"), title: "Team / Employees", caption: "Slots used, and your team members." },
@@ -682,7 +697,7 @@ export default function UserManualContent() {
             nearest them. Contacts who open a branch page are tagged with that branch.
           </p>
           <Callout kind="info">
-            <p>Branches are part of the paid plan. You can add up to 50.</p>
+            <p>Each branch uses one card slot, just like a team member. If you have no free slot, <strong>Add branch</strong> opens the screen to buy more cards. During the 100-day free trial you can add branches freely.</p>
           </Callout>
         </Sub>
 

@@ -36,7 +36,8 @@ export interface Branch {
 /** What the public pages need to list branches and build links. */
 export type BranchSummary = Pick<Branch, "id" | "slug" | "name" | "city" | "is_active">;
 
-export const MAX_BRANCHES = 50;
+/** Branches are limited by the card slots the owner bought (like team members), not by a fixed number. */
+export const MAX_BRANCHES = 500;
 
 /** Same rule as the database: lowercase words joined by single dashes, 2–40 chars. */
 export const BRANCH_SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -112,6 +113,6 @@ export function branchErrorMessage(message: string): string {
   if (/branches_slug_format/i.test(message)) {
     return "The link can use only small letters, numbers and dashes (2–40 characters).";
   }
-  if (/team member|paid plan|up to 50/i.test(message)) return message;
+  if (/team member|paid plan|card slots/i.test(message)) return message;
   return "Couldn't save. Please check your connection and try again.";
 }
