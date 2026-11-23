@@ -16,11 +16,11 @@ export async function GET(request: Request) {
   try {
     const supabase = auth.adminSupabase;
 
-    // Fetch profiles that have is_admin = true or role in ('admin', 'designer')
+    // Fetch profiles that have is_admin = true or role in ('admin', 'designer', 'campaign_manager', 'partner') or is_campaign_manager = true or is_partner = true
     const { data: staffList, error } = await supabase
       .from("profiles")
-      .select("id, email, owner_name, business_name, role, is_admin, created_at, status")
-      .or("is_admin.eq.true,role.in.(admin,designer)")
+      .select("id, email, owner_name, business_name, role, is_admin, is_campaign_manager, is_partner, created_at, status")
+      .or("is_admin.eq.true,role.in.(admin,designer,campaign_manager,partner),is_campaign_manager.eq.true,is_partner.eq.true")
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -32,8 +32,12 @@ export async function GET(request: Request) {
       id: s.id,
       email: s.email,
       name: s.owner_name || s.business_name || "Staff Member",
-      role: s.role || (s.is_admin ? "admin" : "designer"),
+      role: (s.is_partner || s.is_campaign_manager || s.role === "partner" || s.role === "campaign_manager")
+        ? "partner"
+        : s.role || (s.is_admin ? "admin" : "designer"),
       isAdmin: Boolean(s.is_admin || s.role === "admin"),
+      isCampaignManager: Boolean(s.is_campaign_manager || s.role === "campaign_manager"),
+      isPartner: Boolean(s.is_partner || s.is_campaign_manager || s.role === "partner" || s.role === "campaign_manager"),
       createdAt: s.created_at,
       status: s.status || "active",
     }));
@@ -330,6 +334,44 @@ export async function DELETE(request: Request) {
         { error: "You cannot delete your own logged-in administrator account." },
         { status: 400 }
       );
+    }
+
+    // Check if target is a partner / campaign manager (customer account with staff role)
+    const { data: targetProfile } = await supabase
+      .from("profiles")
+      .select("id, role, is_campaign_manager, is_partner")
+      .eq("id", targetUserId)
+      .maybeSingle();
+
+    if (
+      targetProfile &&
+      (targetProfile.is_partner ||
+        targetProfile.is_campaign_manager ||
+        targetProfile.role === "partner" ||
+        targetProfile.role === "campaign_manager")
+    ) {
+      // Demote back to regular user, keep their company profile, card, and subscription intact
+      await supabase
+        .from("profiles")
+        .update({
+          is_partner: false,
+          is_campaign_manager: false,
+          role: "user",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", targetUserId);
+
+      try {
+        await supabase.auth.admin.updateUserById(targetUserId, {
+          app_metadata: { is_partner: false, is_campaign_manager: false, role: "user" },
+          user_metadata: { is_partner: false, is_campaign_manager: false, role: "user" },
+        });
+      } catch {}
+
+      return NextResponse.json({
+        success: true,
+        message: "Partner role removed. Customer account preserved.",
+      });
     }
 
     // 1. Delete profile

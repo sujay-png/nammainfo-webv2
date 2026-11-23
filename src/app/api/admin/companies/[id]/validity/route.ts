@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdminAuth } from "@/admin/shared/lib/admin-auth";
-import { sendWhatsAppTemplate } from "@/lib/whatsapp";
 
 const validityUpdateSchema = z.object({
   subscriptionStartedAt: z.string().nullable().optional(),
@@ -82,15 +81,12 @@ export async function POST(
       .eq("id", id)
       .single();
 
-    // Auto-update card_process milestone when switching to trial or pro
-    if (parsed.data.subscriptionPlan === "trial" || parsed.data.subscriptionPlan === "pro") {
+    // Auto-update card_process milestone when switching to pro
+    if (parsed.data.subscriptionPlan === "pro") {
       const nowIso = new Date().toISOString();
       const existingProcess = (currentProfile?.card_process && typeof currentProfile.card_process === "object") ? currentProfile.card_process : {};
       const updatedProcess = { ...existingProcess };
-      if (parsed.data.subscriptionPlan === "trial" && !updatedProcess.greetings_sent?.completed) {
-        updatedProcess.greetings_sent = { completed: true, updated_at: nowIso };
-      }
-      if (parsed.data.subscriptionPlan === "pro" && !updatedProcess.pro_active?.completed) {
+      if (!updatedProcess.pro_active?.completed) {
         updatedProcess.pro_active = { completed: true, updated_at: nowIso };
       }
       updates.card_process = updatedProcess;
@@ -133,6 +129,56 @@ export async function POST(
       );
     }
 
+    // Campaign Manager Referral Commission Fulfillment
+    try {
+      if (parsed.data.subscriptionPlan === "pro" && currentProfile?.subscription_plan !== "pro") {
+        // Converted from Trial/Free to Pro -> Award ₹500 (if coupon used) or ₹1,000 (if no coupon used)
+        const { data: refRow } = await supabase
+          .from("referrals")
+          .select("id, amount_converted, coupon_code")
+          .eq("referred_user_id", id)
+          .maybeSingle();
+
+        if (refRow) {
+          const reward = refRow.coupon_code ? 500 : 1000;
+          await supabase
+            .from("referrals")
+            .update({
+              status: "converted",
+              amount_pending: 0,
+              amount_converted: Math.max(reward, Number(refRow.amount_converted) || reward),
+              converted_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", refRow.id);
+        }
+      } else if (
+        currentProfile?.subscription_plan === "pro" &&
+        parsed.data.membershipExpiresAt &&
+        parsed.data.subscriptionPlan !== "free"
+      ) {
+        // Pro renewal extension -> Award ₹500 to partner
+        const { data: refRow } = await supabase
+          .from("referrals")
+          .select("id, amount_converted, renewal_count")
+          .eq("referred_user_id", id)
+          .maybeSingle();
+
+        if (refRow) {
+          await supabase
+            .from("referrals")
+            .update({
+              amount_converted: (Number(refRow.amount_converted) || 0) + 500,
+              renewal_count: (Number(refRow.renewal_count) || 0) + 1,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", refRow.id);
+        }
+      }
+    } catch (refErr) {
+      console.warn("[Admin Validity] Referral commission update warning:", refErr);
+    }
+
     // Ensure digital card exists and is active for public access
     if (parsed.data.subscriptionPlan === "trial" || parsed.data.subscriptionPlan === "pro") {
       const { data: existingCard } = await supabase
@@ -153,23 +199,6 @@ export async function POST(
           .update({ is_active: true })
           .eq("id", existingCard.id);
       }
-    }
-
-    // Trigger automated WhatsApp notification if plan was set/switched to Free Trial
-    if (parsed.data.subscriptionPlan === "trial" && currentProfile?.phone) {
-      const recipientName = currentProfile.owner_name || currentProfile.business_name || "Valued Customer";
-      const cardSlug = currentProfile.username || currentProfile.slug || "";
-      sendWhatsAppTemplate({
-        toPhone: currentProfile.phone,
-        templateName: "trial_approved",
-        languageCode: "en_IN",
-        bodyParameters: [cardSlug, recipientName],
-        buttonParameters: [cardSlug],
-        contactName: recipientName,
-        companyName: currentProfile.business_name || (currentProfile as any).company_name || null,
-      }).catch((waErr) => {
-        console.error("[Admin Validity] WhatsApp notification error:", waErr);
-      });
     }
 
     // Synchronize team members according to company plan:

@@ -54,11 +54,110 @@ export async function middleware(request: NextRequest) {
     claims?.user_metadata?.role === "designer"
   );
 
-  // Subdomain routing: if request is on admin.* subdomain (e.g. admin.nammainfo.in or admin.localhost)
+  let isPartner = Boolean(
+    role === "partner" ||
+    role === "campaign_manager" ||
+    claims?.is_partner === true ||
+    claims?.is_campaign_manager === true ||
+    claims?.app_metadata?.is_partner === true ||
+    claims?.app_metadata?.is_campaign_manager === true ||
+    claims?.user_metadata?.is_partner === true ||
+    claims?.user_metadata?.is_campaign_manager === true
+  );
+
+  // Subdomain routing: if request is on admin.* or partner.* subdomain
   const host = request.headers.get("host") || "";
   const isAdminSubdomain =
     host.startsWith("admin.") || host.startsWith("admin.localhost");
+  const isPartnerSubdomain =
+    host.startsWith("partner.") ||
+    host.startsWith("partner.localhost") ||
+    host.startsWith("campaign.") ||
+    host.startsWith("campaign.localhost");
   const pathname = request.nextUrl.pathname;
+
+  // Check partner & admin status from DB if needed
+  if (
+    user &&
+    (isPartnerSubdomain ||
+      pathname.startsWith("/partner") ||
+      pathname.startsWith("/campaign"))
+  ) {
+    const { data: prof } = await supabase
+      .from("profiles")
+      .select("is_partner, is_campaign_manager, role, is_admin")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (prof?.is_admin || prof?.role === "admin") {
+      isAdmin = true;
+    }
+
+    if (
+      (prof as any)?.is_partner ||
+      prof?.is_campaign_manager ||
+      prof?.role === "partner" ||
+      prof?.role === "campaign_manager"
+    ) {
+      isPartner = true;
+    }
+  }
+
+  // Partner Subdomain Routing (e.g. partner.nammainfo.in or partner.localhost)
+  if (isPartnerSubdomain) {
+    if (pathname === "/partner" || pathname === "/campaign") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/";
+      return NextResponse.redirect(url);
+    }
+
+    const isLogin = pathname === "/login" || pathname === "/signin" || pathname === "/partner/login";
+
+    // Unauthenticated on partner subdomain -> redirect to clean /login
+    if (!isLogin && !user) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      return NextResponse.redirect(url);
+    }
+
+    // Authenticated admin attempting to access partner portal -> redirect to admin console
+    if (user && isAdmin && !isPartner) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/admin";
+      return NextResponse.redirect(url);
+    }
+
+    // Authenticated regular user without partner privileges -> redirect to dashboard
+    if (user && !isPartner) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard";
+      return NextResponse.redirect(url);
+    }
+
+    // Authenticated partner on login page -> redirect to home /
+    if (isLogin && user && isPartner) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/";
+      return NextResponse.redirect(url);
+    }
+
+    // Rewrite internal paths to /partner
+    if (!pathname.startsWith("/api")) {
+      const url = request.nextUrl.clone();
+      if (pathname === "/") {
+        url.pathname = "/partner";
+        return NextResponse.rewrite(url);
+      } else if (isLogin) {
+        url.pathname = "/partner/login";
+        return NextResponse.rewrite(url);
+      } else if (!pathname.startsWith("/partner")) {
+        url.pathname = `/partner${pathname}`;
+        return NextResponse.rewrite(url);
+      }
+    }
+
+    return response;
+  }
 
   if (isAdminSubdomain) {
     // If request has prefix /admin on admin subdomain, redirect to clean URL
@@ -186,10 +285,55 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Redirect legacy /campaign routes to /partner
+  if (pathname === "/campaign" || pathname.startsWith("/campaign/")) {
+    const url = request.nextUrl.clone();
+    url.pathname = pathname.replace(/^\/campaign/, "/partner");
+    return NextResponse.redirect(url);
+  }
+
+  // Protect /partner routes for partners (allowing /partner/login)
+  const isPartnerRoute =
+    pathname === "/partner" || pathname.startsWith("/partner/");
+
+  if (isPartnerRoute && pathname !== "/partner/login") {
+    if (!user) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/partner/login";
+      return NextResponse.redirect(url);
+    }
+    // Admin is NOT allowed in Partner Portal -> redirect to /admin
+    if (isAdmin && !isPartner) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/admin";
+      return NextResponse.redirect(url);
+    }
+    if (!isPartner) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard";
+      return NextResponse.redirect(url);
+    }
+  }
+
+  // Redirect signed-in users on /partner/login
+  if (pathname === "/partner/login" && user) {
+    if (isAdmin && !isPartner) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/admin";
+      return NextResponse.redirect(url);
+    }
+    if (isPartner) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/partner";
+      return NextResponse.redirect(url);
+    }
+  }
+
   // Protect dashboard routes for regular users
   if (pathname.startsWith("/dashboard") && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/signup";
+    url.search = "?mode=signin";
     return NextResponse.redirect(url);
   }
 
@@ -197,7 +341,8 @@ export async function middleware(request: NextRequest) {
   if (
     (pathname === "/signup" || pathname === "/") &&
     user &&
-    !isAdminSubdomain
+    !isAdminSubdomain &&
+    !isPartnerSubdomain
   ) {
     const url = request.nextUrl.clone();
     url.pathname = isStaff ? "/admin" : "/dashboard";
@@ -208,7 +353,7 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Routes needing auth decision and admin routing
+  // Routes needing auth decision and admin/partner routing
   matcher: [
     "/",
     "/login",
@@ -219,6 +364,10 @@ export const config = {
     "/onboarding/:path*",
     "/admin",
     "/admin/:path*",
+    "/partner",
+    "/partner/:path*",
+    "/campaign",
+    "/campaign/:path*",
   ],
 };
 

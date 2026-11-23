@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { requireAdminAuth } from "@/admin/shared/lib/admin-auth";
 import { saveAdminNotes } from "@/admin/shared/lib/admin-notes";
-import { sendWhatsAppTemplate } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
 
@@ -42,15 +41,6 @@ export async function POST(request: Request) {
     const oneHundredDaysMs = 100 * 24 * 60 * 60 * 1000;
     const expiresAt = new Date(now.getTime() + oneHundredDaysMs).toISOString();
 
-    const existingCardProcess = (profile.card_process && typeof profile.card_process === "object") ? profile.card_process : {};
-    const updatedCardProcess = {
-      ...existingCardProcess,
-      greetings_sent: {
-        completed: true,
-        updated_at: now.toISOString(),
-      },
-    };
-
     const approval: Record<string, unknown> = {
       subscription_plan: "trial",
       is_member: true,
@@ -62,7 +52,6 @@ export async function POST(request: Request) {
       trial_status: "approved",
       trial_approved_at: now.toISOString(),
       trial_extension_days: 0,
-      card_process: updatedCardProcess,
     };
     let { error: updateErr } = await supabase.from("profiles").update(approval).eq("id", companyId);
     if (updateErr?.message?.includes("primary_card_count")) {
@@ -108,23 +97,6 @@ export async function POST(request: Request) {
         .from("cards")
         .update({ is_active: true })
         .eq("id", existingCard.id);
-    }
-
-    // Trigger automated WhatsApp notification to customer if phone number exists
-    if (profile.phone) {
-      const recipientName = profile.owner_name || profile.business_name || "Valued Customer";
-      const cardSlug = profile.username || profile.slug || "";
-      sendWhatsAppTemplate({
-        toPhone: profile.phone,
-        templateName: "trial_approved",
-        languageCode: "en_IN",
-        bodyParameters: [cardSlug, recipientName],
-        buttonParameters: [cardSlug],
-        contactName: recipientName,
-        companyName: profile.business_name || profile.company_name || null,
-      }).catch((waErr) => {
-        console.error("[Admin Trial Approve] WhatsApp notification error:", waErr);
-      });
     }
 
     // Purge Next.js ISR & route cache so public profile and user dashboard reflect immediately

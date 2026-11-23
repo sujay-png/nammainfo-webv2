@@ -37,7 +37,10 @@ export interface Company {
   trialFollowUpStatus?: "unattended" | "attended" | null;
   trialFollowUpNotes?: string | null;
   profileCompletionPercentage?: number;
-  role?: "user" | "admin" | "designer" | null;
+  role?: "user" | "admin" | "designer" | "campaign_manager" | null;
+  isCampaignManager?: boolean;
+  referredBy?: string | null;
+  referredByCode?: string | null;
   cardProcess?: Record<string, { completed?: boolean; updated_at?: string | null }>;
   employees?: AdminEmployee[];
 }

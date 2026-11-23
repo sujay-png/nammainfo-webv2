@@ -13,6 +13,9 @@ import {
   AlertCircle,
   Loader2,
   RefreshCw,
+  Handshake,
+  Search,
+  CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/admin/shared/ui/Button";
 import { Modal } from "@/admin/shared/ui/Modal";
@@ -22,10 +25,25 @@ interface StaffAccount {
   id: string;
   email: string;
   name: string;
-  role: "admin" | "designer";
+  role: "admin" | "designer" | "campaign_manager" | "partner";
   isAdmin: boolean;
+  isCampaignManager?: boolean;
+  isPartner?: boolean;
   createdAt: string;
   status: string;
+}
+
+interface SearchedUser {
+  id: string;
+  email: string;
+  name: string;
+  businessName?: string;
+  phone?: string;
+  role: string;
+  isAdmin: boolean;
+  isCampaignManager: boolean;
+  isPartner?: boolean;
+  avatarUrl?: string | null;
 }
 
 export const StaffAccountsView: React.FC = () => {
@@ -54,6 +72,72 @@ export const StaffAccountsView: React.FC = () => {
   // Delete State
   const [deleteTarget, setDeleteTarget] = useState<StaffAccount | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // Partner Assignment State
+  const [isPartnerOpen, setIsPartnerOpen] = useState(false);
+  const [searchEmail, setSearchEmail] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchedUser[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<SearchedUser | null>(null);
+  const [assignLoading, setAssignLoading] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
+  const [assignSuccess, setAssignSuccess] = useState<string | null>(null);
+
+  // Debounced user search
+  useEffect(() => {
+    if (!isPartnerOpen || searchEmail.trim().length < 2) {
+      setSearchResults([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const res = await fetch(`/api/admin/staff/search-users?q=${encodeURIComponent(searchEmail.trim())}`);
+        const data = await res.json();
+        setSearchResults(data.users || []);
+      } catch (err) {
+        console.error("Search users error:", err);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchEmail, isPartnerOpen]);
+
+  const handleAssignSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUser) {
+      setAssignError("Please select a user to assign as Partner.");
+      return;
+    }
+    setAssignError(null);
+    setAssignLoading(true);
+
+    try {
+      const res = await fetch("/api/admin/staff/assign-partner", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: selectedUser.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to assign partner");
+
+      setAssignSuccess(data.message || "Assigned successfully!");
+      fetchStaff();
+      setTimeout(() => {
+        setIsPartnerOpen(false);
+        setSearchEmail("");
+        setSelectedUser(null);
+        setAssignSuccess(null);
+      }, 1500);
+    } catch (err: any) {
+      setAssignError(err.message || "Failed to assign partner");
+    } finally {
+      setAssignLoading(false);
+    }
+  };
 
   const fetchStaff = async () => {
     setLoading(true);
@@ -171,10 +255,14 @@ export const StaffAccountsView: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" size="sm" onClick={fetchStaff} disabled={loading}>
             <RefreshCw size={13} className={loading ? "animate-spin mr-1.5" : "mr-1.5"} />
             Refresh
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setIsPartnerOpen(true)}>
+            <Handshake size={14} className="mr-1.5" />
+            Create Partner Account
           </Button>
           <Button variant="primary" size="sm" onClick={() => setIsCreateOpen(true)}>
             <UserPlus size={14} className="mr-1.5" />
@@ -224,7 +312,13 @@ export const StaffAccountsView: React.FC = () => {
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-3">
                         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[5px] bg-[var(--accent)] text-[var(--foreground)] border border-[var(--border)]">
-                          {staff.role === "designer" ? <Palette size={16} /> : <Shield size={16} />}
+                          {staff.role === "designer" ? (
+                            <Palette size={16} />
+                          ) : staff.role === "partner" || staff.role === "campaign_manager" ? (
+                            <Handshake size={16} />
+                          ) : (
+                            <Shield size={16} />
+                          )}
                         </div>
                         <div>
                           <span className="font-semibold text-xs text-[var(--foreground)] block">
@@ -243,11 +337,23 @@ export const StaffAccountsView: React.FC = () => {
                         className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] font-mono text-[10px] font-semibold uppercase tracking-wider border ${
                           staff.role === "admin"
                             ? "bg-[var(--accent)] text-[var(--foreground)] border-[var(--border)]"
+                            : staff.role === "partner" || staff.role === "campaign_manager"
+                            ? "bg-[var(--accent)]/50 text-[var(--foreground)] border-[var(--border)]"
                             : "bg-[var(--background)] text-[var(--foreground)] border-[var(--border)]"
                         }`}
                       >
-                        {staff.role === "designer" ? <Palette size={11} /> : <Shield size={11} />}
-                        <span>{staff.role}</span>
+                        {staff.role === "designer" ? (
+                          <Palette size={11} />
+                        ) : staff.role === "partner" || staff.role === "campaign_manager" ? (
+                          <Handshake size={11} />
+                        ) : (
+                          <Shield size={11} />
+                        )}
+                        <span>
+                          {staff.role === "partner" || staff.role === "campaign_manager"
+                            ? "Partner"
+                            : staff.role}
+                        </span>
                       </span>
                     </td>
 
@@ -512,6 +618,159 @@ export const StaffAccountsView: React.FC = () => {
               </Button>
             </div>
           </div>
+        </Modal>
+      )}
+      {/* 4. Modal: Assign Partner Account */}
+      {isPartnerOpen && (
+        <Modal
+          isOpen={isPartnerOpen}
+          onClose={() => {
+            setIsPartnerOpen(false);
+            setSearchEmail("");
+            setSelectedUser(null);
+            setAssignError(null);
+            setAssignSuccess(null);
+          }}
+          title="Create Partner Account"
+          maxWidth="md"
+        >
+          <form onSubmit={handleAssignSubmit} className="space-y-4 pt-1">
+            <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
+              Assign an existing user account as a Partner in the Partner Program. Type their registered email address to find and link their company profile.
+            </p>
+
+            {assignError && (
+              <div className="flex items-center gap-2 p-2.5 rounded-[5px] border border-rose-500/20 bg-rose-500/10 text-xs text-rose-600 dark:text-rose-400">
+                <AlertCircle size={14} className="shrink-0" />
+                <span>{assignError}</span>
+              </div>
+            )}
+
+            {assignSuccess && (
+              <div className="flex items-center gap-2 p-2.5 rounded-[5px] border border-emerald-500/20 bg-emerald-500/10 text-xs text-emerald-600 dark:text-emerald-400">
+                <CheckCircle2 size={14} className="shrink-0" />
+                <span>{assignSuccess}</span>
+              </div>
+            )}
+
+            {/* Email search field */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-[var(--foreground)] block">
+                Search User by Email:
+              </label>
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]" />
+                <input
+                  type="email"
+                  placeholder="Type registered user email..."
+                  value={searchEmail}
+                  onChange={(e) => {
+                    setSearchEmail(e.target.value);
+                    setSelectedUser(null);
+                  }}
+                  className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] pl-9 pr-3 py-2 text-xs text-[var(--foreground)] outline-none focus:border-[var(--foreground)] font-mono"
+                  autoFocus
+                />
+                {searchLoading && (
+                  <Loader2 size={14} className="animate-spin absolute right-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]" />
+                )}
+              </div>
+            </div>
+
+            {/* Search Results Dropdown / List */}
+            {searchResults.length > 0 && !selectedUser && (
+              <div className="border border-[var(--border)] rounded-[5px] bg-[var(--background)] max-h-48 overflow-y-auto divide-y divide-[var(--border)]">
+                {searchResults.map((u) => (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedUser(u);
+                      setSearchEmail(u.email);
+                    }}
+                    className="w-full text-left p-2.5 hover:bg-[var(--accent)] transition-colors flex items-center justify-between cursor-pointer"
+                  >
+                    <div className="min-w-0">
+                      <span className="font-semibold text-xs text-[var(--foreground)] block truncate">
+                        {u.name} {u.businessName ? `(${u.businessName})` : ""}
+                      </span>
+                      <span className="font-mono text-[11px] text-[var(--muted-foreground)] truncate block">
+                        {u.email} {u.phone ? `• ${u.phone}` : ""}
+                      </span>
+                    </div>
+                    {u.isPartner || u.isCampaignManager ? (
+                      <span className="font-mono text-[10px] text-[var(--muted-foreground)] bg-[var(--accent)] px-2 py-0.5 rounded-[4px] border border-[var(--border)]">
+                        Already Partner
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-semibold text-[var(--foreground)] underline">
+                        Select
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {searchEmail.trim().length >= 2 && !searchLoading && searchResults.length === 0 && !selectedUser && (
+              <p className="text-xs text-[var(--muted-foreground)] text-center py-2">
+                No registered user found with that email address.
+              </p>
+            )}
+
+            {/* Selected User Preview */}
+            {selectedUser && (
+              <div className="rounded-[5px] border border-[var(--border)] bg-[var(--accent)]/40 p-3 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-mono font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+                    Selected Profile
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedUser(null)}
+                    className="text-[11px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] cursor-pointer"
+                  >
+                    Change
+                  </button>
+                </div>
+                <div className="flex items-center gap-2.5 pt-1">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[5px] bg-[var(--card)] font-bold text-xs border border-[var(--border)]">
+                    {selectedUser.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-xs text-[var(--foreground)] truncate">
+                      {selectedUser.name} {selectedUser.businessName ? `• ${selectedUser.businessName}` : ""}
+                    </p>
+                    <p className="font-mono text-[11px] text-[var(--muted-foreground)] truncate">
+                      {selectedUser.email}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border)]">
+              <Button
+                variant="secondary"
+                size="sm"
+                type="button"
+                onClick={() => setIsPartnerOpen(false)}
+                disabled={assignLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                type="submit"
+                disabled={!selectedUser || assignLoading}
+                isLoading={assignLoading}
+              >
+                <Check size={13} className="mr-1" />
+                Assign Partner Account
+              </Button>
+            </div>
+          </form>
         </Modal>
       )}
     </div>

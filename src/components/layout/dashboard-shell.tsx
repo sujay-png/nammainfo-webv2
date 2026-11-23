@@ -9,6 +9,7 @@ import {
   ScanLine,
   Bookmark,
   Settings,
+  Megaphone,
 } from "lucide-react";
 import { clsx } from "clsx";
 import { createClient } from "@/supabase/client";
@@ -38,6 +39,7 @@ export default function DashboardShell({
   const router = useRouter();
   const { colorTheme, setColorTheme } = useTheme();
   const [isStandalone, setIsStandalone] = useState(false);
+  const [isCampaignManager, setIsCampaignManager] = useState(false);
   const [needsTypeFor, setNeedsTypeFor] = useState<string | null>(null);
   const [needsPhoneFor, setNeedsPhoneFor] = useState<string | null>(null);
 
@@ -107,7 +109,19 @@ export default function DashboardShell({
         .eq("id", user.id)
         .single();
 
-      const row = data as { theme?: string; business_name?: string | null; business_type?: string | null; phone?: string | null } | null;
+      const row = data as {
+        theme?: string;
+        business_name?: string | null;
+        business_type?: string | null;
+        phone?: string | null;
+        is_partner?: boolean;
+        is_campaign_manager?: boolean;
+        role?: string;
+      } | null;
+
+      if (row?.is_partner || row?.is_campaign_manager || row?.role === "partner" || row?.role === "campaign_manager") {
+        setIsCampaignManager(true);
+      }
       const saved = row?.theme;
       if (saved && saved !== colorTheme) {
         setColorTheme(saved);
@@ -147,6 +161,15 @@ export default function DashboardShell({
         <span className="font-headline text-sm font-semibold tracking-tight">
           namma info
         </span>
+        {isCampaignManager && (
+          <Link
+            href="/partner"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--accent)] text-xs font-semibold text-[var(--foreground)] transition-colors"
+          >
+            <Megaphone size={13} />
+            <span>Partner Console</span>
+          </Link>
+        )}
       </header>
 
       {/* Page content */}

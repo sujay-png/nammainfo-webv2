@@ -92,6 +92,15 @@ export default function UpgradeToProModal({
   // Step 3 / Pricing: Primary card quantity (1 included with base Pro, +₹500 per additional card)
   const [primaryCardQuantity, setPrimaryCardQuantity] = useState<number>(1);
 
+  // Referral Coupon Code State (only pre-applied if referee explicitly used a coupon code)
+  const initialCoupon = profile.referred_by_code || null;
+  const isPreApplied = Boolean(profile.referred_by_code);
+  const [appliedCoupon, setAppliedCoupon] = useState<string | null>(initialCoupon);
+  const [couponInput, setCouponInput] = useState<string>("");
+  const [isCouponExpanded, setIsCouponExpanded] = useState<boolean>(false);
+  const [validatingCoupon, setValidatingCoupon] = useState<boolean>(false);
+  const [couponError, setCouponError] = useState<string | null>(null);
+
   // Unique idempotency key per checkout attempt
   const [idempotencyKey, setIdempotencyKey] = useState<string>("");
   const [mounted, setMounted] = useState(false);
@@ -141,6 +150,12 @@ export default function UpgradeToProModal({
         notes: "",
       });
       setSameAsProfile(true);
+
+      // Initialize coupon from profile if explicitly present
+      setAppliedCoupon(profile.referred_by_code || null);
+      setCouponInput("");
+      setCouponError(null);
+      setIsCouponExpanded(false);
     }
     prevOpenRef.current = isOpen;
   }, [isOpen]);
@@ -150,7 +165,32 @@ export default function UpgradeToProModal({
   const extraPrimaryCards = Math.max(0, primaryCardQuantity - 1);
   const extraCost = extraPrimaryCards * 500;
   const basePrice = 1999;
-  const totalAmount = basePrice + extraCost;
+  const couponDiscount = appliedCoupon || isPreApplied ? 500 : 0;
+  const totalAmount = Math.max(0, basePrice + extraCost - couponDiscount);
+
+  const handleApplyCoupon = async () => {
+    if (!couponInput.trim()) return;
+    setValidatingCoupon(true);
+    setCouponError(null);
+
+    try {
+      const res = await fetch("/api/coupons/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: couponInput.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error || "Invalid coupon code");
+      }
+      setAppliedCoupon(data.code);
+      setIsCouponExpanded(false);
+    } catch (err: any) {
+      setCouponError(err.message || "Failed to validate coupon");
+    } finally {
+      setValidatingCoupon(false);
+    }
+  };
 
   // Handle existing visiting card file selection
   const handleVisitingCardChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -317,6 +357,7 @@ export default function UpgradeToProModal({
           designMode: designOption === "upload_card" ? "uploaded" : "team_assist",
           shippingAddress: shippingPayload,
           idempotencyKey,
+          couponCode: appliedCoupon || (isPreApplied ? profile.referred_by_code : null),
         }),
       });
 
@@ -1006,6 +1047,67 @@ export default function UpgradeToProModal({
                   {shippingData.city ? `${shippingData.city}, ${shippingData.pincode}` : shippingData.street}
                 </span>
               </div>
+
+              {/* Referral Coupon Applied or Expandable Form */}
+              {appliedCoupon || isPreApplied ? (
+                <div className="flex items-center justify-between border-b border-[var(--border)] pb-2 text-xs">
+                  <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-semibold">
+                    <CheckCircle2 size={13} />
+                    <span>Referral Discount ({appliedCoupon || profile.referred_by_code || "Referral"} applied)</span>
+                  </div>
+                  <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">-₹500</span>
+                </div>
+              ) : (
+                <div className="border-b border-[var(--border)] pb-2 text-xs">
+                  {!isCouponExpanded ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsCouponExpanded(true)}
+                      className="font-semibold text-xs text-[var(--foreground)] hover:underline flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>Have referral? Apply code</span>
+                    </button>
+                  ) : (
+                    <div className="space-y-2 pt-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-mono font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+                          Apply Referral Code
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsCouponExpanded(false);
+                            setCouponError(null);
+                          }}
+                          className="text-[11px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={couponInput}
+                          onChange={(e) => setCouponInput(e.target.value.toUpperCase().trim())}
+                          placeholder="e.g. ABC500"
+                          className="flex-1 rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-xs font-mono font-bold uppercase tracking-wider outline-none focus:border-[var(--primary)]"
+                        />
+                        <button
+                          type="button"
+                          disabled={validatingCoupon || !couponInput.trim()}
+                          onClick={handleApplyCoupon}
+                          className="px-3 py-1.5 rounded-[5px] bg-[var(--foreground)] text-[var(--background)] text-xs font-semibold hover:opacity-90 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed transition"
+                        >
+                          {validatingCoupon ? <Loader2 size={12} className="animate-spin" /> : "Apply"}
+                        </button>
+                      </div>
+                      {couponError && (
+                        <p className="text-[11px] text-rose-500 font-medium">{couponError}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="flex items-center justify-between pt-1">
                 <div>

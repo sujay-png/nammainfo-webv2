@@ -90,6 +90,24 @@ export default function OnboardingPage() {
           email: user.email ?? f.email,
           phone: f.phone || signupPhone || "",
         }));
+
+        // Link referral on mount if ref exists in query, localStorage, or user metadata
+        try {
+          const queryRef = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("ref") : null;
+          const storedRef = typeof window !== "undefined" ? localStorage.getItem("nammainfo:referral") : null;
+          const metaRef = (user.user_metadata as { ref?: string } | undefined)?.ref;
+          const effectiveRef = queryRef || storedRef || metaRef;
+
+          if (effectiveRef) {
+            await fetch("/api/referrals/link", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ref: effectiveRef }),
+            });
+          }
+        } catch (refErr) {
+          console.warn("Referral link on mount warning:", refErr);
+        }
       }
     })();
   }, [router]);
@@ -193,6 +211,26 @@ export default function OnboardingPage() {
           .from("cards")
           .update({ public_slug: username })
           .eq("profile_id", userId);
+      }
+
+      // Link referral if user came through a card or campaign manager link
+      try {
+        const queryRef = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("ref") : null;
+        const storedRef = typeof window !== "undefined" ? localStorage.getItem("nammainfo:referral") : null;
+        const effectiveRef = queryRef || storedRef;
+
+        if (effectiveRef) {
+          await fetch("/api/referrals/link", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ref: effectiveRef }),
+          });
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("nammainfo:referral");
+          }
+        }
+      } catch (refErr) {
+        console.warn("Referral link warning:", refErr);
       }
 
       showInstallAfterLogin(); // just finished signing up
