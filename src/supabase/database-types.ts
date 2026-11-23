@@ -75,6 +75,12 @@ export interface Profile {
   testimonials?: import("@/features/testimonials/types").Testimonial[];
   /** Clients with optional logo + website (migration 20261104). See features/clients/types.ts */
   clients?: import("@/features/clients/types").ClientItem[];
+  /** Up to 3 buttons under "Add to Contacts" (migration 20261123). See features/custom-links/types.ts */
+  custom_links?: import("@/features/custom-links/types").CustomLink[];
+  /** Menu, price list… buttons next to the brochure (migration 20261123). */
+  custom_buttons?: import("@/features/custom-links/types").CustomButton[];
+  /** Owner's WhatsApp greeting messages 2-5 (migration 20261123). See features/whatsapp-greet/types.ts */
+  greeting_templates?: import("@/features/whatsapp-greet/types").GreetingTemplate[];
   theme: string;
   is_admin?: boolean;
   role?: "user" | "admin" | "designer" | null;

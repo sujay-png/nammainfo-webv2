@@ -96,6 +96,8 @@ supabase/migrations/        SQL migrations, run by hand in the Supabase SQL Edit
 | `clients` | "Our Clients" logos with optional website links | `types.ts`, `components/clients-editor.tsx`, `components/public-clients.tsx` |
 | `phone-required` | One-time "Add your mobile number" popup for older accounts | `components/phone-required-popup.tsx` |
 | `team` | Team members and their logins | `components/team-page.tsx`, `components/employee-login-access.tsx` |
+| `custom-links` | Owner-made buttons: up to 3 links under "Add to Contacts", and menu / price-list buttons (file or link) next to the brochure | `types.ts`, `components/custom-links-editor.tsx`, `components/custom-buttons-editor.tsx`, `components/public-custom-links.tsx` |
+| `whatsapp-greet` | "Greet <name> on WhatsApp" in Contacts: 1 built-in + 4 owner-written messages with profile links | `types.ts`, `lib/messages.ts`, `components/greet-sheet.tsx` |
 | `branches` | One profile, many locations: branch editor, public branch pages, link helpers | `types.ts`, `lib/apply-branch.ts`, `lib/paths.ts`, `services/public-pages.service.tsx`, `services/branches.service.ts`, `components/branches-page.tsx`, `components/branch-editor.tsx` |
 | `employee-dashboard` | What a staff login sees | `components/employee-home.tsx`, `employee-profile.tsx`, `employee-settings.tsx` |
 | `home` | Owner's Home screen: stats, plan status, profile completion | `components/home-dashboard.tsx` |
@@ -332,6 +334,7 @@ The same pattern guards `employees` (billing fields; adding a member needs a fre
 | `20261030_designer_role_and_staff.sql` | `role` column, `is_staff()`, staff read policies |
 | `20261030_security_lockdown.sql` | Guard triggers, `profile_admin_notes`, unique payment ids, `primary_card_count` |
 | `20261104_testimonials_clients_phone.sql` | `profiles.testimonials` and `profiles.clients` (jsonb arrays with size checks); `handle_new_user()` copies the sign-up phone into `profiles.phone` |
+| `20261123_custom_links_and_greetings.sql` | `profiles.custom_links` (max 3), `profiles.custom_buttons` (max 10), `profiles.greeting_templates` (max 4), jsonb arrays with size checks |
 | `20261120_branch_card_slots.sql` | Branches use card slots like team members: `secondary_cards_used()` (employees + branches), new `employees_protect_billing()` and `branches_guard()` |
 | `20261112_branches.sql` | `branches` table + RLS + `branches_guard`; `employees.branch_id` + `employees_branch_guard`; unique `(owner_id, slug)` for employees (skipped with a notice if duplicates exist); `contacts.branch_id` + `contacts_set_branch`; `submit_branch_contact()` |
 
@@ -652,6 +655,26 @@ Before this, tabs were built from service categories only, so products never got
 ### Adding or changing sentences
 
 Edit the arrays inside `rolePacks()`. Each entry is a function of `b` (business name) and `s` (the product or service). Keep sentences short, specific and in plain Indian English, avoid dashes (`tidy()` replaces them anyway), and never claim something the role can't do.
+
+## Custom links, menu buttons and WhatsApp greetings
+
+### Custom links and buttons
+
+| Column | Max | Shape | Shown |
+| --- | --- | --- | --- |
+| `profiles.custom_links` | 3 | `{ id, label, url }` | Under "Add to Contacts" on the public card and on team-member cards (`PublicCustomLinks`) |
+| `profiles.custom_buttons` | 10 | `{ id, label, url, kind: "link" \| "file", file_name? }` | Next to the Brochure in "Downloads & Actions" (`PublicCustomButtons`) |
+
+Uploaded files go to `profile-media/<owner id>/buttons/` through `uploadProfileFile()` (`src/lib/images/profile-media.ts`): PDF, JPG, PNG or WebP, max 10 MB, uploaded as they are. Replaced or removed files are deleted on save; files uploaded and then cancelled are deleted too. `cleanCustomLinks()` / `cleanCustomButtons()` drop anything that isn't an http(s) address before rendering, so a hand-edited row can't inject a `javascript:` link.
+
+### Greet on WhatsApp
+
+Contacts → a contact → **Greet <name> on WhatsApp** opens `GreetSheet`. Each message opens `https://wa.me/<number>?text=<message>` (10-digit numbers get 91), so the user only presses send.
+
+- **Message 1** is built in (`defaultGreeting()`): "Hey <name>", the sender's name, designation and company, "Thank you for connecting with me through nammainfo.in", then the profile link.
+- **Messages 2–5** are `profiles.greeting_templates` (`{ id, heading, body, attach[] }`). The heading is sent in bold (`*heading*`). `{name}`, `{my_name}`, `{designation}`, `{company}` and `{profile_link}` are filled per contact and per sender. `attach` holds keys (`profile`, `brochure`, `website`, `review`, `directions`, `btn:<id>`, `link:<id>`) that become "Label: url" lines.
+- **Sender:** the owner (their profile, plus the branch name and link if the contact came from a branch page) or a team member (their own name, designation and card link, from `my_employee_record()`). Team members read the business's templates; only the owner can edit them (RLS on `profiles`).
+- WhatsApp links can't carry files, so brochures and menus are sent as links.
 
 ## Branches
 

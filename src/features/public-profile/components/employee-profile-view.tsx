@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import type { Branch, BranchSummary } from "@/features/branches/types";
 import { employeePath } from "@/features/branches/lib/paths";
+import { PublicCustomLinks } from "@/features/custom-links/components/public-custom-links";
+import { cleanCustomLinks } from "@/features/custom-links/types";
 
 /**
  * Ensure a URL string has a protocol prefix.
@@ -196,6 +198,9 @@ export default function EmployeeProfileView({
           </a>
         )}
       </div>
+
+      {/* Business's custom links (max 3) */}
+      <PublicCustomLinks items={cleanCustomLinks((owner as { custom_links?: unknown }).custom_links)} />
 
       {/* ===== Quick contact ===== */}
       <div className="mt-4 grid grid-cols-3 gap-2 px-5">

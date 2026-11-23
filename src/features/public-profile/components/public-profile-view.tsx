@@ -53,6 +53,8 @@ import PublicClients from "@/features/clients/components/public-clients";
 import { cleanTestimonials } from "@/features/testimonials/types";
 import { cleanClients } from "@/features/clients/types";
 import PublicBranches from "@/features/branches/components/public-branches";
+import { PublicCustomButtons, PublicCustomLinks } from "@/features/custom-links/components/public-custom-links";
+import { cleanCustomButtons, cleanCustomLinks } from "@/features/custom-links/types";
 import type { Branch, BranchSummary } from "@/features/branches/types";
 import { branchPath, profilePath } from "@/features/branches/lib/paths";
 
@@ -809,6 +811,8 @@ export default function PublicProfileView({
   const galleryList = (profile.gallery as { url: string; category?: string; caption?: string }[]) ?? [];
   const testimonialList = cleanTestimonials((profile as { testimonials?: unknown }).testimonials);
   const clientList = cleanClients((profile as { clients?: unknown }).clients);
+  const customLinks = cleanCustomLinks((profile as { custom_links?: unknown }).custom_links);
+  const customButtons = cleanCustomButtons((profile as { custom_buttons?: unknown }).custom_buttons);
   const bankAccounts = (profile.bank_accounts as { bank_name?: string; account_holder?: string; account_number?: string; ifsc?: string; upi_id?: string; qr_url?: string }[]) ?? [];
 
   /* Dynamic label for services/products section */
@@ -966,6 +970,9 @@ export default function PublicProfileView({
               </a>
             )}
           </div>
+
+          {/* Owner's custom links (max 3), e.g. Book appointment */}
+          <PublicCustomLinks items={customLinks} />
 
           {/* Quick contact */}
           <div className="mt-4 grid grid-cols-3 gap-2 px-5">
@@ -1356,6 +1363,8 @@ export default function PublicProfileView({
                 <span className="text-xs font-medium text-[var(--foreground)]">Brochure</span>
               </a>
             )}
+            {/* Menu, price list… (custom buttons) */}
+            <PublicCustomButtons items={customButtons} />
           </div>
         </CollapsibleSection>
 
