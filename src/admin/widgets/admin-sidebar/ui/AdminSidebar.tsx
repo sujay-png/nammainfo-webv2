@@ -1,12 +1,11 @@
 import React from "react";
-import { Building2, Package, UserPlus, LogOut, MessageSquare } from "lucide-react";
+import { Building2, Package, UserPlus, LogOut, Handshake } from "lucide-react";
 
 interface AdminSidebarProps {
   currentTab: string;
   onTabChange: (tab: string) => void;
   onSignOut?: () => void;
   ordersPendingCount?: number;
-  inboxUnreadCount?: number;
 }
 
 export const AdminSidebar: React.FC<AdminSidebarProps> = ({
@@ -14,7 +13,6 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   onTabChange,
   onSignOut,
   ordersPendingCount = 0,
-  inboxUnreadCount = 0,
 }) => {
   return (
     <aside className="flex flex-col w-64 h-screen border-r border-[var(--border)] bg-[var(--card)] p-5 shrink-0 justify-between select-none">
@@ -69,28 +67,17 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
             )}
           </button>
 
-          {/* WhatsApp Customer Inbox */}
+          {/* Partner Program */}
           <button
-            onClick={() => onTabChange("inbox")}
-            className={`flex w-full items-center justify-between rounded-[5px] px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
-              currentTab === "inbox"
+            onClick={() => onTabChange("campaigns")}
+            className={`flex w-full items-center gap-3 rounded-[5px] px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
+              currentTab === "campaigns"
                 ? "bg-[var(--foreground)] text-[var(--background)]"
                 : "text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
             }`}
           >
-            <div className="flex items-center gap-3">
-              <MessageSquare size={15} />
-              <span>WhatsApp Inbox</span>
-            </div>
-            {inboxUnreadCount > 0 && (
-              <span className={`font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded-[4px] ${
-                currentTab === "inbox"
-                  ? "bg-[var(--background)] text-[var(--foreground)]"
-                  : "bg-[var(--accent)] text-[var(--foreground)] border border-[var(--border)]"
-              }`}>
-                {inboxUnreadCount}
-              </span>
-            )}
+            <Handshake size={15} />
+            <span>Partners</span>
           </button>
 
           {/* Account Creation (Staff Management) */}

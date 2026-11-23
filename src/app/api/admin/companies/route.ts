@@ -315,6 +315,10 @@ export async function GET(request: Request) {
           n?.trialFollowUpStatus ?? ((p.trial_follow_up_status as "unattended" | "attended") || "unattended"),
         trialFollowUpNotes: n?.trialFollowUpNotes ?? (p.trial_follow_up_notes || ""),
         profileCompletionPercentage: completion.percentage,
+        role: p.role || "user",
+        isCampaignManager: Boolean(p.is_campaign_manager || p.role === "campaign_manager"),
+        referredBy: p.referred_by || null,
+        referredByCode: p.referred_by_code || null,
         cardProcess,
         employees: mappedEmployees,
       };

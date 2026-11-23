@@ -246,6 +246,12 @@ function SignUpForm() {
     const supabase = createClient();
 
     try {
+      if (ref) {
+        try {
+          localStorage.setItem("nammainfo:referral", ref);
+        } catch {}
+      }
+
       if (mode === "signup") {
         // Mobile number is required for every new account.
         const mobile = formatIndianMobile(phone);
@@ -258,16 +264,12 @@ function SignUpForm() {
           email: email.trim(),
           password,
           options: {
-            // In the save-card flow there's no onboarding: the confirmation
-            // link lands them in Saved Cards (via /onboarding?saved=1, an
-            // already-allowed redirect that forwards straight on).
             emailRedirectTo: saveId
               ? `${getSiteUrl()}/onboarding?saved=1`
               : `${getSiteUrl()}${onboardingUrl}`,
-            // Stored on the account, so the card is saved even if the
-            // confirmation email is opened in another browser or app.
-            // The signup trigger copies "phone" into profiles.phone.
-            data: saveId ? { pending_save: saveId, phone: mobile } : { phone: mobile },
+            data: saveId
+              ? { pending_save: saveId, phone: mobile, ref: ref || undefined }
+              : { phone: mobile, ref: ref || undefined },
           },
         });
         if (signUpError) throw signUpError;
@@ -277,6 +279,20 @@ function SignUpForm() {
           try {
             localStorage.setItem("nammainfo:hasAccount", "1");
           } catch {}
+
+          // Link referral immediately if signed in via ref link
+          if (ref) {
+            try {
+              await fetch("/api/referrals/link", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ref }),
+              });
+            } catch (refErr) {
+              console.warn("Referral link warning:", refErr);
+            }
+          }
+
           await flushPendingSaves();
           showInstallAfterLogin();
           router.push(saveId ? "/dashboard/saved" : onboardingUrl);

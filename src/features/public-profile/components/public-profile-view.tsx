@@ -1405,7 +1405,7 @@ export default function PublicProfileView({
         {/* CTA — hidden on employee views */}
         {!isEmployeeView && (
           <Link
-            href="/signup"
+            href={`/signup?ref=${encodeURIComponent(handle || profile.slug || card?.public_slug || profile.username || profile.id)}`}
             className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[var(--border)] py-4 text-sm font-medium text-[var(--muted-foreground)] transition hover:border-[var(--foreground)] hover:text-[var(--foreground)]"
           >
             <UserPlus size={16} />

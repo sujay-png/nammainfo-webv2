@@ -174,6 +174,83 @@ export async function fulfillPayment(input: FulfillInput): Promise<FulfillResult
       .eq("id", userId);
   }
 
+  // 5. Handle Campaign Referral conversion & rewards
+  try {
+    const couponCodeFromOrder = typeof notes.couponCode === "string" ? notes.couponCode.trim().toUpperCase() : null;
+
+    if (orderType === "pro_initial") {
+      const { data: existingRef } = await admin
+        .from("referrals")
+        .select("id, amount_converted, coupon_code")
+        .eq("referred_user_id", userId)
+        .maybeSingle();
+
+      if (existingRef) {
+        // If coupon applied: referee got ₹500 off, partner gets ₹500.
+        // If NO coupon applied: referee paid full ₹1,999, partner gets ₹1,000!
+        const earnedCommission = couponCodeFromOrder ? 500 : 1000;
+        await admin
+          .from("referrals")
+          .update({
+            status: "converted",
+            amount_pending: 0,
+            amount_converted: Math.max(earnedCommission, Number(existingRef.amount_converted) || earnedCommission),
+            coupon_code: couponCodeFromOrder || existingRef.coupon_code || null,
+            converted_at: now.toISOString(),
+            updated_at: now.toISOString(),
+          })
+          .eq("id", existingRef.id);
+      } else if (couponCodeFromOrder) {
+        const { data: cpn } = await admin
+          .from("campaign_coupons")
+          .select("id, campaign_manager_id, code")
+          .eq("code", couponCodeFromOrder)
+          .maybeSingle();
+
+        if (cpn && cpn.campaign_manager_id !== userId) {
+          await admin.from("referrals").insert({
+            campaign_manager_id: cpn.campaign_manager_id,
+            referred_user_id: userId,
+            coupon_code: cpn.code,
+            source: "coupon",
+            status: "converted",
+            amount_pending: 0,
+            amount_converted: 500,
+            converted_at: now.toISOString(),
+          });
+          await admin
+            .from("profiles")
+            .update({
+              referred_by: cpn.campaign_manager_id,
+              referred_by_code: cpn.code,
+            })
+            .eq("id", userId);
+        }
+      }
+    } else if (orderType === "renewal") {
+      const { data: refRow } = await admin
+        .from("referrals")
+        .select("id, amount_converted, renewal_count")
+        .eq("referred_user_id", userId)
+        .maybeSingle();
+
+      if (refRow) {
+        const curConverted = Number(refRow.amount_converted) || 0;
+        const curCount = Number(refRow.renewal_count) || 0;
+        await admin
+          .from("referrals")
+          .update({
+            amount_converted: curConverted + 500,
+            renewal_count: curCount + 1,
+            updated_at: now.toISOString(),
+          })
+          .eq("id", refRow.id);
+      }
+    }
+  } catch (refRewardErr) {
+    console.error("[Fulfill Payment] Referral reward error:", refRewardErr);
+  }
+
   try {
     if (profile?.slug) revalidatePath(`/${profile.slug}`);
     if (profile?.username) revalidatePath(`/${profile.username}`);

@@ -83,8 +83,11 @@ export interface Profile {
   greeting_templates?: import("@/features/whatsapp-greet/types").GreetingTemplate[];
   theme: string;
   is_admin?: boolean;
-  role?: "user" | "admin" | "designer" | null;
+  role?: "user" | "admin" | "designer" | "campaign_manager" | null;
   status?: "active" | "suspended" | "expired" | "pending";
+  is_campaign_manager?: boolean;
+  referred_by?: string | null;
+  referred_by_code?: string | null;
   subscription_plan?: string;
   primary_card_count?: number;
   purchased_id_count?: number;
@@ -258,6 +261,24 @@ export interface Database {
         Update: Record<string, any>;
         Relationships: AnyRelationship[];
       };
+      campaign_coupons: {
+        Row: CampaignCoupon;
+        Insert: Record<string, any>;
+        Update: Record<string, any>;
+        Relationships: AnyRelationship[];
+      };
+      referrals: {
+        Row: Referral;
+        Insert: Record<string, any>;
+        Update: Record<string, any>;
+        Relationships: AnyRelationship[];
+      };
+      campaign_withdrawals: {
+        Row: CampaignWithdrawal;
+        Insert: Record<string, any>;
+        Update: Record<string, any>;
+        Relationships: AnyRelationship[];
+      };
     };
     Views: { [_ in never]: never };
     Functions: { [_ in never]: never };
@@ -265,3 +286,56 @@ export interface Database {
     CompositeTypes: { [_ in never]: never };
   };
 }
+
+/* ---- Campaign & Referrals ---------------------------------------- */
+
+export interface CampaignCoupon {
+  id: string;
+  campaign_manager_id: string;
+  code: string;
+  discount_amount: number;
+  reward_amount: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Referral {
+  id: string;
+  campaign_manager_id: string;
+  referred_user_id: string;
+  coupon_code: string | null;
+  source: "link" | "coupon" | "card";
+  status: "pending" | "converted" | "claimed" | "expired";
+  amount_pending: number;
+  amount_converted: number;
+  amount_transferred: number;
+  converted_at: string | null;
+  renewal_count: number;
+  created_at: string;
+  updated_at: string;
+  // Joined fields when queried
+  profile?: Profile;
+}
+
+export interface CampaignWithdrawal {
+  id: string;
+  campaign_manager_id: string;
+  amount: number;
+  payout_method: "bank_transfer" | "upi";
+  account_details: {
+    account_holder?: string;
+    bank_name?: string;
+    account_number?: string;
+    ifsc?: string;
+    upi_id?: string;
+    holder_name?: string;
+  };
+  status: "pending" | "transferred" | "rejected";
+  notes?: string | null;
+  created_at: string;
+  transferred_at?: string | null;
+  transferred_by?: string | null;
+  // Joined fields when queried
+  manager?: Profile;
+}
+

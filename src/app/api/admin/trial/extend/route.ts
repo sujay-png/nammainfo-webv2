@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { requireAdminAuth } from "@/admin/shared/lib/admin-auth";
-import { sendWhatsAppTemplate } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
 
@@ -60,21 +59,6 @@ export async function POST(request: Request) {
     if (updateErr) {
       console.error("[Admin Trial Extend] Error updating expiry:", updateErr);
       return NextResponse.json({ error: updateErr.message }, { status: 500 });
-    }
-
-    // Trigger automated WhatsApp notification to customer if phone number exists
-    if (profile.phone) {
-      const recipientName = profile.owner_name || profile.business_name || "Valued Customer";
-      const businessName = profile.business_name || "your business";
-      const cardSlug = profile.username || profile.slug || "";
-      sendWhatsAppTemplate({
-        toPhone: profile.phone,
-        templateName: "trial_extended",
-        languageCode: "en",
-        bodyParameters: [recipientName, businessName, days, cardSlug],
-      }).catch((waErr) => {
-        console.error("[Admin Trial Extend] WhatsApp notification error:", waErr);
-      });
     }
 
     // Purge Next.js ISR & route cache so public profile and user dashboard reflect immediately

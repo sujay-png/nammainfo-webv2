@@ -41,6 +41,7 @@ export async function POST(req: Request) {
       designMode = "team_assist",
       shippingAddress = {},
       idempotencyKey,
+      couponCode = null,
     } = body;
 
     // Check if an existing order with this idempotency key already exists to prevent double charges
@@ -85,6 +86,8 @@ export async function POST(req: Request) {
 
     // Calculate accurate dynamic tier pricing
     let calculation: { unitPrice: number; totalAmount: number; cardQuantity: number };
+    let appliedCoupon: { code: string; campaign_manager_id: string } | null = null;
+    let discountAmount = 0;
 
     if (orderType === "pro_initial") {
       const res = calculateInitialProCost(Number(cardQuantity) || 1);
@@ -93,6 +96,26 @@ export async function POST(req: Request) {
         totalAmount: res.totalAmount,
         cardQuantity: res.cardQuantity,
       };
+
+      // Referral Discount check: ₹500 off ONLY if referee explicitly entered a valid coupon code ending in 500
+      const requestedCoupon = (couponCode || profile.referred_by_code || "").trim().toUpperCase();
+
+      if (requestedCoupon && requestedCoupon.endsWith("500")) {
+        const { data: cpn } = await supabase
+          .from("campaign_coupons")
+          .select("id, code, campaign_manager_id")
+          .eq("code", requestedCoupon)
+          .maybeSingle();
+
+        if (cpn && cpn.campaign_manager_id !== user.id) {
+          appliedCoupon = cpn;
+          discountAmount = 500;
+        }
+      }
+
+      if (discountAmount > 0) {
+        calculation.totalAmount = Math.max(0, calculation.totalAmount - discountAmount);
+      }
     } else if (orderType === "primary_card_addon") {
       const res = calculatePrimaryCardAddonCost(Number(cardQuantity) || 1);
       calculation = {
@@ -160,6 +183,9 @@ export async function POST(req: Request) {
         cardQuantity: calculation.cardQuantity,
         unitPrice: calculation.unitPrice,
         totalAmount: calculation.totalAmount,
+        discountAmount,
+        couponCode: appliedCoupon?.code || profile.referred_by_code || "",
+        referrerId: appliedCoupon?.campaign_manager_id || profile.referred_by || "",
         businessName: profile.business_name || profile.owner_name || "",
       },
     });
@@ -173,6 +199,8 @@ export async function POST(req: Request) {
       cardQuantity: calculation.cardQuantity,
       unitPrice: calculation.unitPrice,
       totalAmount: calculation.totalAmount,
+      discountAmount,
+      couponCode: appliedCoupon?.code || profile.referred_by_code || null,
     });
   } catch (err: any) {
     console.error("Create order exception:", err);
