@@ -110,7 +110,7 @@ function OwnerTeamPage() {
   async function addEmployee() {
     if (!profile || !newEmp.name || !newEmp.designation) return;
     if (!isTrial && availableSlots <= 0) {
-      alert("No available team card slots. Please purchase additional team cards first.");
+      alert("No free card slots. Team members and branches share your slots. Please buy more cards first.");
       setShowBuyTeamModal(true);
       return;
     }
@@ -142,9 +142,9 @@ function OwnerTeamPage() {
       setNewEmp({ name: "", designation: "", email: "", phone: "", branch_id: "" });
       setShowAdd(false);
       load();
-    } else if (/team slots/i.test(error.message)) {
+    } else if (/team slots|card slots/i.test(error.message)) {
       // The database checks paid slots too (e.g. if this page was out of date).
-      alert("No available team card slots. Please purchase additional team cards first.");
+      alert("No free card slots. Team members and branches share your slots. Please buy more cards first.");
       setShowAdd(false);
       setShowBuyTeamModal(true);
     } else {
@@ -304,10 +304,14 @@ function OwnerTeamPage() {
   const primaryCards = Number(profile?.primary_card_count ?? (isMember ? 1 : 0));
 
   // Employee quota: Free Trial accounts have unlimited team additions during trial
-  const quota = isTrial ? employees.length : isMember ? Number(profile?.purchased_id_count || 0) : 0;
-  const availableSlots = isTrial ? 9999 : Math.max(0, quota - employees.length);
-  const totalCards = primaryCards + employees.length;
-  const renewalCost = calculateRenewalCost(primaryCards, employees.length);
+  // Branches use the same slots as team members (secondary cards), so
+  // they count towards slots, the total and the volume price.
+  const usedSlots = employees.length + branches.length;
+  const quota = isTrial ? usedSlots : isMember ? Number(profile?.purchased_id_count || 0) : 0;
+  const availableSlots = isTrial ? 9999 : Math.max(0, quota - usedSlots);
+  const totalCards = primaryCards + usedSlots;
+  const renewalCost = calculateRenewalCost(primaryCards, usedSlots);
+  const cardBreakdown = `${primaryCards} Primary + ${employees.length} Team${branches.length ? ` + ${branches.length} Branch${branches.length === 1 ? "" : "es"}` : ""}`;
 
   // Check company expiry (15 days alert)
   const now = Date.now();
@@ -333,7 +337,7 @@ function OwnerTeamPage() {
               Team / Employees
             </h1>
             <p className="font-mono text-[11px] text-[var(--muted-foreground)] truncate">
-              {totalCards} Total Cards ({primaryCards} Primary + {employees.length} Team)
+              {totalCards} Total Cards ({cardBreakdown})
             </p>
           </div>
         </div>
@@ -369,7 +373,7 @@ function OwnerTeamPage() {
             </span>
           </div>
           <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
-            All team member cards sync with your company&apos;s annual expiry. Upgrading now covers all <strong>{totalCards} cards</strong> (1 Primary + {employees.length} Team) at the volume rate of <strong>₹{renewalCost.unitPrice}/card</strong>:
+            All team member cards sync with your company&apos;s annual expiry. Upgrading now covers all <strong>{totalCards} cards</strong> ({cardBreakdown}) at the volume rate of <strong>₹{renewalCost.unitPrice}/card</strong>:
           </p>
           <div className="flex items-center justify-between pt-1 border-t border-amber-500/20">
             <span className="font-headline font-bold text-sm text-[var(--foreground)]">
@@ -397,7 +401,7 @@ function OwnerTeamPage() {
           <span className="font-mono text-xs font-bold text-[var(--foreground)]">
             {isTrial
               ? `${employees.length} Team Members Added`
-              : `${employees.length} of ${quota} Slots Used`}
+              : `${usedSlots} of ${quota} Slots Used${branches.length ? ` (${branches.length} by branches)` : ""}`}
           </span>
         </div>
 
@@ -405,7 +409,7 @@ function OwnerTeamPage() {
           <div className="h-1.5 overflow-hidden rounded-full bg-[var(--muted)]">
             <div
               className="h-full rounded-full bg-[var(--primary)] transition-all duration-500"
-              style={{ width: `${Math.min(100, quota > 0 ? (employees.length / quota) * 100 : 0)}%` }}
+              style={{ width: `${Math.min(100, quota > 0 ? (usedSlots / quota) * 100 : 0)}%` }}
             />
           </div>
         )}
@@ -417,8 +421,8 @@ function OwnerTeamPage() {
               : availableSlots > 0
               ? `${availableSlots} slot${availableSlots === 1 ? "" : "s"} ready to assign`
               : quota === 0
-              ? "0 employee slots — purchase cards below to add members"
-              : "All employee slots currently assigned"}
+              ? "0 card slots — buy cards below to add team members or branches"
+              : "All card slots are in use (team members and branches)"}
           </span>
           {!isTrial && (
             <button
@@ -806,7 +810,7 @@ function OwnerTeamPage() {
           isOpen={showBuyTeamModal}
           onClose={() => setShowBuyTeamModal(false)}
           profile={profile}
-          currentTeamCount={employees.length}
+          currentTeamCount={usedSlots}
           onSuccess={() => load()}
         />
       )}
@@ -817,7 +821,7 @@ function OwnerTeamPage() {
           isOpen={showRenewalModal}
           onClose={() => setShowRenewalModal(false)}
           profile={profile}
-          employeesCount={employees.length}
+          employeesCount={usedSlots}
           onSuccess={() => load()}
         />
       )}

@@ -12,6 +12,7 @@ import { initials } from "@/lib/utils";
 import { useTheme } from "@/hooks/use-theme";
 import { SHOW_INSTALL_EVENT, isRunningAsApp } from "@/features/install-app/components/add-to-home-screen-popup";
 import { themes, getTheme } from "@/lib/themes";
+import { countBranches } from "@/features/branches/lib/card-count";
 import {
   LogOut,
   User,
@@ -60,14 +61,16 @@ function OwnerSettingsPage() {
       const user = await getCurrentUser();
       if (!user || !isMounted) return;
 
-      const [profRes, empRes] = await Promise.all([
+      const [profRes, empRes, branchCount] = await Promise.all([
         supabase.from("profiles").select("*").eq("id", user.id).single(),
         supabase.from("employees").select("id", { count: "exact", head: true }).eq("owner_id", user.id).eq("is_active", true),
+        countBranches(supabase, user.id),
       ]);
 
       if (!isMounted) return;
       if (profRes.data) setProfile(profRes.data as unknown as Profile);
-      setTeamCount(empRes.count || 0);
+      // Team members + branches: all of them renew with the primary card.
+      setTeamCount((empRes.count || 0) + branchCount);
       if (isMounted) setLoading(false);
 
       if (!activeChannel && user.id) {

@@ -188,8 +188,8 @@ export default function RenewalModal({
             </h2>
             <p className="text-xs text-[var(--muted-foreground)]">
               {isTrial
-                ? "Convert your Free Trial to Pro: 365-day active coverage for your primary card and all team member IDs."
-                : "Synchronized 365-day extension for your primary card and all team member IDs."}
+                ? "Convert your Free Trial to Pro: 365-day active coverage for your primary card and all team and branch cards."
+                : "Synchronized 365-day extension for your primary card and all team and branch cards."}
             </p>
           </div>
 
@@ -217,10 +217,10 @@ export default function RenewalModal({
               <div className="flex items-center justify-between border-b border-[var(--border)] pb-2.5">
                 <div>
                   <span className="font-semibold text-[var(--foreground)] block">
-                    {employeesCount}x Team Member ID Cards
+                    {employeesCount}x Team &amp; Branch Cards
                   </span>
                   <span className="text-[11px] text-[var(--muted-foreground)]">
-                    {employeesCount} employee cards @ ₹{cost.unitPrice}/card
+                    {employeesCount} team / branch cards @ ₹{cost.unitPrice}/card
                   </span>
                 </div>
                 <span className="font-mono font-bold text-[var(--foreground)]">

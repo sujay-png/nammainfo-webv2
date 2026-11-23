@@ -69,6 +69,7 @@ function ConnectionAvatar({
 }
 import RenewalModal from "@/components/RenewalModal";
 import { calculateRenewalCost } from "@/lib/pricing";
+import { countBranches } from "@/features/branches/lib/card-count";
 import { calculateProfileCompletion } from "@/lib/profile-completion";
 import { getMembership } from "@/lib/membership";
 
@@ -240,7 +241,7 @@ function ValidityCard({
                 Lifetime Organization Access (Permanent)
               </p>
               <p className="font-mono text-[10px] text-[var(--muted-foreground)] mt-0.5">
-                {totalCards} Total Cards (1 Primary + {employeesCount} Team)
+                {totalCards} Total Cards (1 Primary + {employeesCount} Team &amp; Branch)
               </p>
             </div>
           </div>
@@ -365,7 +366,7 @@ function ValidityCard({
             {isTrial ? "Trial Cards" : "Issued Cards"}
           </span>
           <span className="block font-mono text-xs font-semibold text-[var(--foreground)] mt-0.5">
-            {totalCards} Total ({primaryCards} Primary{employeesCount > 0 ? ` + ${employeesCount} Team` : ""})
+            {totalCards} Total ({primaryCards} Primary{employeesCount > 0 ? ` + ${employeesCount} Team & Branch` : ""})
           </span>
         </div>
 
@@ -448,6 +449,8 @@ function OwnerHomePage() {
   const [card, setCard] = useState<Card | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  // Branches are billed like team cards (they share the same slots).
+  const [branchCount, setBranchCount] = useState(0);
   const [connections, setConnections] = useState<EnrichedConnection[]>([]);
   const [tapCount, setTapCount] = useState(0);
   const [reviewCount, setReviewCount] = useState(0);
@@ -465,7 +468,7 @@ function OwnerHomePage() {
       if (!user || !isMounted) return;
 
       // Fetch all data in parallel
-      const [profileRes, cardRes, reviewRes, employeeRes, connectionRes, reviewCountRes] =
+      const [profileRes, cardRes, reviewRes, employeeRes, connectionRes, reviewCountRes, branchTotal] =
         await Promise.all([
           supabase.from("profiles").select("*").eq("id", user.id).single(),
           supabase
@@ -495,6 +498,7 @@ function OwnerHomePage() {
             .from("reviews")
             .select("id", { count: "exact", head: true })
             .eq("profile_id", user.id),
+          countBranches(supabase, user.id),
         ]);
 
       if (!isMounted) return;
@@ -508,6 +512,7 @@ function OwnerHomePage() {
       if (reviewRes.data) setReviews(reviewRes.data as unknown as Review[]);
       setReviewCount(reviewCountRes.count || 0);
       if (employeeRes.data) setEmployees(employeeRes.data as unknown as Employee[]);
+      setBranchCount(branchTotal);
 
       if (connectionRes.data) {
         const rawConns = connectionRes.data as Connection[];
@@ -632,7 +637,7 @@ function OwnerHomePage() {
       {/* Card validity & Account Status */}
       <ValidityCard
         profile={profile}
-        employeesCount={employees.length}
+        employeesCount={employees.length + branchCount}
         completionPct={completionPct}
         onOpenUpgrade={() => setShowUpgradeModal(true)}
         onOpenRenewal={() => setShowRenewalModal(true)}
@@ -934,7 +939,7 @@ function OwnerHomePage() {
           isOpen={showRenewalModal}
           onClose={() => setShowRenewalModal(false)}
           profile={profile}
-          employeesCount={employees.length}
+          employeesCount={employees.length + branchCount}
           onSuccess={() => {
             setShowRenewalModal(false);
             window.location.reload();
