@@ -574,7 +574,17 @@ export default function UserManualContent() {
             <Step>Tick the links to add, for example <em>Brochure</em> or <em>Menu</em>, and tap <strong>Save</strong>.</Step>
           </Steps>
           <Callout kind="info">
-            <p>Messages are saved once and used for every contact. Team members see the same messages with their own name, designation and card link, but only the owner can change them. WhatsApp can&apos;t attach files from a link, so your brochure or menu is sent as a link the customer taps to open.</p>
+            <p>Messages are saved once and used for every contact. Team members see the same messages with their own name, designation and card link, but only the owner can change them.</p>
+          </Callout>
+          <p><strong>Sending your brochure or menu as the actual file:</strong></p>
+          <ul>
+            <li>On a phone, a message that includes your brochure or an uploaded file (menu, price list) shows <strong>Send with file</strong>. Tap it, choose <strong>WhatsApp</strong>, then pick the person&apos;s chat. The PDF goes as a real attachment with your message.</li>
+            <li>The message is also copied. If WhatsApp shows only the file, paste the message in the chat.</li>
+            <li><strong>Send as link instead</strong> opens their chat directly, with a short link such as <em>nammainfo.in/doc/yourname/brochure</em>. The link always opens your latest file, even after you replace it.</li>
+            <li>On a computer, messages are sent with the short links.</li>
+          </ul>
+          <Callout kind="tip">
+            <p>Team members&apos; cards now also show <strong>Share your details</strong> and <strong>Create your own Namma Info profile</strong> at the bottom. Details shared there go to that team member&apos;s contacts.</p>
           </Callout>
         </Sub>
 

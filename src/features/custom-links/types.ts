@@ -85,3 +85,39 @@ export function saveErrorMessage(message: string, column: string): string {
   }
   return "Couldn't save. Please check your connection and try again.";
 }
+
+/* ---------- Short document links: nammainfo.in/doc/<username>/<key> ---------- */
+
+/** "Price List" → "price-list". Brochure is always "brochure". */
+function keyFromLabel(label: string): string {
+  return (
+    label
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40) || "file"
+  );
+}
+
+/**
+ * The short key of every custom button, in order. Two buttons with the same
+ * name get "menu" and "menu-2". The same function runs in the browser (to
+ * build links) and on the server (to resolve them), so they always agree.
+ */
+export function docKeys(buttons: CustomButton[]): Map<string, string> {
+  const used = new Set<string>(["brochure"]);
+  const out = new Map<string, string>();
+  for (const b of buttons) {
+    const base = keyFromLabel(b.label);
+    let key = base;
+    for (let n = 2; used.has(key); n++) key = `${base}-${n}`;
+    used.add(key);
+    out.set(b.id, key);
+  }
+  return out;
+}
+
+/** Branded short link for a brochure ("brochure") or a custom button's key. */
+export function docLink(username: string, key: string, site = "https://nammainfo.in") {
+  return `${site}/doc/${encodeURIComponent(username)}/${key}`;
+}

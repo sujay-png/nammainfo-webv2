@@ -13,7 +13,10 @@ export interface Sender {
 export interface Attachable {
   key: string;
   label: string;
+  /** What goes in the message text: a short branded link where possible. */
   url: string;
+  /** For uploaded documents (brochure, menu PDF…): the real file, so it can be sent as an attachment. */
+  file?: { url: string; name: string };
 }
 
 /** Message 1, word for word as agreed. Empty lines are dropped. */
@@ -44,13 +47,20 @@ export function fillPlaceholders(text: string, contactName: string, s: Sender): 
 }
 
 /** Messages 2-5: *heading*, the body, then each chosen link on its own line. */
-export function templateMessage(t: GreetingTemplate, contactName: string, s: Sender, attachables: Attachable[]): string {
+export function templateMessage(
+  t: GreetingTemplate,
+  contactName: string,
+  s: Sender,
+  attachables: Attachable[],
+  opts: { leaveOutFiles?: boolean } = {}
+): string {
   const parts: string[] = [];
   if (t.heading.trim()) parts.push(`*${fillPlaceholders(t.heading.trim(), contactName, s)}*`);
   if (t.body.trim()) parts.push(fillPlaceholders(t.body.trim(), contactName, s));
   const links = t.attach
     .map((k) => attachables.find((a) => a.key === k))
     .filter((a): a is Attachable => !!a)
+    .filter((a) => !(opts.leaveOutFiles && a.file))
     .map((a) => `${a.label}: ${a.url}`);
   if (links.length) parts.push(links.join("\n"));
   return parts.join("\n\n");
@@ -86,3 +96,17 @@ export const SAMPLE_TEMPLATES: Omit<GreetingTemplate, "id">[] = [
     attach: ["profile", "website"],
   },
 ];
+
+/** The uploaded documents a template sends (brochure, menu PDF…), in order. */
+export function templateFiles(t: GreetingTemplate, attachables: Attachable[]): Attachable[] {
+  return t.attach
+    .map((k) => attachables.find((a) => a.key === k))
+    .filter((a): a is Attachable => !!a && !!a.file);
+}
+
+/** "Akshara Digital India Brochure.pdf": a readable name for an attached file. */
+export function attachmentName(company: string | null, label: string, url: string): string {
+  const ext = (url.split("?")[0].match(/\.(pdf|jpe?g|png|webp)$/i)?.[1] ?? "pdf").toLowerCase();
+  const base = [company, label].filter(Boolean).join(" ").replace(/[^\w\s.-]/g, "").replace(/\s+/g, " ").trim().slice(0, 60);
+  return `${base || "document"}.${ext}`;
+}

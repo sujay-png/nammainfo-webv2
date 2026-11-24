@@ -69,6 +69,8 @@ export default function EmployeeProfileView({
   const linkName = handle ?? owner.username;
   const pagePath = linkName ? employeePath(linkName, employee.slug, branch?.slug) : null;
   const [profileUrl, setProfileUrl] = useState("");
+  // "Share your details" at the bottom opens this member's form, so the contact reaches them.
+  const [showDetailsForm, setShowDetailsForm] = useState(false);
 
   useEffect(() => {
     setProfileUrl(pagePath ? `${window.location.origin}${pagePath}` : window.location.href);
@@ -105,6 +107,8 @@ export default function EmployeeProfileView({
       <VisitorDetailsGate
         ownerId={owner.id}
         employeeId={employee.id}
+        forceOpen={showDetailsForm}
+        onClose={() => setShowDetailsForm(false)}
         branchId={branch?.id ?? null}
         personName={employee.name}
         businessName={owner.business_name || owner.owner_name || "this business"}
@@ -248,6 +252,7 @@ export default function EmployeeProfileView({
         branches={branches}
         handle={linkName ?? undefined}
         isEmployeeView
+        onShareDetails={() => setShowDetailsForm(true)}
         hideHero
       />
     </main>

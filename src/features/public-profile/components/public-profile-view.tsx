@@ -688,6 +688,7 @@ export default function PublicProfileView({
   reviews,
   employees,
   isEmployeeView = false,
+  onShareDetails,
   hideHero = false,
   branch = null,
   branches = [],
@@ -697,8 +698,10 @@ export default function PublicProfileView({
   card: Card | null;
   reviews: Review[];
   employees: Employee[];
-  /** When true, hides the "Create your own profile" CTA */
+  /** Embedded in a team member's card: no tap counting or auto-save here (the member's card does that). */
   isEmployeeView?: boolean;
+  /** On a team member's card: "Share your details" opens the member's own form, so the contact goes to them. */
+  onShareDetails?: () => void;
   /** When true, hides the hero/header section (used when embedded inside employee view) */
   hideHero?: boolean;
   /** The branch being shown. `profile` already has the branch merged in (applyBranch). */
@@ -1391,11 +1394,11 @@ export default function PublicProfileView({
           </div>
         )}
 
-        {/* Share your details button — triggers visitor details popup */}
-        {!isEmployeeView && (
+        {/* Share your details: on the business page and on team members' cards */}
+        {(!isEmployeeView || onShareDetails) && (
           <button
             type="button"
-            onClick={() => setShowVisitorGate(true)}
+            onClick={() => (onShareDetails ? onShareDetails() : setShowVisitorGate(true))}
             className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[var(--border)] py-4 text-sm font-medium text-[var(--muted-foreground)] transition hover:border-[var(--foreground)] hover:text-[var(--foreground)]"
           >
             <Contact size={16} />
@@ -1403,16 +1406,14 @@ export default function PublicProfileView({
           </button>
         )}
 
-        {/* CTA — hidden on employee views */}
-        {!isEmployeeView && (
-          <Link
+        {/* Create your own profile: also shown on team members' cards */}
+        <Link
             href={`/signup?ref=${encodeURIComponent(handle || profile.slug || card?.public_slug || profile.username || profile.id)}`}
             className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[var(--border)] py-4 text-sm font-medium text-[var(--muted-foreground)] transition hover:border-[var(--foreground)] hover:text-[var(--foreground)]"
           >
             <UserPlus size={16} />
             Create your own Namma Info profile
           </Link>
-        )}
 
         <p className="pt-4 text-center font-mono text-[11px] text-[var(--muted-foreground)]">
           Powered by Namma Info

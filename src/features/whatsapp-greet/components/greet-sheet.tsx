@@ -1,17 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, Loader2, Lock, Pencil, Plus, Send, LayoutTemplate, Trash2 } from "lucide-react";
+import { Check, FileText, Loader2, Lock, Pencil, Plus, Send, LayoutTemplate, Trash2 } from "lucide-react";
 import { createClient } from "@/supabase/client";
 import { useAccount } from "@/hooks/use-account";
 import Sheet, { ui } from "@/components/ui/sheet";
 import { directionsUrl, googleReviewUrl } from "@/lib/utils";
-import { cleanCustomButtons, cleanCustomLinks } from "@/features/custom-links/types";
+import { cleanCustomButtons, cleanCustomLinks, docKeys, docLink } from "@/features/custom-links/types";
 import type { ContactRow } from "@/supabase/database-types";
 import { cleanGreetings, MAX_GREETINGS, type GreetingTemplate } from "../types";
 import {
+  attachmentName,
   defaultGreeting,
   SAMPLE_TEMPLATES,
+  templateFiles,
   templateMessage,
   whatsappUrl,
   type Attachable,
@@ -113,9 +115,29 @@ export default function GreetSheet({ contact, onClose }: { contact: ContactRow; 
   const attachables: Attachable[] = useMemo(() => {
     if (!biz || !sender) return [];
     const list: Attachable[] = [];
+    // Documents get a short branded link (nammainfo.in/doc/<you>/brochure)
+    // in the text, plus the real file for "Send with PDF".
+    const handle = !isOwner && employee ? employee.owner_username : biz.username;
+    const company = biz.business_name;
     if (sender.profileUrl) list.push({ key: "profile", label: "Profile", url: sender.profileUrl });
-    if (biz.brochure_url) list.push({ key: "brochure", label: "Brochure", url: biz.brochure_url });
-    for (const b of cleanCustomButtons(biz.custom_buttons)) list.push({ key: `btn:${b.id}`, label: b.label, url: b.url });
+    if (biz.brochure_url) {
+      list.push({
+        key: "brochure",
+        label: "Brochure",
+        url: handle ? docLink(handle, "brochure") : biz.brochure_url,
+        file: { url: biz.brochure_url, name: attachmentName(company, "Brochure", biz.brochure_url) },
+      });
+    }
+    const buttons = cleanCustomButtons(biz.custom_buttons);
+    const keys = docKeys(buttons);
+    for (const b of buttons) {
+      const short = handle ? docLink(handle, keys.get(b.id) as string) : b.url;
+      list.push(
+        b.kind === "file"
+          ? { key: `btn:${b.id}`, label: b.label, url: short, file: { url: b.url, name: attachmentName(company, b.label, b.url) } }
+          : { key: `btn:${b.id}`, label: b.label, url: b.url }
+      );
+    }
     for (const l of cleanCustomLinks(biz.custom_links)) list.push({ key: `link:${l.id}`, label: l.label, url: l.url });
     if (biz.website) {
       const w = /^https?:\/\//i.test(biz.website) ? biz.website : `https://${biz.website}`;
@@ -125,13 +147,77 @@ export default function GreetSheet({ contact, onClose }: { contact: ContactRow; 
     const dir = directionsUrl(biz);
     if (dir) list.push({ key: "directions", label: "Directions", url: dir });
     return list;
-  }, [biz, sender]);
+  }, [biz, sender, isOwner, employee]);
 
   const name = contact.name && contact.name !== "Business card" ? contact.name : "there";
+
+  // Can this phone share files to apps (WhatsApp) from the browser?
+  // True on Android Chrome and iPhone Safari; false on most desktops.
+  const [canShareFiles, setCanShareFiles] = useState(false);
+  useEffect(() => {
+    try {
+      const probe = new File(["x"], "x.pdf", { type: "application/pdf" });
+      setCanShareFiles(typeof navigator !== "undefined" && !!navigator.canShare?.({ files: [probe] }));
+    } catch {
+      setCanShareFiles(false);
+    }
+  }, []);
+
+  // Download the documents the saved messages use, as soon as the sheet
+  // opens. Sharing must start straight from the tap (browsers block it
+  // after a slow download), so the files have to be ready beforehand.
+  const [files, setFiles] = useState<Record<string, File | "error">>({});
+  useEffect(() => {
+    if (!canShareFiles) return;
+    const needed = new Map<string, NonNullable<Attachable["file"]>>();
+    for (const t of templates) for (const a of templateFiles(t, attachables)) needed.set(a.file!.url, a.file!);
+    let alive = true;
+    needed.forEach(async (f, url) => {
+      if (files[url]) return;
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(String(res.status));
+        const blob = await res.blob();
+        const file = new File([blob], f.name, { type: blob.type || "application/pdf" });
+        if (alive) setFiles((m) => ({ ...m, [url]: file }));
+      } catch {
+        if (alive) setFiles((m) => ({ ...m, [url]: "error" }));
+      }
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canShareFiles, templates, attachables]);
+
+  const [notice, setNotice] = useState<string | null>(null);
 
   function send(text: string) {
     if (!contact.phone) return;
     window.open(whatsappUrl(contact.phone, text), "_blank", "noopener,noreferrer");
+  }
+
+  /** Opens the phone's share sheet with the real file(s) and the message; the user picks WhatsApp, then the chat. */
+  async function sendWithFiles(t: GreetingTemplate) {
+    if (!sender) return;
+    const docs = templateFiles(t, attachables);
+    const ready = docs.map((a) => files[a.file!.url]).filter((f): f is File => f instanceof File);
+    const fallback = templateMessage(t, name, sender, attachables);
+    if (!ready.length) return send(fallback); // files didn't load: send the links instead
+    const text = templateMessage(t, name, sender, attachables, { leaveOutFiles: ready.length === docs.length });
+    // WhatsApp on iPhone sometimes drops the text when a file is attached,
+    // so the message is also copied, ready to paste.
+    try {
+      await navigator.clipboard?.writeText(text);
+    } catch {
+      /* not allowed: fine */
+    }
+    try {
+      await navigator.share({ files: ready, text });
+      setNotice(`Message copied too. If WhatsApp shows only the file, paste the message in ${name.split(" ")[0]}'s chat.`);
+    } catch (e) {
+      if ((e as Error)?.name !== "AbortError") send(fallback);
+    }
   }
 
   async function saveTemplates(next: GreetingTemplate[]) {
@@ -187,6 +273,9 @@ export default function GreetSheet({ contact, onClose }: { contact: ContactRow; 
         />
       ) : (
         <div className="space-y-2.5">
+          {notice && (
+            <p className="rounded-lg bg-[var(--muted)] px-3 py-2 text-xs leading-relaxed text-[var(--foreground)]">{notice}</p>
+          )}
           <MessageCard
             n={1}
             title="Greeting"
@@ -205,6 +294,15 @@ export default function GreetSheet({ contact, onClose }: { contact: ContactRow; 
                   text={templateMessage(t, name, sender, attachables)}
                   onSend={send}
                   onEdit={isOwner ? () => setEditing(i) : undefined}
+                  fileNames={
+                    canShareFiles
+                      ? templateFiles(t, attachables)
+                          .filter((a) => files[a.file!.url] !== "error") // couldn't download: link only
+                          .map((a) => a.file!.name)
+                      : []
+                  }
+                  filesReady={templateFiles(t, attachables).some((a) => files[a.file!.url] instanceof File)}
+                  onSendWithFiles={() => sendWithFiles(t)}
                 />
               );
             }
@@ -238,6 +336,9 @@ function MessageCard({
   onSend,
   onEdit,
   badge,
+  fileNames = [],
+  filesReady = false,
+  onSendWithFiles,
 }: {
   n: number;
   title: string;
@@ -245,7 +346,12 @@ function MessageCard({
   onSend: (text: string) => void;
   onEdit?: () => void;
   badge?: string;
+  /** Documents this message can attach (only on phones that can share files). */
+  fileNames?: string[];
+  filesReady?: boolean;
+  onSendWithFiles?: () => void;
 }) {
+  const withFiles = fileNames.length > 0 && onSendWithFiles;
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--card)]">
       <div className="flex items-center justify-between gap-2 px-3.5 pt-3">
@@ -271,14 +377,45 @@ function MessageCard({
       <p className="line-clamp-5 whitespace-pre-line px-3.5 pt-1.5 text-[13px] leading-relaxed text-[var(--muted-foreground)]">
         {text.replace(/\*/g, "")}
       </p>
-      <div className="px-3.5 pb-3 pt-2.5">
-        <button
-          type="button"
-          onClick={() => onSend(text)}
-          className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#25D366] text-sm font-semibold text-white transition hover:opacity-90"
-        >
-          <Send size={15} /> Send on WhatsApp
-        </button>
+      {withFiles && (
+        <div className="flex flex-wrap gap-1.5 px-3.5 pt-2">
+          {fileNames.map((f) => (
+            <span key={f} className="inline-flex max-w-full items-center gap-1 rounded-md bg-[var(--muted)] px-2 py-1 text-[11px] font-medium text-[var(--foreground)]">
+              <FileText size={11} className="shrink-0" />
+              <span className="truncate">{f}</span>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="space-y-1.5 px-3.5 pb-3 pt-2.5">
+        {withFiles ? (
+          <>
+            <button
+              type="button"
+              onClick={onSendWithFiles}
+              disabled={!filesReady}
+              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#25D366] text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
+            >
+              {filesReady ? <FileText size={15} /> : <Loader2 size={15} className="animate-spin" />}
+              {filesReady ? `Send with ${fileNames.length > 1 ? "files" : "file"}` : "Getting file ready…"}
+            </button>
+            <button
+              type="button"
+              onClick={() => onSend(text)}
+              className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg text-xs font-medium text-[var(--muted-foreground)] transition hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+            >
+              <Send size={13} /> Send as link instead (opens their chat)
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onSend(text)}
+            className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#25D366] text-sm font-semibold text-white transition hover:opacity-90"
+          >
+            <Send size={15} /> Send on WhatsApp
+          </button>
+        )}
       </div>
     </div>
   );
@@ -419,7 +556,10 @@ function TemplateEditor({
             })}
           </div>
         )}
-        <span className={ui.hint}>WhatsApp can&apos;t attach files from a link, so these are sent as links people tap to open.</span>
+        <span className={ui.hint}>
+          Brochure and uploaded files can be sent as the actual file on phones (&ldquo;Send with file&rdquo;), or as a short
+          link like nammainfo.in/doc/yourname/brochure.
+        </span>
       </div>
 
       {error && <p className={ui.error}>{error}</p>}
