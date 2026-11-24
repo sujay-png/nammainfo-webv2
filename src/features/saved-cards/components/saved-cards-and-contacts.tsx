@@ -19,7 +19,7 @@ import {
   Upload,
   Loader2,
   Camera,
-  Sparkles,
+  HeartHandshake,
 } from "lucide-react";
 import { createClient } from "@/supabase/client";
 import { useAccount } from "@/hooks/use-account";
@@ -669,7 +669,7 @@ function ContactSheet({
         </button>
         {contact.phone && (
           <button type="button" onClick={() => setGreeting(true)} className={`${actionBtn} px-2 text-center`}>
-            <Sparkles size={17} />
+            <HeartHandshake size={17} />
             <span className="leading-tight">Greet {(contact.name || "them").split(" ")[0]} on WhatsApp</span>
           </button>
         )}

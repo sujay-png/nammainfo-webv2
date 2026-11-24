@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, Loader2, Lock, Pencil, Plus, Send, Sparkles, Trash2 } from "lucide-react";
+import { Check, Loader2, Lock, Pencil, Plus, Send, LayoutTemplate, Trash2 } from "lucide-react";
 import { createClient } from "@/supabase/client";
 import { useAccount } from "@/hooks/use-account";
 import Sheet, { ui } from "@/components/ui/sheet";
@@ -332,7 +332,7 @@ function TemplateEditor({
       {!initial && (
         <div>
           <p className="mb-1.5 flex items-center gap-1 text-xs font-medium text-[var(--muted-foreground)]">
-            <Sparkles size={12} /> Start from a sample
+            <LayoutTemplate size={12} /> Start from a sample
           </p>
           <div className="flex flex-wrap gap-1.5">
             {SAMPLE_TEMPLATES.map((s) => (

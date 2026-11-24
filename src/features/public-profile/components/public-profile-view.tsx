@@ -1,5 +1,6 @@
 "use client";
 
+import { useScrollLock } from "@/lib/scroll-lock";
 import { useState, useMemo, useEffect } from "react";
 import { saveContactFromUrl } from "@/features/save-contact/lib/save-contact";
 import Link from "next/link";
@@ -1598,13 +1599,7 @@ function ReviewCopiedSheet({
 }) {
   const [copiedAgain, setCopiedAgain] = useState(false);
 
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, []);
+  useScrollLock();
 
   const steps = googleUrl
     ? [

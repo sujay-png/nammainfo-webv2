@@ -1,5 +1,6 @@
 "use client";
 
+import { useScrollLock } from "@/lib/scroll-lock";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BookmarkPlus, X } from "lucide-react";
@@ -77,14 +78,7 @@ export default function SaveCardExitPrompt({
   }, [storageKey]);
 
   // Lock background scroll while open
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [open]);
+  useScrollLock(open);
 
   if (!open) return null;
 
