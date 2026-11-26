@@ -130,8 +130,9 @@ export async function POST(req: Request) {
         .eq("owner_id", user.id);
 
       // Branches use card slots too, and count towards the volume price.
+      // Primary subscription is always 1 seat (extra physical primary cards are one-time ₹500 cards).
       const branchCount = await countBranches(supabase, user.id);
-      const currentTotal = primaryCards + (teamCount || 0) + branchCount;
+      const currentTotal = 1 + (teamCount || 0) + branchCount;
       const res = calculateTeamAddonCost(currentTotal, Number(cardQuantity));
       calculation = {
         unitPrice: res.unitPrice,
@@ -145,9 +146,10 @@ export async function POST(req: Request) {
         .eq("owner_id", user.id)
         .neq("status", "cancelled");
 
-      // Every card renews: primary + team members + branches.
+      // Every active card renews: 1 primary subscription + team members + branches.
+      // Extra ₹500 physical primary cards are one-time hardware costs and are NOT billed on renewal.
       const branchCount = await countBranches(supabase, user.id);
-      const res = calculateRenewalCost(primaryCards, (teamCount || 0) + branchCount);
+      const res = calculateRenewalCost(1, (teamCount || 0) + branchCount);
       calculation = {
         unitPrice: res.unitPrice,
         totalAmount: res.totalAmount,

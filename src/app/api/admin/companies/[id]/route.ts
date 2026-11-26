@@ -167,6 +167,19 @@ export async function GET(
       }
     }
 
+    let referredByName: string | null = null;
+    if (p.referred_by) {
+      const { data: partnerProf } = await supabase
+        .from("profiles")
+        .select("business_name, owner_name, email")
+        .eq("id", p.referred_by)
+        .maybeSingle();
+      if (partnerProf) {
+        referredByName =
+          partnerProf.business_name || partnerProf.owner_name || partnerProf.email || "Partner";
+      }
+    }
+
     const company: CompanyWithEmployees = {
       id: p.id,
       businessName: p.business_name || p.username || "Unnamed Business",
@@ -187,6 +200,12 @@ export async function GET(
       createdAt: p.created_at,
       avatarUrl: p.avatar_url,
       logoUrl: p.logo_url,
+      referredBy: p.referred_by || null,
+      referredByCode: p.referred_by_code || null,
+      referredByName,
+      defaultCardTemplateUrl: p.default_card_template_url || null,
+      nextFollowupAt: p.next_followup_at || null,
+      nextFollowupNote: p.next_followup_note || null,
       cardProcess,
       employees,
 

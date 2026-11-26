@@ -10,8 +10,10 @@ import {
   loadPageData,
   membershipGate,
   publicHandle,
+  resolveEmployeePartnerStatus,
   resolveOwner,
 } from "@/features/branches/services/public-pages.service";
+import { buildEmployeeReferralRef } from "@/lib/affiliate/requests";
 
 /**
  * /<business>/<branch>/<member>: a team member of a branch, e.g.
@@ -66,7 +68,17 @@ export default async function BranchMemberPage({ params }: { params: Params }) {
   const gate = membershipGate(owner);
   if (gate) return gate;
 
-  const { card, reviews, employees } = await loadPageData(owner.id, result.card);
+  const [{ card, reviews, employees }, employeeIsPartner] = await Promise.all([
+    loadPageData(owner.id, result.card),
+    resolveEmployeePartnerStatus((employee as any).user_id),
+  ]);
+  const referralRef =
+    buildEmployeeReferralRef({
+      employeeId: employee.id,
+      employeeIsPartner,
+      ownerHandle: handle,
+    }) ?? undefined;
+
   return (
     <EmployeeProfileView
       employee={employee}
@@ -77,6 +89,7 @@ export default async function BranchMemberPage({ params }: { params: Params }) {
       branch={branch}
       branches={branches}
       handle={handle}
+      referralRef={referralRef}
     />
   );
 }

@@ -210,7 +210,9 @@ export default function EmployeeCardView({
             Get your digital business card and start sharing instantly
           </p>
           <Link
-            href="/signup"
+            href={`/signup?ref=${encodeURIComponent(
+              (employee as any).user_id ? `emp_${employee.id}` : owner.slug || owner.username || owner.id
+            )}`}
             className="inline-flex items-center gap-2 rounded-xl bg-ink-950 px-5 py-2.5 text-xs font-semibold text-white transition hover:bg-ink-800"
           >
             Get Started

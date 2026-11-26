@@ -86,6 +86,8 @@ export interface Profile {
   primary_card_count?: number;
   purchased_id_count?: number;
   subscription_started_at?: string | null;
+  default_card_template_url?: string | null;
+  default_card_design_notes?: string | null;
 
   // 100-Day Free Trial & Milestone Follow-ups
   trial_status?: "none" | "pending_approval" | "approved" | "rejected" | null;
@@ -173,6 +175,9 @@ export interface Employee {
   login_enabled?: boolean;
   /** Branch this member works at (migration 20261112). NULL = main office. */
   branch_id?: string | null;
+  card_design_mode?: "company_template" | "custom_upload" | "team_assist" | null;
+  card_design_url?: string | null;
+  card_design_notes?: string | null;
   created_at: string;
 }
 

@@ -17,7 +17,6 @@ import {
   Download,
   Lock,
   MessageCircle,
-  Plus,
 } from "lucide-react";
 import { Modal } from "@/admin/shared/ui/Modal";
 import { Badge } from "@/admin/shared/ui/Badge";
@@ -42,13 +41,6 @@ import type {
 import { CompanyQrCardRow } from "./CompanyQrCardRow";
 import { buildPublicCardUrl } from "@/admin/shared/lib/card-urls";
 
-export interface SenderNumberOption {
-  number: string;
-  label: string;
-}
-
-const DEFAULT_SENDER_NUMBERS: SenderNumberOption[] = [];
-
 interface CompanyDetailModalProps {
   company: Company | null;
   isOpen: boolean;
@@ -57,6 +49,7 @@ interface CompanyDetailModalProps {
   onUpdateCompany?: (updated: Partial<Company> & { id: string }) => void;
   onDeleteRequest?: (company: Company) => void;
   readOnly?: boolean;
+  userRole?: "admin" | "designer";
   initialTab?: "status" | "overview" | "subscription" | "employees" | "qrcodes";
 }
 
@@ -68,8 +61,18 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
   onUpdateCompany,
   onDeleteRequest,
   readOnly = false,
+  userRole = "admin",
   initialTab,
 }) => {
+  const isDesignerMode = userRole === "designer";
+  const isReadOnlySubscription = readOnly || isDesignerMode;
+  const canToggleMilestone = (stepKey: string) => {
+    if (readOnly && !isDesignerMode) return false;
+    if (isDesignerMode) {
+      return ["card_printed_approved", "card_posted", "card_delivered"].includes(stepKey);
+    }
+    return true;
+  };
   const [details, setDetails] = useState<CompanyWithEmployees | null>(null);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
@@ -93,6 +96,15 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
   // State for toggling lifecycle milestone
   const [togglingMilestoneKey, setTogglingMilestoneKey] = useState<string | null>(null);
 
+  // State for scheduling CRM follow-up
+  const [followupDate, setFollowupDate] = useState<string>(() => {
+    const tmr = new Date(Date.now() + 86_400_000);
+    return tmr.toISOString().slice(0, 10);
+  });
+  const [followupNote, setFollowupNote] = useState<string>("");
+  const [savingFollowup, setSavingFollowup] = useState<boolean>(false);
+  const [followupFeedback, setFollowupFeedback] = useState<string | null>(null);
+
   // State for milestone confirmation modal
   const [confirmStepModal, setConfirmStepModal] = useState<{
     stepKey: string;
@@ -100,51 +112,11 @@ export const CompanyDetailModal: React.FC<CompanyDetailModalProps> = ({
     targetCompleted: boolean;
   } | null>(null);
 
-  // Manual Greetings state (user-managed sender numbers, zero hardcoding)
-  const [senderNumbers, setSenderNumbers] = useState<SenderNumberOption[]>(DEFAULT_SENDER_NUMBERS);
-  const [selectedSenderNumber, setSelectedSenderNumber] = useState<string>("");
+  // Welcome Greetings Modal state
   const [showGreetingModal, setShowGreetingModal] = useState<boolean>(false);
-  const [showManageNumbersModal, setShowManageNumbersModal] = useState<boolean>(false);
-  const [newSenderNumber, setNewSenderNumber] = useState<string>("");
-  const [newSenderLabel, setNewSenderLabel] = useState<string>("");
   const [customGreetingText, setCustomGreetingText] = useState<string>("");
   const [autoMarkGreetingOnSend, setAutoMarkGreetingOnSend] = useState<boolean>(true);
   const [copiedGreeting, setCopiedGreeting] = useState<boolean>(false);
-
-  // Load saved sender numbers from localStorage
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const saved = localStorage.getItem("nammainfo_sender_numbers");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          // Remove any legacy test dummy numbers
-          const clean = parsed.filter(
-            (p: any) =>
-              p &&
-              p.number &&
-              !p.number.includes("91480") &&
-              !p.number.includes("98860")
-          );
-          setSenderNumbers(clean);
-          localStorage.setItem("nammainfo_sender_numbers", JSON.stringify(clean));
-
-          const selected = localStorage.getItem("nammainfo_selected_sender_number");
-          if (selected && clean.some((s: any) => s.number === selected)) {
-            setSelectedSenderNumber(selected);
-          } else if (clean.length > 0) {
-            setSelectedSenderNumber(clean[0].number);
-            localStorage.setItem("nammainfo_selected_sender_number", clean[0].number);
-          } else {
-            setSelectedSenderNumber("");
-            localStorage.removeItem("nammainfo_selected_sender_number");
-          }
-          return;
-        }
-      }
-    } catch {}
-  }, []);
 
   // Instantly initialize form values & details from company props (0ms wait)
   useEffect(() => {
@@ -243,52 +215,6 @@ Requesting you to send us your visiting card design along with your company logo
 Eagerly waiting for your response.`;
 
   const effectiveGreeting = customGreetingText || defaultGreetingMessage;
-
-  const handleSenderNumberChange = (val: string) => {
-    if (val === "__add_new__" || val === "__manage__") {
-      setShowManageNumbersModal(true);
-    } else {
-      setSelectedSenderNumber(val);
-      try {
-        localStorage.setItem("nammainfo_selected_sender_number", val);
-      } catch {}
-    }
-  };
-
-  const handleAddSenderNumber = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const cleanNum = newSenderNumber.trim();
-    if (!cleanNum) return;
-    const cleanLabel = newSenderLabel.trim() || "Admin";
-
-    const updated = [
-      ...senderNumbers.filter((s) => s.number !== cleanNum),
-      { number: cleanNum, label: cleanLabel },
-    ];
-    setSenderNumbers(updated);
-    setSelectedSenderNumber(cleanNum);
-    setNewSenderNumber("");
-    setNewSenderLabel("");
-    try {
-      localStorage.setItem("nammainfo_sender_numbers", JSON.stringify(updated));
-      localStorage.setItem("nammainfo_selected_sender_number", cleanNum);
-    } catch {}
-  };
-
-  const handleRemoveSenderNumber = (numberToRemove: string) => {
-    const updated = senderNumbers.filter((s) => s.number !== numberToRemove);
-    setSenderNumbers(updated);
-    const nextSelected = updated.length > 0 ? updated[0].number : "";
-    setSelectedSenderNumber(nextSelected);
-    try {
-      localStorage.setItem("nammainfo_sender_numbers", JSON.stringify(updated));
-      if (nextSelected) {
-        localStorage.setItem("nammainfo_selected_sender_number", nextSelected);
-      } else {
-        localStorage.removeItem("nammainfo_selected_sender_number");
-      }
-    } catch {}
-  };
 
   const handleSendGreeting = (textToSend = effectiveGreeting) => {
     if (!cleanRecipientPhone) {
@@ -511,7 +437,7 @@ Eagerly waiting for your response.`;
 
   // Toggle individual lifecycle process milestone step
   const handleToggleMilestoneStep = async (stepKey: string, completed: boolean) => {
-    if (readOnly) return;
+    if (!canToggleMilestone(stepKey)) return;
     setTogglingMilestoneKey(stepKey);
     const nowIso = new Date().toISOString();
     const existingProcess = current.cardProcess || {};
@@ -520,6 +446,7 @@ Eagerly waiting for your response.`;
       [stepKey]: {
         completed,
         updated_at: completed ? nowIso : null,
+        updated_by_role: userRole,
       },
     };
 
@@ -544,6 +471,41 @@ Eagerly waiting for your response.`;
       setDetails((prev) => (prev ? { ...prev, cardProcess: existingProcess } : null));
     } finally {
       setTogglingMilestoneKey(null);
+    }
+  };
+
+  const handleScheduleFollowup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!followupDate || !followupNote.trim()) return;
+    setSavingFollowup(true);
+    setFollowupFeedback(null);
+    try {
+      const res = await fetch("/api/staff/followups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          profileId: current.id,
+          dueAt: new Date(`${followupDate}T09:00:00`).toISOString(),
+          followupType: "custom",
+          notes: followupNote.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to schedule follow-up");
+      setFollowupNote("");
+      setFollowupFeedback("Follow-up scheduled and added to Operational Radar.");
+      if (onUpdateCompany) {
+        onUpdateCompany({
+          id: current.id,
+          nextFollowupAt: new Date(`${followupDate}T09:00:00`).toISOString(),
+          nextFollowupNote: followupNote.trim(),
+        });
+      }
+      onRefresh?.({ silent: true });
+    } catch (err: any) {
+      setFollowupFeedback(err.message || "Failed to schedule follow-up");
+    } finally {
+      setSavingFollowup(false);
     }
   };
 
@@ -577,8 +539,8 @@ Eagerly waiting for your response.`;
     },
     {
       key: "customer_responded_designing",
-      title: "Customer responded and card being designed",
-      description: "Customer requirements gathered and card design is in progress",
+      title: "Customer responded and card sent to designer",
+      description: "Customer requirements gathered and card queued in Designer Studio",
     },
     {
       key: "card_printed_approved",
@@ -607,8 +569,8 @@ Eagerly waiting for your response.`;
     },
     {
       key: "customer_responded_designing",
-      title: "Customer responded and card being designed",
-      description: "Customer requirements gathered and card design is in progress",
+      title: "Customer responded and card sent to designer",
+      description: "Customer requirements gathered and card queued in Designer Studio",
     },
     {
       key: "card_printed_approved",
@@ -743,7 +705,7 @@ Eagerly waiting for your response.`;
             >
               Overview & Details
             </button>
-            {!readOnly && (
+            {!isReadOnlySubscription && (
               <button
                 onClick={() => setActiveTab("subscription")}
                 className={`border-b-2 px-3 py-2 text-xs font-semibold uppercase tracking-wider transition-all whitespace-nowrap ${
@@ -843,6 +805,25 @@ Eagerly waiting for your response.`;
                 </div>
               ) : (
                 <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-5">
+                  {/* Partner Responsibility Banner */}
+                  {(current.referredByName || current.referredByCode) && (
+                    <div className="rounded-[5px] border border-[var(--border)] bg-[var(--accent)]/40 px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <div className="space-y-0.5">
+                        <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-[var(--foreground)] block">
+                          Handled by Partner: {current.referredByName || current.referredByCode}
+                        </span>
+                        <span className="text-[11px] text-[var(--muted-foreground)] block">
+                          Partner manages customer greetings, design hand-off &amp; follow-ups. Any updates here sync bi-directionally.
+                        </span>
+                      </div>
+                      {current.referredByCode && (
+                        <span className="rounded-[4px] border border-[var(--border)] bg-[var(--background)] px-2 py-0.5 font-mono text-[10px] font-semibold text-[var(--foreground)]">
+                          {current.referredByCode}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
                   <div>
                     <h4 className="font-headline text-xs font-bold uppercase tracking-wider text-[var(--foreground)]">
                       {current.subscriptionPlan === "pro"
@@ -863,7 +844,11 @@ Eagerly waiting for your response.`;
                       const isCompleted = Boolean(stepData?.completed || (step.isAuto && stepData?.completed !== false));
                       const timestamp = stepData?.updated_at || (step.isAuto ? step.fallbackDate : null);
                       const formattedDate = formatStepTimestamp(timestamp);
+                      const updatedByLabel = stepData?.updated_by_role
+                        ? `by ${stepData.updated_by_role.charAt(0).toUpperCase() + stepData.updated_by_role.slice(1)}${stepData.updated_by_name ? ` (${stepData.updated_by_name})` : ""}`
+                        : null;
                       const isToggling = togglingMilestoneKey === step.key;
+                      const stepEditable = canToggleMilestone(step.key);
 
                       return (
                         <div key={step.key} className="relative flex items-start gap-4 group">
@@ -871,20 +856,28 @@ Eagerly waiting for your response.`;
                           <button
                             type="button"
                             onClick={() => {
-                              if (readOnly || isToggling) return;
+                              if (!stepEditable || isToggling) return;
                               setConfirmStepModal({
                                 stepKey: step.key,
                                 title: step.title,
                                 targetCompleted: !isCompleted,
                               });
                             }}
-                            disabled={readOnly || isToggling}
-                            className={`relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-all cursor-pointer ${
+                            disabled={!stepEditable || isToggling}
+                            className={`relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-all ${
+                              stepEditable ? "cursor-pointer" : "cursor-not-allowed opacity-70"
+                            } ${
                               isCompleted
                                 ? "border-[var(--foreground)] bg-[var(--foreground)] text-[var(--background)] shadow-xs"
                                 : "border-[var(--border)] bg-[var(--background)] hover:border-[var(--foreground)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
                             }`}
-                            title={isCompleted ? "Click to revert" : "Click to mark completed"}
+                            title={
+                              !stepEditable
+                                ? "Managed by Admin"
+                                : isCompleted
+                                ? "Click to revert"
+                                : "Click to mark completed"
+                            }
                           >
                             {isToggling ? (
                               <Loader2 size={13} className="animate-spin text-[var(--foreground)]" />
@@ -897,9 +890,9 @@ Eagerly waiting for your response.`;
 
                           {/* Text and Completion Date with ample breathing space */}
                           <div
-                            className="min-w-0 flex-1 pt-0.5 cursor-pointer select-none"
+                            className={`min-w-0 flex-1 pt-0.5 select-none ${stepEditable ? "cursor-pointer" : ""}`}
                             onClick={() => {
-                              if (readOnly || isToggling) return;
+                              if (!stepEditable || isToggling) return;
                               setConfirmStepModal({
                                 stepKey: step.key,
                                 title: step.title,
@@ -934,37 +927,6 @@ Eagerly waiting for your response.`;
                                 className="mt-3 flex flex-wrap items-center gap-2 pt-2 border-t border-[var(--border)]/50"
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                {senderNumbers.length === 0 ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => setShowManageNumbersModal(true)}
-                                    className="inline-flex items-center gap-1.5 rounded-[5px] border border-dashed border-[var(--border)] hover:border-[var(--foreground)] bg-[var(--background)] px-2.5 py-1 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors cursor-pointer"
-                                    title="Add your sender WhatsApp number"
-                                  >
-                                    <Plus size={13} />
-                                    <span>Add Sender Line</span>
-                                  </button>
-                                ) : (
-                                  <div className="flex items-center gap-1.5 rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-2.5 py-1 text-xs">
-                                    <span className="text-[10px] font-mono uppercase text-[var(--muted-foreground)] font-semibold">From:</span>
-                                    <select
-                                      value={selectedSenderNumber}
-                                      onChange={(e) => handleSenderNumberChange(e.target.value)}
-                                      className="bg-transparent text-xs font-semibold text-[var(--foreground)] outline-none cursor-pointer"
-                                      title="Select sender WhatsApp number"
-                                    >
-                                      {senderNumbers.map((sn) => (
-                                        <option key={sn.number} value={sn.number} className="bg-[var(--card)] text-[var(--foreground)]">
-                                          {sn.label ? `${sn.label} (${sn.number})` : sn.number}
-                                        </option>
-                                      ))}
-                                      <option value="__add_new__" className="bg-[var(--card)] text-[var(--foreground)] font-semibold">
-                                        + Add / Manage numbers...
-                                      </option>
-                                    </select>
-                                  </div>
-                                )}
-
                                 <button
                                   type="button"
                                   onClick={() => handleSendGreeting()}
@@ -990,9 +952,10 @@ Eagerly waiting for your response.`;
                               </div>
                             )}
 
-                            {isCompleted && formattedDate && (
+                            {isCompleted && (formattedDate || updatedByLabel) && (
                               <p className="font-mono text-[10px] text-[var(--muted-foreground)] mt-1 font-medium">
                                 {formattedDate}
+                                {updatedByLabel ? `${formattedDate ? " • " : ""}${updatedByLabel}` : ""}
                               </p>
                             )}
                           </div>
@@ -1000,6 +963,52 @@ Eagerly waiting for your response.`;
                       );
                     })}
                   </div>
+
+                  {/* Schedule Custom Follow-up Reminder (Admin) */}
+                  {!isReadOnlySubscription && (
+                    <form
+                      onSubmit={handleScheduleFollowup}
+                      className="pt-4 border-t border-[var(--border)] space-y-2.5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
+                          Schedule Follow-Up Reminder
+                        </span>
+                        {current.nextFollowupAt && (
+                          <span className="font-mono text-[10px] text-[var(--foreground)]">
+                            Next: {formatDate(current.nextFollowupAt)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <input
+                          type="date"
+                          value={followupDate}
+                          onChange={(e) => setFollowupDate(e.target.value)}
+                          className="rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-2.5 py-1.5 text-xs text-[var(--foreground)] outline-none focus:border-[var(--foreground)]"
+                        />
+                        <input
+                          type="text"
+                          value={followupNote}
+                          onChange={(e) => setFollowupNote(e.target.value)}
+                          placeholder="e.g. Call tomorrow for card confirmation & renewal..."
+                          className="flex-1 rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-xs text-[var(--foreground)] outline-none focus:border-[var(--foreground)]"
+                        />
+                        <Button
+                          type="submit"
+                          variant="secondary"
+                          size="sm"
+                          isLoading={savingFollowup}
+                          disabled={!followupNote.trim()}
+                        >
+                          Schedule
+                        </Button>
+                      </div>
+                      {followupFeedback && (
+                        <p className="text-[11px] text-[var(--muted-foreground)]">{followupFeedback}</p>
+                      )}
+                    </form>
+                  )}
                 </div>
               )}
             </div>
@@ -1565,34 +1574,9 @@ Eagerly waiting for your response.`;
 
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                {senderNumbers.length === 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowManageNumbersModal(true)}
-                    className="inline-flex items-center gap-1.5 rounded-[5px] border border-dashed border-[var(--border)] hover:border-[var(--foreground)] bg-[var(--background)] px-2.5 py-1 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors cursor-pointer"
-                  >
-                    <Plus size={12} />
-                    <span>Add Sender Line</span>
-                  </button>
-                ) : (
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="font-mono text-[10px] uppercase font-semibold text-[var(--muted-foreground)]">Sender Line:</span>
-                    <select
-                      value={selectedSenderNumber}
-                      onChange={(e) => handleSenderNumberChange(e.target.value)}
-                      className="rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-2.5 py-1 text-xs font-semibold text-[var(--foreground)] outline-none cursor-pointer"
-                    >
-                      {senderNumbers.map((sn) => (
-                        <option key={sn.number} value={sn.number} className="bg-[var(--card)] text-[var(--foreground)]">
-                          {sn.label ? `${sn.label} (${sn.number})` : sn.number}
-                        </option>
-                      ))}
-                      <option value="__add_new__" className="bg-[var(--card)] text-[var(--foreground)] font-semibold">
-                        + Add / Manage numbers...
-                      </option>
-                    </select>
-                  </div>
-                )}
+                <span className="text-[11px] text-[var(--muted-foreground)]">
+                  Opens in your currently logged-in WhatsApp Web / WhatsApp App session.
+                </span>
 
                 <button
                   type="button"
@@ -1673,138 +1657,6 @@ Eagerly waiting for your response.`;
                 <ExternalLink size={12} className="opacity-80" />
               </button>
             </div>
-          </div>
-        </Modal>
-      )}
-
-      {/* Manage Sender WhatsApp Numbers Modal */}
-      {showManageNumbersModal && (
-        <Modal
-          isOpen={showManageNumbersModal}
-          onClose={() => setShowManageNumbersModal(false)}
-          title="WhatsApp Sender Numbers"
-          maxWidth="md"
-        >
-          <div className="space-y-4">
-            <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
-              Add the WhatsApp numbers you use to reach out to customers. Numbers added here will appear in the &quot;From&quot; line selector.
-            </p>
-
-            {/* Existing Numbers List */}
-            <div className="space-y-2">
-              <label className="text-[10px] font-mono uppercase tracking-wider text-[var(--muted-foreground)] font-semibold">
-                Saved Sender Numbers ({senderNumbers.length})
-              </label>
-
-              {senderNumbers.length === 0 ? (
-                <div className="rounded-[5px] border border-dashed border-[var(--border)] p-4 text-center text-xs text-[var(--muted-foreground)]">
-                  No sender numbers added yet. Add your number below.
-                </div>
-              ) : (
-                <div className="divide-y divide-[var(--border)] rounded-[5px] border border-[var(--border)] bg-[var(--background)]">
-                  {senderNumbers.map((sn) => {
-                    const isSelected = sn.number === selectedSenderNumber;
-                    return (
-                      <div
-                        key={sn.number}
-                        className="flex items-center justify-between p-2.5 text-xs hover:bg-[var(--accent)]/30 transition-colors"
-                      >
-                        <div
-                          className="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0"
-                          onClick={() => {
-                            setSelectedSenderNumber(sn.number);
-                            try {
-                              localStorage.setItem("nammainfo_selected_sender_number", sn.number);
-                            } catch {}
-                          }}
-                        >
-                          <div
-                            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
-                              isSelected
-                                ? "border-[var(--foreground)] bg-[var(--foreground)] text-[var(--background)]"
-                                : "border-[var(--muted-foreground)]/40"
-                            }`}
-                          >
-                            {isSelected && <Check size={10} />}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="font-semibold text-[var(--foreground)] truncate">
-                              {sn.label || "Admin"}
-                            </div>
-                            <div className="font-mono text-[11px] text-[var(--muted-foreground)]">
-                              {sn.number}
-                            </div>
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveSenderNumber(sn.number)}
-                          className="rounded-[4px] p-1 text-[var(--muted-foreground)] hover:text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer"
-                          title="Remove number"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Add New Number Form */}
-            <form onSubmit={handleAddSenderNumber} className="space-y-3 pt-2 border-t border-[var(--border)]">
-              <label className="text-[10px] font-mono uppercase tracking-wider text-[var(--muted-foreground)] font-semibold">
-                Add New Number
-              </label>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[10px] text-[var(--muted-foreground)] block mb-1">
-                    Label (e.g. Sales, Support, Primary Admin)
-                  </label>
-                  <input
-                    type="text"
-                    value={newSenderLabel}
-                    onChange={(e) => setNewSenderLabel(e.target.value)}
-                    placeholder="e.g. Primary Admin"
-                    className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-2.5 py-1.5 text-xs text-[var(--foreground)] outline-none focus:border-[var(--foreground)]"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[10px] text-[var(--muted-foreground)] block mb-1">
-                    WhatsApp Number
-                  </label>
-                  <input
-                    type="text"
-                    value={newSenderNumber}
-                    onChange={(e) => setNewSenderNumber(e.target.value)}
-                    placeholder="+91 98765 43210"
-                    className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-2.5 py-1.5 text-xs text-[var(--foreground)] font-mono outline-none focus:border-[var(--foreground)]"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-1">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowManageNumbersModal(false)}
-                >
-                  Done
-                </Button>
-                <button
-                  type="submit"
-                  disabled={!newSenderNumber.trim()}
-                  className="inline-flex items-center gap-1.5 rounded-[5px] bg-[var(--foreground)] text-[var(--background)] px-3 py-1.5 text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <Plus size={13} />
-                  <span>Add Number</span>
-                </button>
-              </div>
-            </form>
           </div>
         </Modal>
       )}

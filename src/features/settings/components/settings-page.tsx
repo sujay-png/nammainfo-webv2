@@ -33,6 +33,7 @@ import {
   MapPin,
 } from "lucide-react";
 import UpgradeToProModal from "@/components/UpgradeToProModal";
+import { AffiliateProgramSettings } from "@/features/affiliate/components/AffiliateProgramSettings";
 import RenewalModal from "@/components/RenewalModal";
 import BuyPrimaryCardsModal from "@/components/BuyPrimaryCardsModal";
 import { getMembership } from "@/lib/membership";
@@ -395,6 +396,9 @@ function OwnerSettingsPage() {
           href="mailto:support@nammainfo.in"
         />
       </div>
+
+      {/* Affiliate / Partner Program */}
+      <AffiliateProgramSettings variant="owner" />
 
       <div className="mt-6 border-t border-[var(--border)] pt-4">
         <button

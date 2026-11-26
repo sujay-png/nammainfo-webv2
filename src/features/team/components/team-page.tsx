@@ -37,7 +37,7 @@ import {
   MapPin,
 } from "lucide-react";
 import Link from "next/link";
-import EmployeeLoginAccess, { removeEmployeeLogin } from "@/features/team/components/employee-login-access";
+import EmployeeLoginAccess from "@/features/team/components/employee-login-access";
 import { listMyBranches } from "@/features/branches/services/branches.service";
 import { uniqueSlug, type Branch } from "@/features/branches/types";
 import { absolute, displayLink, employeePath } from "@/features/branches/lib/paths";
@@ -53,13 +53,20 @@ function OwnerTeamPage() {
   const [showRenewalModal, setShowRenewalModal] = useState(false);
   const [editingEmp, setEditingEmp] = useState<Employee | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<Employee | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [newEmp, setNewEmp] = useState({
     name: "",
     designation: "",
     email: "",
     phone: "",
     branch_id: "",
+    card_design_mode: "company_template" as "company_template" | "custom_upload" | "team_assist",
+    card_design_url: "",
+    card_design_notes: "",
   });
+  const [uploadingTemplate, setUploadingTemplate] = useState(false);
+  const [uploadingEmpArtwork, setUploadingEmpArtwork] = useState(false);
+  const [templateNotice, setTemplateNotice] = useState<string | null>(null);
 
   // Crop modal state
   const [cropImage, setCropImage] = useState<{
@@ -124,33 +131,99 @@ function OwnerTeamPage() {
       ...branches.map((b) => b.slug),
     ]);
 
-    const { error } = await supabase.from("employees").insert({
-      owner_id: profile.id,
-      name: newEmp.name,
-      designation: newEmp.designation,
-      email: newEmp.email || null,
-      phone: newEmp.phone || null,
-      slug,
-      ...(newEmp.branch_id ? { branch_id: newEmp.branch_id } : {}),
-      is_premium: true,
-      status: "active",
-      subscription_started_at: profile.subscription_started_at || new Date().toISOString(),
-      subscription_expires_at: profile.membership_expires_at || null,
-    });
+    const { data: insertedEmp, error } = await supabase
+      .from("employees")
+      .insert({
+        owner_id: profile.id,
+        name: newEmp.name,
+        designation: newEmp.designation,
+        email: newEmp.email || null,
+        phone: newEmp.phone || null,
+        slug,
+        ...(newEmp.branch_id ? { branch_id: newEmp.branch_id } : {}),
+        is_premium: true,
+        status: "active",
+        subscription_started_at: profile.subscription_started_at || new Date().toISOString(),
+        subscription_expires_at: profile.membership_expires_at || null,
+      })
+      .select("id")
+      .single();
 
-    if (!error) {
-      setNewEmp({ name: "", designation: "", email: "", phone: "", branch_id: "" });
+    if (!error && insertedEmp) {
+      // Queue card print specification & notify Admin
+      await fetch("/api/team/card-spec", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "submit_card_spec",
+          targetType: "employee",
+          targetId: insertedEmp.id,
+          designMode: newEmp.card_design_mode,
+          designFileUrl: newEmp.card_design_url || null,
+          designNotes: newEmp.card_design_notes || null,
+        }),
+      }).catch(() => {});
+
+      setNewEmp({
+        name: "",
+        designation: "",
+        email: "",
+        phone: "",
+        branch_id: "",
+        card_design_mode: "company_template",
+        card_design_url: "",
+        card_design_notes: "",
+      });
       setShowAdd(false);
       load();
-    } else if (/team slots|card slots/i.test(error.message)) {
+    } else if (error && /team slots|card slots/i.test(error.message)) {
       // The database checks paid slots too (e.g. if this page was out of date).
       alert("No free card slots. Team members and branches share your slots. Please buy more cards first.");
       setShowAdd(false);
       setShowBuyTeamModal(true);
-    } else {
+    } else if (error) {
       alert(`Couldn't add this member: ${error.message}`);
     }
     setSaving(false);
+  }
+
+  async function uploadCardArtworkFile(file: File, prefix: string): Promise<string | null> {
+    if (!profile) return null;
+    const supabase = createClient();
+    const ext = file.name.split(".").pop() || "png";
+    const path = `${profile.id}/card-designs/${prefix}_${Date.now()}.${ext}`;
+    const { error } = await supabase.storage
+      .from("profile-media")
+      .upload(path, file, { upsert: true });
+    if (error) {
+      alert(`Upload failed: ${error.message}`);
+      return null;
+    }
+    return supabase.storage.from("profile-media").getPublicUrl(path).data.publicUrl;
+  }
+
+  async function handleCompanyTemplateUpload(file: File) {
+    setUploadingTemplate(true);
+    setTemplateNotice(null);
+    try {
+      const url = await uploadCardArtworkFile(file, "master_template");
+      if (!url) return;
+      const res = await fetch("/api/team/card-spec", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "save_company_template",
+          templateUrl: url,
+          designNotes: profile?.default_card_design_notes || null,
+        }),
+      });
+      if (res.ok) {
+        setTemplateNotice("Company Master Template saved & synced for Designer.");
+        await load();
+      }
+    } finally {
+      setUploadingTemplate(false);
+    }
   }
 
   async function updateEmployee() {
@@ -173,6 +246,18 @@ function OwnerTeamPage() {
       .eq("id", editingEmp.id);
 
     if (!error) {
+      await fetch("/api/team/card-spec", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "submit_card_spec",
+          targetType: "employee",
+          targetId: editingEmp.id,
+          designMode: editingEmp.card_design_mode || "company_template",
+          designFileUrl: editingEmp.card_design_url || null,
+          designNotes: editingEmp.card_design_notes || null,
+        }),
+      }).catch(() => {});
       setEditingEmp(null);
       load();
     } else {
@@ -182,20 +267,25 @@ function OwnerTeamPage() {
   }
 
   async function deleteEmployee(id: string) {
-    const supabase = createClient();
-    // Remove their login first, so a deleted employee can't keep signing in.
-    const emp = employees.find((e) => e.id === id);
-    if (emp?.user_id) {
-      try {
-        await removeEmployeeLogin(id);
-      } catch (e) {
-        alert(e instanceof Error ? e.message : "Could not remove their login");
+    if (deletingId) return;
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/team/employees/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.deleted) {
+        alert(data?.error || "Could not delete team member. Please try again.");
         return;
       }
+      setEmployees((prev) => prev.filter((e) => e.id !== id));
+      setDeleteConfirm(null);
+      await load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Could not delete team member");
+    } finally {
+      setDeletingId(null);
     }
-    await supabase.from("employees").delete().eq("id", id);
-    setEmployees(employees.filter((e) => e.id !== id));
-    setDeleteConfirm(null);
   }
 
   function handlePhotoSelect(
@@ -309,9 +399,9 @@ function OwnerTeamPage() {
   const usedSlots = employees.length + branches.length;
   const quota = isTrial ? usedSlots : isMember ? Number(profile?.purchased_id_count || 0) : 0;
   const availableSlots = isTrial ? 9999 : Math.max(0, quota - usedSlots);
-  const totalCards = primaryCards + usedSlots;
-  const renewalCost = calculateRenewalCost(primaryCards, usedSlots);
-  const cardBreakdown = `${primaryCards} Primary + ${employees.length} Team${branches.length ? ` + ${branches.length} Branch${branches.length === 1 ? "" : "es"}` : ""}`;
+  const totalCards = 1 + usedSlots;
+  const renewalCost = calculateRenewalCost(1, usedSlots);
+  const cardBreakdown = `1 Primary${primaryCards > 1 ? ` (+${primaryCards - 1} extra physical)` : ""} + ${employees.length} Team${branches.length ? ` + ${branches.length} Branch${branches.length === 1 ? "" : "es"}` : ""}`;
 
   // Check company expiry (15 days alert)
   const now = Date.now();
@@ -435,6 +525,65 @@ function OwnerTeamPage() {
           )}
         </div>
       </div>
+
+      {/* Reusable Company Master Card Template Panel */}
+      {isMember && (
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-2.5 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-xs font-semibold text-[var(--foreground)]">
+                Company Master Card Template
+              </p>
+              <p className="text-[11px] text-[var(--muted-foreground)]">
+                Upload your card design once and reuse it for every team &amp; branch card — just add each employee&apos;s photo and details.
+              </p>
+            </div>
+            <label className="inline-flex items-center gap-1.5 rounded-[5px] border border-[var(--border)] bg-[var(--accent)] hover:bg-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--foreground)] cursor-pointer transition-colors">
+              {uploadingTemplate ? (
+                <Loader2 size={12} className="animate-spin" />
+              ) : (
+                <CreditCard size={12} />
+              )}
+              <span>
+                {uploadingTemplate
+                  ? "Uploading..."
+                  : profile?.default_card_template_url
+                  ? "Update Master Template"
+                  : "Upload Master Template"}
+              </span>
+              <input
+                type="file"
+                accept="image/*,application/pdf"
+                disabled={uploadingTemplate}
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleCompanyTemplateUpload(f);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          </div>
+          {profile?.default_card_template_url && (
+            <div className="flex items-center justify-between rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-[11px]">
+              <span className="text-[var(--foreground)] font-medium">
+                Active template ready for Designer
+              </span>
+              <a
+                href={profile.default_card_template_url}
+                target="_blank"
+                rel="noreferrer"
+                className="underline font-semibold text-[var(--foreground)]"
+              >
+                Preview File
+              </a>
+            </div>
+          )}
+          {templateNotice && (
+            <p className="text-[11px] font-medium text-[var(--foreground)]">{templateNotice}</p>
+          )}
+        </div>
+      )}
 
       {/* Employee list */}
       {employees.length > 0 ? (
@@ -659,9 +808,58 @@ function OwnerTeamPage() {
                   onChange={(v) => setNewEmp({ ...newEmp, branch_id: v })}
                 />
               )}
+              <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--background)] p-3">
+                <label className="block font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
+                  Physical Card Design
+                </label>
+                <select
+                  value={newEmp.card_design_mode}
+                  onChange={(e) =>
+                    setNewEmp({
+                      ...newEmp,
+                      card_design_mode: e.target.value as "company_template" | "custom_upload" | "team_assist",
+                    })
+                  }
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs outline-none"
+                >
+                  <option value="company_template">
+                    Use Company Master Template{profile?.default_card_template_url ? " (Saved)" : ""}
+                  </option>
+                  <option value="custom_upload">Upload Custom Card Artwork</option>
+                  <option value="team_assist">Design by Namma Info Team</option>
+                </select>
+                {newEmp.card_design_mode === "custom_upload" && (
+                  <div className="space-y-1.5">
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      disabled={uploadingEmpArtwork}
+                      onChange={async (e) => {
+                        const f = e.target.files?.[0];
+                        if (!f) return;
+                        setUploadingEmpArtwork(true);
+                        const url = await uploadCardArtworkFile(f, "emp_card");
+                        if (url) setNewEmp((prev) => ({ ...prev, card_design_url: url }));
+                        setUploadingEmpArtwork(false);
+                      }}
+                      className="text-xs"
+                    />
+                    {newEmp.card_design_url && (
+                      <p className="text-[10px] text-emerald-600 font-medium">Custom artwork uploaded.</p>
+                    )}
+                  </div>
+                )}
+                <input
+                  type="text"
+                  value={newEmp.card_design_notes}
+                  onChange={(e) => setNewEmp({ ...newEmp, card_design_notes: e.target.value })}
+                  placeholder="Optional print notes (e.g. include branch phone)..."
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs outline-none"
+                />
+              </div>
               <button
                 onClick={addEmployee}
-                disabled={saving || !newEmp.name || !newEmp.designation}
+                disabled={saving || uploadingEmpArtwork || !newEmp.name || !newEmp.designation}
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--foreground)] py-3 text-sm font-semibold text-[var(--background)] transition hover:opacity-80 disabled:opacity-40"
               >
                 <Check size={14} />
@@ -731,9 +929,69 @@ function OwnerTeamPage() {
                   onChange={(v) => setEditingEmp({ ...editingEmp, branch_id: v || null })}
                 />
               )}
+              <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--background)] p-3">
+                <label className="block font-mono text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
+                  Physical Card Design
+                </label>
+                <select
+                  value={editingEmp.card_design_mode || "company_template"}
+                  onChange={(e) =>
+                    setEditingEmp({
+                      ...editingEmp,
+                      card_design_mode: e.target.value as "company_template" | "custom_upload" | "team_assist",
+                    })
+                  }
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs outline-none"
+                >
+                  <option value="company_template">
+                    Use Company Master Template{profile?.default_card_template_url ? " (Saved)" : ""}
+                  </option>
+                  <option value="custom_upload">Upload Custom Card Artwork</option>
+                  <option value="team_assist">Design by Namma Info Team</option>
+                </select>
+                {editingEmp.card_design_mode === "custom_upload" && (
+                  <div className="space-y-1.5">
+                    {editingEmp.card_design_url && (
+                      <a
+                        href={editingEmp.card_design_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] underline block"
+                      >
+                        View current employee card artwork
+                      </a>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      disabled={uploadingEmpArtwork}
+                      onChange={async (e) => {
+                        const f = e.target.files?.[0];
+                        if (!f) return;
+                        setUploadingEmpArtwork(true);
+                        const url = await uploadCardArtworkFile(f, `emp_${editingEmp.id}`);
+                        if (url) {
+                          setEditingEmp((prev) => (prev ? { ...prev, card_design_url: url } : null));
+                        }
+                        setUploadingEmpArtwork(false);
+                      }}
+                      className="text-xs"
+                    />
+                  </div>
+                )}
+                <input
+                  type="text"
+                  value={editingEmp.card_design_notes ?? ""}
+                  onChange={(e) =>
+                    setEditingEmp({ ...editingEmp, card_design_notes: e.target.value || null })
+                  }
+                  placeholder="Optional print notes..."
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs outline-none"
+                />
+              </div>
               <button
                 onClick={updateEmployee}
-                disabled={saving || !editingEmp.name || !editingEmp.designation}
+                disabled={saving || uploadingEmpArtwork || !editingEmp.name || !editingEmp.designation}
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--foreground)] py-3 text-sm font-semibold text-[var(--background)] transition hover:opacity-80 disabled:opacity-40"
               >
                 <Check size={14} />
@@ -767,17 +1025,19 @@ function OwnerTeamPage() {
             </div>
             <div className="flex gap-3">
               <button
+                disabled={Boolean(deletingId)}
                 onClick={() => setDeleteConfirm(null)}
-                className="flex flex-1 items-center justify-center rounded-xl border border-[var(--border)] py-2.5 text-sm font-semibold transition hover:bg-[var(--accent)]"
+                className="flex flex-1 items-center justify-center rounded-xl border border-[var(--border)] py-2.5 text-sm font-semibold transition hover:bg-[var(--accent)] disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
+                disabled={Boolean(deletingId)}
                 onClick={() => deleteEmployee(deleteConfirm.id)}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-red-500 py-2.5 text-sm font-semibold text-white transition hover:bg-red-600"
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-red-500 py-2.5 text-sm font-semibold text-white transition hover:bg-red-600 disabled:opacity-50"
               >
                 <Trash2 size={14} />
-                Delete
+                {deletingId === deleteConfirm.id ? "Deleting…" : "Delete"}
               </button>
             </div>
           </div>
@@ -812,6 +1072,7 @@ function OwnerTeamPage() {
           profile={profile}
           currentTeamCount={usedSlots}
           onSuccess={() => load()}
+          onRequestRenewal={() => setShowRenewalModal(true)}
         />
       )}
 

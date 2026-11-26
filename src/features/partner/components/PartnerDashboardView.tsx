@@ -33,6 +33,8 @@ import {
   ChevronDown,
   Info,
   Bell,
+  Maximize2,
+  ArrowLeft,
 } from "lucide-react";
 import { Modal } from "@/admin/shared/ui/Modal";
 import { Badge } from "@/admin/shared/ui/Badge";
@@ -117,15 +119,15 @@ export interface PartnerNotification {
 }
 
 const LIFECYCLE_MILESTONES = [
-  { key: "greetings_sent", title: "Greetings message sent", description: "Welcome greeting sent to customer" },
-  { key: "customer_responded_designing", title: "Customer responded and card being designed", description: "Requirements gathered and design in progress" },
-  { key: "card_printed_approved", title: "Card printed customer approved ready for dispatch", description: "Physical card printed and artwork approved" },
-  { key: "card_posted", title: "Card posted", description: "Dispatched via courier (delivery within 5–7 working days)" },
-  { key: "card_delivered", title: "Card delivered", description: "Physical card delivered to customer" },
-  { key: "followup_1_done", title: "After 30 days 1st follow-up done", description: "Day 30 check-in and usage feedback" },
-  { key: "followup_2_done", title: "After 60 days second follow-up done", description: "Day 60 check-in and feature review" },
-  { key: "followup_3_done", title: "After 90 days third follow-up done", description: "Day 90 check-in before expiry" },
-  { key: "pro_active", title: "Pro active", description: "Customer active on paid Pro subscription" },
+  { key: "greetings_sent", title: "Greetings message sent", description: "Welcome greeting sent to customer", partnerEditable: true },
+  { key: "customer_responded_designing", title: "Customer responded and card sent to designer", description: "Requirements gathered and queued in Designer Studio", partnerEditable: true },
+  { key: "card_printed_approved", title: "Card printed customer approved ready for dispatch", description: "Physical card printed and artwork approved (Designer / Admin)", partnerEditable: false },
+  { key: "card_posted", title: "Card posted", description: "Dispatched via courier (Designer / Admin)", partnerEditable: false },
+  { key: "card_delivered", title: "Card delivered", description: "Physical card delivered to customer (Designer / Admin)", partnerEditable: false },
+  { key: "followup_1_done", title: "After 30 days 1st follow-up done", description: "Day 30 check-in and usage feedback", partnerEditable: true },
+  { key: "followup_2_done", title: "After 60 days second follow-up done", description: "Day 60 check-in and feature review", partnerEditable: true },
+  { key: "followup_3_done", title: "After 90 days third follow-up done", description: "Day 90 check-in before expiry", partnerEditable: true },
+  { key: "pro_active", title: "Pro active", description: "Customer active on paid Pro subscription", partnerEditable: false },
 ];
 
 export function PartnerDashboardView() {
@@ -159,12 +161,18 @@ export function PartnerDashboardView() {
   // Filters & sorting
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "trial" | "pro" | "free" | "expired">("all");
-  const [sortBy, setSortBy] = useState<"recently_added" | "a_z" | "z_a">("recently_added");
+  const [sortBy, setSortBy] = useState<"recently_added" | "a_z" | "z_a" | "expiring_soon">("recently_added");
 
   // Customer Detail Drawer / Modal
   const [selectedUser, setSelectedUser] = useState<ReferralUser | null>(null);
   const [detailTab, setDetailTab] = useState<"status" | "refer_status" | "company" | "team" | "notes">("status");
   const [togglingMilestoneKey, setTogglingMilestoneKey] = useState<string | null>(null);
+  const [partnerFollowupDate, setPartnerFollowupDate] = useState<string>(() =>
+    new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)
+  );
+  const [partnerFollowupNote, setPartnerFollowupNote] = useState("");
+  const [savingPartnerFollowup, setSavingPartnerFollowup] = useState(false);
+  const [partnerFollowupMsg, setPartnerFollowupMsg] = useState<string | null>(null);
 
   // Withdrawals
   const [withdrawals, setWithdrawals] = useState<WithdrawalItem[]>([]);
@@ -190,6 +198,9 @@ export function PartnerDashboardView() {
   const mainScrollRef = useRef<HTMLDivElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showAllNotificationsModal, setShowAllNotificationsModal] = useState(false);
+  const [partnerNotifFilter, setPartnerNotifFilter] = useState<"all" | "unread" | "followup" | "renewal" | "signup">("all");
+  const [partnerNotifSearch, setPartnerNotifSearch] = useState("");
   const [readNotificationIds, setReadNotificationIds] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
     try {
@@ -461,6 +472,11 @@ export function PartnerDashboardView() {
         if (sortBy === "z_a") {
           return (b.businessName || "").localeCompare(a.businessName || "");
         }
+        if (sortBy === "expiring_soon") {
+          const aExp = a.membershipExpiresAt ? new Date(a.membershipExpiresAt).getTime() : Number.MAX_SAFE_INTEGER;
+          const bExp = b.membershipExpiresAt ? new Date(b.membershipExpiresAt).getTime() : Number.MAX_SAFE_INTEGER;
+          return aExp - bExp;
+        }
         return 0;
       });
   }, [referrals, statusFilter, searchQuery, sortBy]);
@@ -597,15 +613,23 @@ export function PartnerDashboardView() {
     }
   };
 
-  const partnerSlug = partnerProfile?.slug || partnerProfile?.username || "";
+  const partnerSlug =
+    partnerProfile?.publicSlug ||
+    partnerProfile?.slug ||
+    partnerProfile?.username ||
+    "";
   const publicReferralLink = partnerSlug ? `https://nammainfo.in/${partnerSlug}` : "https://nammainfo.in";
+  const isPartnerSubdomain =
+    typeof window !== "undefined" &&
+    (window.location.hostname.startsWith("partner.") ||
+      window.location.hostname.startsWith("campaign."));
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-[var(--background)] text-[var(--foreground)] select-none">
+    <div className="flex h-dvh md:h-screen w-full overflow-hidden bg-[var(--background)] text-[var(--foreground)] select-none">
       {/* ========================================================================= */}
-      {/* 1. Fixed Left Sidebar (Admin Aesthetic)                                   */}
+      {/* 1. Fixed Left Sidebar (Desktop md+)                                       */}
       {/* ========================================================================= */}
-      <aside className="flex flex-col w-64 h-screen border-r border-[var(--border)] bg-[var(--card)] p-5 shrink-0 justify-between select-none">
+      <aside className="hidden md:flex flex-col w-64 h-screen border-r border-[var(--border)] bg-[var(--card)] p-5 shrink-0 justify-between select-none">
         <div>
           {/* Brand */}
           <div className="pb-6 border-b border-[var(--border)]">
@@ -692,8 +716,19 @@ export function PartnerDashboardView() {
           </nav>
         </div>
 
-        {/* Sidebar Footer: Log Out Only (Exact same as AdminSidebar) */}
-        <div className="border-t border-[var(--border)] pt-4">
+        {/* Sidebar Footer: Back to App (if same origin) & Log Out */}
+        <div className="border-t border-[var(--border)] pt-4 space-y-2">
+          {!isPartnerSubdomain && (
+            <Link
+              href="/dashboard/settings"
+              className="flex w-full items-center justify-between rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs font-medium text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                <ArrowLeft size={14} />
+                <span>Back to App</span>
+              </span>
+            </Link>
+          )}
           <button
             onClick={handleSignOut}
             className="flex w-full items-center justify-between rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs font-medium text-[var(--muted-foreground)] hover:text-red-600 dark:hover:text-red-400 hover:bg-[var(--accent)] transition-colors cursor-pointer"
@@ -709,37 +744,68 @@ export function PartnerDashboardView() {
       {/* ========================================================================= */}
       {/* 2. Main Content View                                                      */}
       {/* ========================================================================= */}
-      <div ref={mainScrollRef} className="flex flex-1 flex-col h-screen overflow-y-auto min-w-0">
-        {/* Top Header Bar (1:1 with AdminHeader) */}
-        <header className="sticky top-0 z-20 flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-[var(--border)] bg-[var(--card)] px-6 py-4 gap-3 shrink-0">
-          <div>
-            <h2 className="font-headline text-lg font-bold text-[var(--foreground)]">
-              {activeTab === "referrals" && "Referral Customers"}
-              {activeTab === "coupon" && "Partner Coupon Code Generator"}
-              {activeTab === "withdrawals" && "Earnings, Balances & Payouts"}
-            </h2>
-            <p className="text-xs text-[var(--muted-foreground)]">
-              Partner: <span className="font-medium text-[var(--foreground)]">{partnerProfile?.business_name || partnerProfile?.owner_name || "Partner Account"}</span>
-            </p>
+      <div ref={mainScrollRef} className="flex flex-1 flex-col h-dvh md:h-screen overflow-y-auto min-w-0">
+        {/* Top Header Bar (Desktop & Mobile responsive matching main app UI) */}
+        <header className="sticky top-0 z-20 flex flex-col md:flex-row md:items-center md:justify-between border-b border-[var(--border)] bg-[var(--card)]/95 backdrop-blur-md px-4 py-3 md:px-6 md:py-4 gap-3 shrink-0">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 md:hidden mb-0.5">
+                <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
+                  Namma Info · Partner
+                </span>
+              </div>
+              <h2 className="font-headline text-base md:text-lg font-bold text-[var(--foreground)] truncate">
+                {activeTab === "referrals" && "Referral Customers"}
+                {activeTab === "coupon" && "Partner Code & Link"}
+                {activeTab === "withdrawals" && "Earnings & Payouts"}
+              </h2>
+              <p className="text-[11px] md:text-xs text-[var(--muted-foreground)] truncate">
+                Partner: <span className="font-medium text-[var(--foreground)]">{partnerProfile?.name || partnerProfile?.businessName || partnerProfile?.business_name || partnerProfile?.owner_name || "Partner Account"}</span>
+              </p>
+            </div>
+
+            {/* Mobile quick Back / Logout controls */}
+            <div className="flex md:hidden items-center gap-1.5 shrink-0">
+              {!isPartnerSubdomain && (
+                <Link
+                  href="/dashboard/settings"
+                  className="inline-flex h-8 items-center gap-1 rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-2.5 text-[11px] font-medium text-[var(--foreground)]"
+                >
+                  <ArrowLeft size={13} />
+                  <span>App</span>
+                </Link>
+              )}
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="flex h-8 w-8 items-center justify-center rounded-[5px] border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)] hover:text-red-500 cursor-pointer"
+                title="Log Out"
+                aria-label="Log Out"
+              >
+                <LogOut size={14} />
+              </button>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center justify-between md:justify-end gap-2">
             {/* Top Right Wallet Chip with Withdraw Button */}
-            <div className="flex items-center gap-2 rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-1.5 shadow-xs">
-              <Banknote size={15} className="text-emerald-600 dark:text-emerald-400" />
-              <div className="flex items-center gap-1.5 font-mono text-xs">
-                <span className="text-[10px] uppercase text-[var(--muted-foreground)] font-semibold">
-                  Withdrawable:
-                </span>
-                <span className="font-bold text-[var(--foreground)]">
-                  ₹{kpis.withdrawableBalance.toLocaleString("en-IN")}
-                </span>
+            <div className="flex flex-1 sm:flex-initial items-center justify-between sm:justify-start gap-2 rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-2.5 md:px-3 py-1.5 shadow-xs">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Banknote size={15} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
+                <div className="flex items-center gap-1 font-mono text-xs">
+                  <span className="text-[10px] uppercase text-[var(--muted-foreground)] font-semibold hidden sm:inline">
+                    Withdrawable:
+                  </span>
+                  <span className="font-bold text-[var(--foreground)]">
+                    ₹{kpis.withdrawableBalance.toLocaleString("en-IN")}
+                  </span>
+                </div>
               </div>
               <button
                 type="button"
                 disabled={kpis.withdrawableBalance <= 0}
                 onClick={() => setShowWithdrawModal(true)}
-                className="ml-1 rounded-[4px] bg-[var(--foreground)] text-[var(--background)] px-2.5 py-1 text-[11px] font-semibold hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition"
+                className="ml-1 rounded-[4px] bg-[var(--foreground)] text-[var(--background)] px-2.5 py-1 text-[11px] font-semibold hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shrink-0"
               >
                 Withdraw
               </button>
@@ -764,7 +830,7 @@ export function PartnerDashboardView() {
 
               {/* Popover Dropdown */}
               {showNotifications && (
-                <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-[8px] border border-[var(--border)] bg-[var(--card)] shadow-2xl z-50 overflow-hidden divide-y divide-[var(--border)] animate-in fade-in duration-100">
+                <div className="fixed sm:absolute left-4 right-4 sm:left-auto sm:right-0 top-24 sm:top-auto sm:mt-2 sm:w-96 rounded-[5px] border border-[var(--border)] bg-[var(--card)] shadow-2xl z-50 overflow-hidden divide-y divide-[var(--border)] animate-in fade-in duration-100">
                   {/* Popover Header */}
                   <div className="p-3 bg-[var(--accent)]/40 flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -777,76 +843,121 @@ export function PartnerDashboardView() {
                         </span>
                       )}
                     </div>
-                    {unreadCount > 0 && (
+                    <div className="flex items-center gap-2 shrink-0">
+                      {unreadCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={markAllAsRead}
+                          className="text-[11px] font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] underline cursor-pointer"
+                        >
+                          Mark all read
+                        </button>
+                      )}
                       <button
                         type="button"
-                        onClick={markAllAsRead}
-                        className="text-[11px] font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] underline cursor-pointer"
+                        onClick={() => {
+                          setShowNotifications(false);
+                          setShowAllNotificationsModal(true);
+                        }}
+                        className="flex h-6 w-6 items-center justify-center rounded-[4px] border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)] cursor-pointer"
+                        title="Open full notifications view"
+                        aria-label="Open full notifications view"
                       >
-                        Mark all as read
+                        <Maximize2 size={12} />
                       </button>
-                    )}
+                    </div>
                   </div>
 
-                  {/* Popover List */}
-                  <div className="max-h-[360px] overflow-y-auto divide-y divide-[var(--border)]">
-                    {notifications.length === 0 ? (
-                      <div className="py-8 text-center text-xs text-[var(--muted-foreground)] p-4 space-y-1">
-                        <CheckCircle2 size={24} className="mx-auto text-emerald-500 mb-2 opacity-80" />
-                        <p className="font-semibold text-[var(--foreground)]">All caught up!</p>
-                        <p className="text-[11px]">No alerts right now. New referral signups, 30-day follow-ups, and expirations will appear here.</p>
-                      </div>
-                    ) : (
-                      notifications.map((n) => {
-                        const isRead = readNotificationIds.has(n.id);
-                        return (
-                          <div
-                            key={n.id}
-                            onClick={() => {
-                              markOneAsRead(n.id);
-                              if (n.targetUser) {
-                                setSelectedUser(n.targetUser);
-                                setDetailTab("status");
-                                setShowNotifications(false);
-                              }
-                            }}
-                            className={`p-3 transition-colors flex items-start gap-3 cursor-pointer ${
-                              isRead
-                                ? "hover:bg-[var(--accent)]/30 opacity-75"
-                                : "bg-[var(--accent)]/20 hover:bg-[var(--accent)]/40"
-                            }`}
-                          >
-                            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[5px] border border-[var(--border)] bg-[var(--background)] mt-0.5 text-[var(--foreground)]">
-                              {n.type === "signup" && <Users size={13} className="text-[var(--foreground)]" />}
-                              {n.type === "followup" && <Clock size={13} className="text-amber-500" />}
-                              {n.type === "renewal" && <Calendar size={13} className="text-blue-500" />}
-                              {n.type === "reward" && <CheckCircle2 size={13} className="text-emerald-500" />}
-                              {n.type === "payout" && <Banknote size={13} className="text-emerald-500" />}
-                            </div>
-
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center justify-between gap-2">
-                                <span className={`text-xs font-semibold ${isRead ? "text-[var(--foreground)]" : "text-[var(--foreground)] font-bold"}`}>
-                                  {n.title}
-                                </span>
-                                {!isRead && (
-                                  <span className="h-1.5 w-1.5 rounded-full bg-rose-500 shrink-0" />
-                                )}
-                              </div>
-                              <p className="text-[11px] text-[var(--muted-foreground)] mt-0.5 leading-relaxed">
-                                {n.message}
+                  {/* Popover List (Past 2 days) */}
+                  {(() => {
+                    const twoDaysCutoff = Date.now() - 2 * 24 * 60 * 60 * 1000;
+                    const recentPartnerNotifs = notifications.filter(
+                      (n) => !n.date || new Date(n.date).getTime() >= twoDaysCutoff
+                    );
+                    return (
+                      <>
+                        <div className="max-h-[340px] overflow-y-auto divide-y divide-[var(--border)]">
+                          {recentPartnerNotifs.length === 0 ? (
+                            <div className="py-8 text-center text-xs text-[var(--muted-foreground)] p-4 space-y-1">
+                              <CheckCircle2 size={24} className="mx-auto text-[var(--muted-foreground)] mb-2 opacity-60" />
+                              <p className="font-semibold text-[var(--foreground)]">No alerts in the past 2 days</p>
+                              <p className="text-[11px]">
+                                {notifications.length > 0
+                                  ? `${notifications.length} older alert${notifications.length === 1 ? "" : "s"} available in full view.`
+                                  : "New referral signups, 30-day follow-ups, and expirations will appear here."}
                               </p>
-                              {n.targetUser && (
-                                <span className="inline-block text-[10px] text-[var(--foreground)] underline font-medium mt-1">
-                                  View customer & card flow →
-                                </span>
-                              )}
                             </div>
+                          ) : (
+                            recentPartnerNotifs.map((n) => {
+                              const isRead = readNotificationIds.has(n.id);
+                              return (
+                                <div
+                                  key={n.id}
+                                  onClick={() => {
+                                    markOneAsRead(n.id);
+                                    if (n.targetUser) {
+                                      setSelectedUser(n.targetUser);
+                                      setDetailTab("status");
+                                      setShowNotifications(false);
+                                    }
+                                  }}
+                                  className={`p-3 transition-colors flex items-start gap-3 cursor-pointer ${
+                                    isRead
+                                      ? "hover:bg-[var(--accent)]/30 opacity-75"
+                                      : "bg-[var(--accent)]/20 hover:bg-[var(--accent)]/40"
+                                  }`}
+                                >
+                                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[5px] border border-[var(--border)] bg-[var(--background)] mt-0.5 text-[var(--foreground)]">
+                                    {n.type === "signup" && <Users size={13} className="text-[var(--foreground)]" />}
+                                    {n.type === "followup" && <Clock size={13} className="text-amber-500" />}
+                                    {n.type === "renewal" && <Calendar size={13} className="text-blue-500" />}
+                                    {n.type === "reward" && <CheckCircle2 size={13} className="text-emerald-500" />}
+                                    {n.type === "payout" && <Banknote size={13} className="text-emerald-500" />}
+                                  </div>
+
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className={`text-xs font-semibold ${isRead ? "text-[var(--foreground)]" : "text-[var(--foreground)] font-bold"}`}>
+                                        {n.title}
+                                      </span>
+                                      {!isRead && (
+                                        <span className="h-1.5 w-1.5 rounded-full bg-rose-500 shrink-0" />
+                                      )}
+                                    </div>
+                                    <p className="text-[11px] text-[var(--muted-foreground)] mt-0.5 leading-relaxed">
+                                      {n.message}
+                                    </p>
+                                    {n.targetUser && (
+                                      <span className="inline-block text-[10px] text-[var(--foreground)] underline font-medium mt-1">
+                                        View customer & card flow →
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                        {notifications.length > 0 && (
+                          <div className="px-3 py-2 bg-[var(--accent)]/20 flex items-center justify-between text-[11px]">
+                            <span className="text-[var(--muted-foreground)] font-mono text-[10px]">
+                              Showing past 2 days ({recentPartnerNotifs.length} of {notifications.length})
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowNotifications(false);
+                                setShowAllNotificationsModal(true);
+                              }}
+                              className="font-semibold text-[var(--foreground)] hover:underline cursor-pointer"
+                            >
+                              View all →
+                            </button>
                           </div>
-                        );
-                      })
-                    )}
-                  </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               )}
             </div>
@@ -868,7 +979,7 @@ export function PartnerDashboardView() {
         </header>
 
         {/* Content Body */}
-        <main className="p-6 space-y-6 flex-1">
+        <main className="p-4 md:p-6 pb-24 md:pb-8 space-y-5 md:space-y-6 flex-1">
           {error && (
             <div className="flex items-start gap-2.5 rounded-[5px] border border-rose-500/20 bg-rose-500/10 p-4 text-xs text-rose-500">
               <AlertCircle size={16} className="shrink-0 mt-0.5" />
@@ -985,32 +1096,87 @@ export function PartnerDashboardView() {
                   ))}
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <div className="relative flex items-center rounded-[5px] border border-[var(--border)] bg-[var(--card)] px-2.5 py-1 text-xs">
-                    <Search size={13} className="text-[var(--muted-foreground)] mr-1.5" />
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  <div className="relative flex flex-1 items-center rounded-[5px] border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-xs">
+                    <Search size={13} className="text-[var(--muted-foreground)] mr-1.5 shrink-0" />
                     <input
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       placeholder="Search company, owner, phone…"
-                      className="bg-transparent text-xs text-[var(--foreground)] outline-none placeholder-[var(--muted-foreground)] w-48 sm:w-60"
+                      className="bg-transparent text-xs text-[var(--foreground)] outline-none placeholder-[var(--muted-foreground)] w-full sm:w-56"
                     />
                   </div>
 
                   <select
                     value={sortBy}
                     onChange={(e: any) => setSortBy(e.target.value)}
-                    className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] px-2.5 py-1 text-xs font-medium text-[var(--foreground)] outline-none cursor-pointer"
+                    className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-xs font-medium text-[var(--foreground)] outline-none cursor-pointer"
                   >
-                    <option value="recently_added">Recently Added</option>
+                    <option value="recently_added">Recent Sign-ups</option>
                     <option value="a_z">Alphabetical (A–Z)</option>
                     <option value="z_a">Alphabetical (Z–A)</option>
+                    <option value="expiring_soon">Expiring Soon</option>
                   </select>
                 </div>
               </div>
 
-              {/* Referrals Customers Table */}
-              <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] overflow-hidden shadow-xs">
+              {/* Referrals Mobile Card List (< md) */}
+              <div className="md:hidden space-y-2.5">
+                {filteredReferrals.length === 0 ? (
+                  <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-6 text-center text-xs text-[var(--muted-foreground)]">
+                    No referrals found matching the selected filter.
+                  </div>
+                ) : (
+                  filteredReferrals.map((r) => {
+                    const isConverted = r.referralStatus === "converted" || r.referralStatus === "claimed";
+                    return (
+                      <div
+                        key={`mobile-${r.id}`}
+                        className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-3.5 space-y-2.5"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-[var(--foreground)] truncate">
+                              {r.businessName}
+                            </p>
+                            <p className="text-xs text-[var(--muted-foreground)] truncate">
+                              {r.ownerName} {r.phone ? `• ${r.phone}` : ""}
+                            </p>
+                          </div>
+                          <span className="shrink-0 rounded-[4px] border border-[var(--border)] bg-[var(--background)] px-2 py-0.5 font-mono text-[10px] font-semibold uppercase text-[var(--foreground)]">
+                            {r.userPlan === "trial" ? "Free Trial" : r.userPlan.toUpperCase()}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 text-[11px] border-t border-[var(--border)] pt-2">
+                          <span className="font-mono text-[var(--muted-foreground)]">
+                            {r.couponCode ? `Code: ${r.couponCode}` : "Card Link"}
+                          </span>
+                          <span className="font-mono font-semibold text-[var(--foreground)]">
+                            {isConverted ? `Claimed: ₹${r.amountConverted}` : `Pending: ₹${r.amountPending}`}
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedUser(r);
+                            setDetailTab("status");
+                          }}
+                          className="flex w-full items-center justify-center gap-1.5 rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs font-semibold text-[var(--foreground)] hover:bg-[var(--accent)] cursor-pointer"
+                        >
+                          <span>Status &amp; Details</span>
+                          <ChevronRight size={13} />
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Referrals Customers Table (Desktop md+) */}
+              <div className="hidden md:block rounded-[5px] border border-[var(--border)] bg-[var(--card)] overflow-hidden shadow-xs">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead>
@@ -1085,7 +1251,7 @@ export function PartnerDashboardView() {
                                     : r.cardProcess?.card_printed_approved?.completed
                                     ? "Card Printed"
                                     : r.cardProcess?.customer_responded_designing?.completed
-                                    ? "Being Designed"
+                                    ? "Sent to Designer"
                                     : r.cardProcess?.greetings_sent?.completed
                                     ? "Greetings Sent"
                                     : "Onboarding"}
@@ -1457,7 +1623,7 @@ export function PartnerDashboardView() {
                         Lifecycle & Physical Card Production Checklist
                       </h4>
                       <p className="text-[11px] text-[var(--muted-foreground)] mt-0.5">
-                        Partners can mark milestones directly. Any update synchronizes automatically with Admin.
+                        Partners manage onboarding greetings, designer hand-off, and follow-ups. Print &amp; courier steps update automatically from Designer / Admin.
                       </p>
                     </div>
                   </div>
@@ -1468,6 +1634,7 @@ export function PartnerDashboardView() {
                       const stepData = selectedUser.cardProcess?.[step.key];
                       const isCompleted = Boolean(stepData?.completed);
                       const isToggling = togglingMilestoneKey === step.key;
+                      const canEdit = step.partnerEditable;
 
                       return (
                         <div
@@ -1476,13 +1643,16 @@ export function PartnerDashboardView() {
                         >
                           <button
                             type="button"
-                            disabled={isToggling}
-                            onClick={() => handleToggleMilestone(step.key, !isCompleted)}
-                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-all cursor-pointer ${
+                            disabled={!canEdit || isToggling}
+                            onClick={() => canEdit && handleToggleMilestone(step.key, !isCompleted)}
+                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-all ${
+                              canEdit ? "cursor-pointer" : "cursor-not-allowed opacity-70"
+                            } ${
                               isCompleted
                                 ? "border-[var(--foreground)] bg-[var(--foreground)] text-[var(--background)] shadow-xs"
                                 : "border-[var(--border)] bg-[var(--card)] hover:border-[var(--foreground)] text-[var(--muted-foreground)]"
                             }`}
+                            title={!canEdit ? "Updated by Designer / Admin" : undefined}
                           >
                             {isToggling ? (
                               <Loader2 size={11} className="animate-spin" />
@@ -1494,7 +1664,7 @@ export function PartnerDashboardView() {
                           </button>
 
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               <span
                                 className={`text-xs font-semibold ${
                                   isCompleted ? "text-[var(--foreground)]" : "text-[var(--muted-foreground)]"
@@ -1502,8 +1672,13 @@ export function PartnerDashboardView() {
                               >
                                 {step.title}
                               </span>
+                              {!canEdit && (
+                                <span className="rounded-[4px] border border-[var(--border)] bg-[var(--card)] px-1.5 py-0.5 text-[9px] font-mono text-[var(--muted-foreground)]">
+                                  Designer / Admin
+                                </span>
+                              )}
                               {isCompleted && (
-                                <span className="rounded-[3px] border border-[var(--border)] bg-[var(--accent)] px-1.5 py-0.2 text-[9px] font-mono text-[var(--foreground)]">
+                                <span className="rounded-[4px] border border-[var(--border)] bg-[var(--accent)] px-1.5 py-0.5 text-[9px] font-mono text-[var(--foreground)]">
                                   Done
                                 </span>
                               )}
@@ -1515,6 +1690,65 @@ export function PartnerDashboardView() {
                         </div>
                       );
                     })}
+                  </div>
+
+                  {/* Schedule Follow-up Reminder (Syncs with Admin) */}
+                  <div className="pt-3 border-t border-[var(--border)] space-y-2">
+                    <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-[var(--muted-foreground)] block">
+                      Schedule Follow-Up Reminder (Synced with Admin)
+                    </span>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        type="date"
+                        value={partnerFollowupDate}
+                        onChange={(e) => setPartnerFollowupDate(e.target.value)}
+                        className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-xs text-[var(--foreground)] outline-none"
+                      />
+                      <input
+                        type="text"
+                        value={partnerFollowupNote}
+                        onChange={(e) => setPartnerFollowupNote(e.target.value)}
+                        placeholder="e.g. Call tomorrow for card confirmation..."
+                        className="flex-1 rounded-[5px] border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-xs text-[var(--foreground)] outline-none"
+                      />
+                      <button
+                        type="button"
+                        disabled={savingPartnerFollowup || !partnerFollowupNote.trim()}
+                        onClick={async () => {
+                          if (!selectedUser || !partnerFollowupNote.trim()) return;
+                          setSavingPartnerFollowup(true);
+                          setPartnerFollowupMsg(null);
+                          try {
+                            const res = await fetch("/api/staff/followups", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                profileId: selectedUser.referredUserId,
+                                dueAt: new Date(`${partnerFollowupDate}T09:00:00`).toISOString(),
+                                followupType: "custom",
+                                notes: partnerFollowupNote.trim(),
+                              }),
+                            });
+                            if (!res.ok) {
+                              const err = await res.json().catch(() => ({}));
+                              throw new Error(err.error || "Failed to schedule");
+                            }
+                            setPartnerFollowupNote("");
+                            setPartnerFollowupMsg("Follow-up scheduled & synced with Admin.");
+                          } catch (err: any) {
+                            setPartnerFollowupMsg(err.message || "Failed to schedule follow-up");
+                          } finally {
+                            setSavingPartnerFollowup(false);
+                          }
+                        }}
+                        className="rounded-[5px] bg-[var(--foreground)] text-[var(--background)] px-3 py-1.5 text-xs font-semibold hover:opacity-90 disabled:opacity-40 cursor-pointer"
+                      >
+                        {savingPartnerFollowup ? "Saving..." : "Schedule"}
+                      </button>
+                    </div>
+                    {partnerFollowupMsg && (
+                      <p className="text-[11px] text-[var(--muted-foreground)]">{partnerFollowupMsg}</p>
+                    )}
                   </div>
                 </div>
 
@@ -1833,6 +2067,184 @@ export function PartnerDashboardView() {
           </div>
         </Modal>
       )}
+      {/* Full-Screen Partner Notifications Modal */}
+      {showAllNotificationsModal && (
+        <Modal
+          isOpen={showAllNotificationsModal}
+          onClose={() => setShowAllNotificationsModal(false)}
+          title="Partner Alerts"
+          description={`Complete notification history (${notifications.length} total • ${unreadCount} unread)`}
+          maxWidth="3xl"
+        >
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(
+                  [
+                    { id: "all", label: "All" },
+                    { id: "unread", label: `Unread (${unreadCount})` },
+                    { id: "followup", label: "Follow-ups" },
+                    { id: "renewal", label: "Renewals" },
+                    { id: "signup", label: "Signups" },
+                  ] as const
+                ).map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setPartnerNotifFilter(f.id)}
+                    className={`rounded-[5px] px-2.5 py-1 text-xs font-semibold cursor-pointer ${
+                      partnerNotifFilter === f.id
+                        ? "bg-[var(--foreground)] text-[var(--background)]"
+                        : "border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1 sm:w-56">
+                  <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]" />
+                  <input
+                    type="text"
+                    value={partnerNotifSearch}
+                    onChange={(e) => setPartnerNotifSearch(e.target.value)}
+                    placeholder="Search alerts..."
+                    className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] pl-8 pr-2.5 py-1 text-xs text-[var(--foreground)] outline-none focus:border-[var(--foreground)]"
+                  />
+                </div>
+                {unreadCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={markAllAsRead}
+                    className="shrink-0 rounded-[5px] border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--accent)] px-2.5 py-1 text-xs font-semibold text-[var(--foreground)] cursor-pointer"
+                  >
+                    Mark all read
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="max-h-[60vh] overflow-y-auto divide-y divide-[var(--border)] rounded-[5px] border border-[var(--border)] bg-[var(--background)]">
+              {(() => {
+                const filtered = notifications.filter((n) => {
+                  const isRead = readNotificationIds.has(n.id);
+                  if (partnerNotifFilter === "unread" && isRead) return false;
+                  if (
+                    partnerNotifFilter !== "all" &&
+                    partnerNotifFilter !== "unread" &&
+                    n.type !== partnerNotifFilter
+                  ) {
+                    return false;
+                  }
+                  if (partnerNotifSearch.trim()) {
+                    const q = partnerNotifSearch.toLowerCase();
+                    return (
+                      n.title.toLowerCase().includes(q) ||
+                      n.message.toLowerCase().includes(q)
+                    );
+                  }
+                  return true;
+                });
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="py-12 text-center text-xs text-[var(--muted-foreground)]">
+                      No notifications match the selected filter.
+                    </div>
+                  );
+                }
+
+                return filtered.map((n) => {
+                  const isRead = readNotificationIds.has(n.id);
+                  return (
+                    <div
+                      key={n.id}
+                      onClick={() => {
+                        markOneAsRead(n.id);
+                        setShowAllNotificationsModal(false);
+                        if (n.targetUser) {
+                          setSelectedUser(n.targetUser);
+                          setDetailTab("status");
+                        }
+                      }}
+                      className={`p-3.5 hover:bg-[var(--accent)]/40 flex items-start gap-3 cursor-pointer ${
+                        !isRead ? "bg-[var(--accent)]/20" : ""
+                      }`}
+                    >
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[5px] border border-[var(--border)] bg-[var(--card)] mt-0.5 text-[var(--foreground)]">
+                        {n.type === "signup" && <Users size={13} />}
+                        {n.type === "followup" && <Clock size={13} className="text-amber-500" />}
+                        {n.type === "renewal" && <Calendar size={13} />}
+                        {n.type === "reward" && <CheckCircle2 size={13} className="text-emerald-500" />}
+                        {n.type === "payout" && <Banknote size={13} className="text-emerald-500" />}
+                      </div>
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`text-xs ${!isRead ? "font-bold" : "font-semibold"} text-[var(--foreground)]`}>
+                            {n.title}
+                          </span>
+                          <span className="font-mono text-[10px] text-[var(--muted-foreground)] shrink-0">
+                            {n.date ? formatDate(n.date) : ""}
+                          </span>
+                        </div>
+                        <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
+                          {n.message}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Mobile Bottom Navigation Bar (< md, matching main app shell UI) */}
+      <nav className="md:hidden fixed inset-x-0 bottom-0 z-40 border-t border-[var(--border)] bg-[var(--background)]/95 backdrop-blur-xl pb-safe">
+        <div className="mx-auto flex max-w-lg items-center justify-around px-2 py-1.5">
+          <button
+            type="button"
+            onClick={() => handleTabChange("referrals")}
+            className={`flex flex-1 flex-col items-center gap-0.5 rounded-[5px] py-1 font-mono text-[10px] font-medium cursor-pointer ${
+              activeTab === "referrals"
+                ? "text-[var(--foreground)] font-semibold"
+                : "text-[var(--muted-foreground)]"
+            }`}
+          >
+            <Users size={18} strokeWidth={activeTab === "referrals" ? 2.2 : 1.7} />
+            <span>Referrals ({referrals.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleTabChange("coupon")}
+            className={`flex flex-1 flex-col items-center gap-0.5 rounded-[5px] py-1 font-mono text-[10px] font-medium cursor-pointer ${
+              activeTab === "coupon"
+                ? "text-[var(--foreground)] font-semibold"
+                : "text-[var(--muted-foreground)]"
+            }`}
+          >
+            <Tag size={18} strokeWidth={activeTab === "coupon" ? 2.2 : 1.7} />
+            <span>Code &amp; Link</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleTabChange("withdrawals")}
+            className={`flex flex-1 flex-col items-center gap-0.5 rounded-[5px] py-1 font-mono text-[10px] font-medium cursor-pointer ${
+              activeTab === "withdrawals"
+                ? "text-[var(--foreground)] font-semibold"
+                : "text-[var(--muted-foreground)]"
+            }`}
+          >
+            <Wallet size={18} strokeWidth={activeTab === "withdrawals" ? 2.2 : 1.7} />
+            <span>Payouts</span>
+          </button>
+        </div>
+      </nav>
     </div>
   );
 }

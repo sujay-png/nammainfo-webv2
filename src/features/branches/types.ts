@@ -29,6 +29,9 @@ export interface Branch {
   products: ServiceItem[] | null;
   is_active: boolean;
   sort_order: number;
+  card_design_mode?: "company_template" | "custom_upload" | "team_assist" | null;
+  card_design_url?: string | null;
+  card_design_notes?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -99,6 +102,9 @@ export function emptyDraft(sortOrder = 0): BranchDraft {
     products: null,
     is_active: true,
     sort_order: sortOrder,
+    card_design_mode: "company_template",
+    card_design_url: null,
+    card_design_notes: null,
   };
 }
 

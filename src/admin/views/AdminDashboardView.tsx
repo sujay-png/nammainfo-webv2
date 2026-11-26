@@ -21,6 +21,7 @@ import { AdminOrdersView } from "@/admin/views/AdminOrdersView";
 import { DesignerDashboardView } from "@/admin/views/DesignerDashboardView";
 import { StaffAccountsView } from "@/admin/widgets/staff-accounts/ui/StaffAccountsView";
 import { AdminCampaignsView } from "@/admin/views/AdminCampaignsView";
+import { AffiliateRequestsView } from "@/admin/views/AffiliateRequestsView";
 import { fetchAdminCompanies } from "@/admin/entities/company/api/company-api";
 import { fetchAdminOrders } from "@/admin/entities/order/api/order-api";
 import { getDaysRemaining } from "@/admin/shared/lib/formatters";
@@ -65,6 +66,7 @@ export const AdminDashboardView: React.FC = () => {
   const [filters, setFilters] = useState<CompanyFilters>({
     search: "",
     tab: "all",
+    sortBy: "recent",
   });
 
   // Modal states
@@ -73,6 +75,7 @@ export const AdminDashboardView: React.FC = () => {
   const [deleteTarget, setDeleteTarget] = useState<Company | null>(null);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [pendingOrdersCount, setPendingOrdersCount] = useState<number>(0);
+  const [pendingAffiliateCount, setPendingAffiliateCount] = useState<number>(0);
   const [userRole, setUserRole] = useState<"admin" | "designer">("admin");
 
   const [unauthorizedEmail, setUnauthorizedEmail] = useState<string | null>(null);
@@ -200,6 +203,14 @@ export const AdminDashboardView: React.FC = () => {
           setPendingOrdersCount(res.stats?.underReviewCount || 0);
         })
         .catch((e) => console.warn("Failed to load initial orders count:", e));
+      fetch("/api/admin/affiliate-requests", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (d?.counts?.pending !== undefined) {
+            setPendingAffiliateCount(d.counts.pending);
+          }
+        })
+        .catch(() => {});
     }
   }, [authLoading, unauthorizedEmail, loadData]);
 
@@ -210,9 +221,9 @@ export const AdminDashboardView: React.FC = () => {
     router.replace(getLoginUrl());
   };
 
-  // Client-side filtering (All, Free Trial, Pro, Expired)
+  // Client-side filtering & sorting (All, Free Trial, Pro, Expired)
   const filteredCompanies = useMemo(() => {
-    return companies.filter((c) => {
+    const matched = companies.filter((c) => {
       if (filters.search.trim()) {
         const query = filters.search.toLowerCase();
         const matchesName = c.businessName?.toLowerCase().includes(query);
@@ -249,6 +260,22 @@ export const AdminDashboardView: React.FC = () => {
       }
 
       return true;
+    });
+
+    const sortBy = filters.sortBy || "recent";
+    return [...matched].sort((a, b) => {
+      if (sortBy === "a_z") {
+        return (a.businessName || "").localeCompare(b.businessName || "");
+      }
+      if (sortBy === "z_a") {
+        return (b.businessName || "").localeCompare(a.businessName || "");
+      }
+      if (sortBy === "expiring_soon") {
+        const aExp = a.membershipExpiresAt ? new Date(a.membershipExpiresAt).getTime() : Number.MAX_SAFE_INTEGER;
+        const bExp = b.membershipExpiresAt ? new Date(b.membershipExpiresAt).getTime() : Number.MAX_SAFE_INTEGER;
+        return aExp - bExp;
+      }
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
   }, [companies, filters]);
 
@@ -289,6 +316,31 @@ export const AdminDashboardView: React.FC = () => {
     setDeleteTarget(company);
     setIsDeleteOpen(true);
   };
+
+  // Urgent operational radar: expiring in <= 3 days or follow-ups due today / tomorrow
+  const urgentOpsAlerts = useMemo(() => {
+    const nowMs = Date.now();
+    const threeDaysMs = 3 * 86_400_000;
+    const twoDaysMs = 2 * 86_400_000;
+    const expiring3d: Company[] = [];
+    const followupsDue: Company[] = [];
+
+    for (const c of companies) {
+      if ((c.subscriptionPlan === "pro" || c.subscriptionPlan === "trial") && c.membershipExpiresAt) {
+        const diff = new Date(c.membershipExpiresAt).getTime() - nowMs;
+        if (diff > 0 && diff <= threeDaysMs) {
+          expiring3d.push(c);
+        }
+      }
+      if (c.nextFollowupAt) {
+        const fDiff = new Date(c.nextFollowupAt).getTime() - nowMs;
+        if (fDiff <= twoDaysMs) {
+          followupsDue.push(c);
+        }
+      }
+    }
+    return { expiring3d, followupsDue };
+  }, [companies]);
 
   // If verifying authentication, show loading state
   if (authLoading) {
@@ -345,30 +397,93 @@ export const AdminDashboardView: React.FC = () => {
         onTabChange={setCurrentTab}
         onSignOut={handleSignOut}
         ordersPendingCount={pendingOrdersCount}
+        affiliatePendingCount={pendingAffiliateCount}
       />
 
       {/* Main Admin Content Area */}
       {currentTab === "orders" ? (
         <AdminOrdersView
-          onOrderCountUpdate={(cnt) => setPendingOrdersCount(cnt)}
+          onOrderCountUpdate={setPendingOrdersCount}
         />
       ) : currentTab === "campaigns" ? (
-        <div className="flex flex-1 flex-col h-full min-h-0 min-w-0 overflow-y-auto">
+        <div className="flex flex-1 flex-col h-full min-h-0 min-w-0 overflow-y-scroll">
           <AdminCampaignsView />
         </div>
+      ) : currentTab === "affiliate_requests" ? (
+        <div className="flex flex-1 flex-col h-full min-h-0 min-w-0 overflow-y-scroll">
+          <AffiliateRequestsView onPendingCountChange={setPendingAffiliateCount} />
+        </div>
       ) : currentTab === "staff" ? (
-        <div className="flex flex-1 flex-col h-full min-h-0 min-w-0 overflow-y-auto">
+        <div className="flex flex-1 flex-col h-full min-h-0 min-w-0 overflow-y-scroll">
           <StaffAccountsView />
         </div>
       ) : (
-        <div className="flex flex-1 flex-col h-screen overflow-y-auto min-w-0">
+        <div className="flex flex-1 flex-col h-screen overflow-y-scroll min-w-0">
           <AdminHeader
             onRefresh={loadData}
             loading={loading}
             totalCompaniesCount={stats.totalCompanies}
+            onSelectNotification={(n) => {
+              if (n.entity_type === "affiliate_request") {
+                setCurrentTab("affiliate_requests");
+                return;
+              }
+              if (n.entity_type === "withdrawal") {
+                setCurrentTab("campaigns");
+                return;
+              }
+              if (n.profile_id) {
+                const match = companies.find((c) => c.id === n.profile_id);
+                if (match) {
+                  handleSelectCompany(match);
+                  return;
+                }
+              }
+              if (n.entity_type === "order") {
+                setCurrentTab("orders");
+              }
+            }}
           />
 
           <main className="flex-1 space-y-6 p-6 w-full pb-16">
+            {/* Operational Alert Radar: <=3d Expiries & Today/Tomorrow Follow-ups */}
+            {(urgentOpsAlerts.expiring3d.length > 0 || urgentOpsAlerts.followupsDue.length > 0) && (
+              <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-3.5 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-[var(--foreground)]">
+                    Action Radar — Expiring Within 3 Days &amp; Upcoming Follow-Ups
+                  </span>
+                  <span className="font-mono text-[10px] text-[var(--muted-foreground)]">
+                    {urgentOpsAlerts.expiring3d.length} expiring ≤3d • {urgentOpsAlerts.followupsDue.length} follow-up{urgentOpsAlerts.followupsDue.length === 1 ? "" : "s"} due
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {urgentOpsAlerts.expiring3d.slice(0, 6).map((c) => {
+                    const days = Math.max(0, Math.ceil((new Date(c.membershipExpiresAt!).getTime() - Date.now()) / 86_400_000));
+                    return (
+                      <button
+                        key={`exp-${c.id}`}
+                        type="button"
+                        onClick={() => handleSelectCompany(c)}
+                        className="rounded-[4px] border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[11px] font-medium text-[var(--foreground)] hover:bg-amber-500/20 transition-colors cursor-pointer"
+                      >
+                        {c.businessName} · {days}d left
+                      </button>
+                    );
+                  })}
+                  {urgentOpsAlerts.followupsDue.slice(0, 6).map((c) => (
+                    <button
+                      key={`fu-${c.id}`}
+                      type="button"
+                      onClick={() => handleSelectCompany(c)}
+                      className="rounded-[4px] border border-[var(--border)] bg-[var(--accent)] px-2 py-1 text-[11px] font-medium text-[var(--foreground)] hover:border-[var(--foreground)] transition-colors cursor-pointer"
+                    >
+                      Follow-up: {c.businessName} ({new Date(c.nextFollowupAt!).toLocaleDateString("en-IN", { day: "numeric", month: "short" })})
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {/* Top 4 KPI Metrics Cards */}
             <KpiMetricsGrid
               stats={stats}
@@ -422,23 +537,8 @@ export const AdminDashboardView: React.FC = () => {
                 loading={loading}
                 onSelectCompany={handleSelectCompany}
               />
-            ) : filters.tab === "trial" ? (
-              /* Dedicated 100-Day Free Trial Table with 20-Day Touchpoints & Custom Extensions */
-              <div className="space-y-4">
-                <CompanyFiltersBar
-                  filters={filters}
-                  onChange={setFilters}
-                  totalFiltered={filteredCompanies.length}
-                />
-                <FreeTrialsTable
-                  companies={filteredCompanies}
-                  loading={loading}
-                  onSelectCompany={handleSelectCompany}
-                  onRefresh={loadData}
-                />
-              </div>
             ) : (
-              /* Unified Companies Registry & Controls */
+              /* Unified Companies Registry & Controls (All, Free Trial, Pro, Expired) */
               <div className="space-y-4">
                 <CompanyFiltersBar
                   filters={filters}
@@ -469,6 +569,7 @@ export const AdminDashboardView: React.FC = () => {
         company={selectedCompany}
         onRefresh={() => loadData({ silent: true })}
         onUpdateCompany={handleUpdateCompanyLocally}
+        userRole={userRole}
       />
 
       {/* Delete Confirmation Modal */}

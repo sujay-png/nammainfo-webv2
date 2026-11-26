@@ -34,7 +34,9 @@ export async function GET() {
     // Verify partner / campaign manager
     const { data: managerProfile } = await admin
       .from("profiles")
-      .select("id, is_partner, is_campaign_manager, role, business_name, owner_name, email, phone")
+      .select(
+        "id, is_partner, is_campaign_manager, role, account_type, business_name, owner_name, email, phone, slug, username"
+      )
       .eq("id", user.id)
       .single();
 
@@ -229,6 +231,42 @@ export async function GET() {
 
     const withdrawableBalance = Math.max(0, totalConvertedAmount - totalTransferred);
 
+    // Resolve public referral slug (including employee profile path for employee Partners)
+    let managerPublicSlug: string = managerProfile.slug || managerProfile.username || "";
+    let employeeDisplayName: string | null = null;
+    let isEmployeePartner = managerProfile.account_type === "employee";
+
+    const { data: empRow } = await admin
+      .from("employees")
+      .select("id, name, slug, owner_id, branch_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (empRow) {
+      isEmployeePartner = true;
+      employeeDisplayName = empRow.name;
+      const { data: ownerProf } = await admin
+        .from("profiles")
+        .select("slug, username, business_name")
+        .eq("id", empRow.owner_id)
+        .maybeSingle();
+      const ownerSeg = ownerProf?.username || ownerProf?.slug;
+      let branchSeg: string | null = null;
+      if (empRow.branch_id) {
+        const { data: b } = await admin
+          .from("branches")
+          .select("slug")
+          .eq("id", empRow.branch_id)
+          .maybeSingle();
+        branchSeg = b?.slug || null;
+      }
+      if (ownerSeg && empRow.slug) {
+        managerPublicSlug = branchSeg
+          ? `${ownerSeg}/${branchSeg}/${empRow.slug}`
+          : `${ownerSeg}/${empRow.slug}`;
+      }
+    }
+
     return NextResponse.json({
       kpis: {
         totalUsers: enrichedReferrals.length,
@@ -243,10 +281,14 @@ export async function GET() {
       referrals: enrichedReferrals,
       manager: {
         id: managerProfile.id,
-        name: managerProfile.owner_name || managerProfile.business_name || "Campaign Manager",
+        name: employeeDisplayName || managerProfile.owner_name || managerProfile.business_name || "Campaign Manager",
         businessName: managerProfile.business_name,
         email: managerProfile.email,
         phone: managerProfile.phone,
+        slug: managerProfile.slug || null,
+        username: managerProfile.username || null,
+        publicSlug: managerPublicSlug || null,
+        isEmployeePartner,
       },
     });
   } catch (err: any) {

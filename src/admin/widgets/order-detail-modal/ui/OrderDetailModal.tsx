@@ -88,8 +88,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       case "on_work":
         return {
           step: 2,
-          label: "Card Designed",
-          description: "Design completed and queued for physical NFC card printing.",
+          label: "Sent to Designer",
+          description: "Customer responded and card forwarded to Designer Studio for printing.",
         };
       case "ready_to_dispatch":
         return {
@@ -128,7 +128,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 
   const STAGES = [
     { key: "under_review", step: 1, label: "Under Review" },
-    { key: "card_designed", step: 2, label: "Card Designed" },
+    { key: "card_designed", step: 2, label: "Sent to Designer" },
     { key: "ready_to_dispatch", step: 3, label: "Ready to Dispatch" },
     { key: "out_for_delivery", step: 4, label: "Out for Delivery" },
     { key: "delivered", step: 5, label: "Delivered" },

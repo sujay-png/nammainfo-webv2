@@ -689,12 +689,13 @@ export default function PublicProfileView({
   branch = null,
   branches = [],
   handle,
+  referralRef,
 }: {
   profile: Profile;
   card: Card | null;
   reviews: Review[];
   employees: Employee[];
-  /** When true, hides the "Create your own profile" CTA */
+  /** When true, hides visitor share details gate */
   isEmployeeView?: boolean;
   /** When true, hides the hero/header section (used when embedded inside employee view) */
   hideHero?: boolean;
@@ -704,6 +705,8 @@ export default function PublicProfileView({
   branches?: BranchSummary[];
   /** The business's link name (username, or the card link it was opened with). */
   handle?: string;
+  /** Explicit referral token (e.g. emp_<id> when an employee is a Partner). */
+  referralRef?: string;
 }) {
   const ownerTheme = getTheme(profile.theme);
   const directionsHref = directionsUrl(profile);
@@ -1393,16 +1396,16 @@ export default function PublicProfileView({
           </button>
         )}
 
-        {/* CTA — hidden on employee views */}
-        {!isEmployeeView && (
-          <Link
-            href={`/signup?ref=${encodeURIComponent(handle || profile.slug || card?.public_slug || profile.username || profile.id)}`}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[var(--border)] py-4 text-sm font-medium text-[var(--muted-foreground)] transition hover:border-[var(--foreground)] hover:text-[var(--foreground)]"
-          >
-            <UserPlus size={16} />
-            Create your own Namma Info profile
-          </Link>
-        )}
+        {/* CTA — shown on both primary company and employee profiles for referral attribution */}
+        <Link
+          href={`/signup?ref=${encodeURIComponent(
+            referralRef || handle || profile.slug || card?.public_slug || profile.username || profile.id
+          )}`}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[var(--border)] py-4 text-sm font-medium text-[var(--muted-foreground)] transition hover:border-[var(--foreground)] hover:text-[var(--foreground)]"
+        >
+          <UserPlus size={16} />
+          Create your own Namma Info profile
+        </Link>
 
         <p className="pt-4 text-center font-mono text-[11px] text-[var(--muted-foreground)]">
           Powered by Namma Info

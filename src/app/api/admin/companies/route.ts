@@ -109,11 +109,15 @@ export async function GET(request: Request) {
         p.role === "admin" ||
         p.role === "designer" ||
         p.subscription_plan === "none" ||
+        p.account_type === "employee" ||
         emailLower === "abhishek.aksharadigital@gmail.com" ||
         emailLower === "aksharadigitalindia@outlook.com";
 
       return !isStaff;
     });
+
+    // Build quick partner lookup map so Admin sees who manages Partner-referred accounts
+    const profileById = new Map<string, any>((profiles || []).map((p: any) => [p.id, p]));
 
     // Admin-only follow-up notes live in their own table (lib/admin-notes).
     const notesMap = await loadAdminNotes(
@@ -123,6 +127,10 @@ export async function GET(request: Request) {
 
     const companies: Company[] = customerProfiles.map((p: any) => {
       const n = notesMap.get(p.id);
+      const partnerRow = p.referred_by ? profileById.get(p.referred_by) : null;
+      const referredByName = partnerRow
+        ? partnerRow.business_name || partnerRow.owner_name || partnerRow.email || "Partner"
+        : null;
       const assignedCount = employeeMap.get(p.id) || 0;
       const latestEmpExpiry = employeeExpiryMap.get(p.id);
       const hasValidEmpExpiry = Boolean(latestEmpExpiry && new Date(latestEmpExpiry).getTime() > now);
@@ -319,6 +327,10 @@ export async function GET(request: Request) {
         isCampaignManager: Boolean(p.is_campaign_manager || p.role === "campaign_manager"),
         referredBy: p.referred_by || null,
         referredByCode: p.referred_by_code || null,
+        referredByName,
+        defaultCardTemplateUrl: p.default_card_template_url || null,
+        nextFollowupAt: p.next_followup_at || null,
+        nextFollowupNote: p.next_followup_note || null,
         cardProcess,
         employees: mappedEmployees,
       };

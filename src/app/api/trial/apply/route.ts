@@ -3,6 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { calculateProfileCompletion } from "@/lib/profile-completion";
 import { createAdminClient } from "@/supabase/admin";
+import { createStaffNotification } from "@/lib/fulfillment/service";
 
 export const dynamic = "force-dynamic";
 
@@ -127,6 +128,17 @@ export async function POST(req: Request) {
         { status: 500 }
       );
     }
+
+    await createStaffNotification(admin, {
+      recipientRole: "admin",
+      eventType: "trial_applied",
+      severity: "action_required",
+      title: `Free Trial Request: ${profile.business_name || profile.owner_name || "New Business"}`,
+      message: `${profile.business_name || profile.owner_name || "A business"} applied for the 100-Day Free Trial (Code: ${rawCoupon}).`,
+      entityType: "profile",
+      entityId: user.id,
+      profileId: user.id,
+    });
 
     return NextResponse.json({
       success: true,

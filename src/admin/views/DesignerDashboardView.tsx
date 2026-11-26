@@ -16,26 +16,91 @@ import {
   LogOut,
   Building2,
   Phone,
-  Mail,
   MapPin,
-  Clock,
   Printer,
   Users,
-  ShieldCheck,
-  MessageSquare,
+  CheckCircle2,
+  Truck,
+  FileText,
+  Image as ImageIcon,
+  ChevronRight,
+  ArrowLeft,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { AdminThemeToggle } from "@/admin/shared/ui/AdminThemeToggle";
 import { Button } from "@/admin/shared/ui/Button";
+import { Modal } from "@/admin/shared/ui/Modal";
 import { formatDate } from "@/admin/shared/lib/formatters";
 import { fetchAdminCompanies } from "@/admin/entities/company/api/company-api";
-import { fetchAdminOrders } from "@/admin/entities/order/api/order-api";
 import { CompanyDetailModal } from "@/admin/widgets/company-detail-modal/ui/CompanyDetailModal";
+import { StaffNotificationsBell } from "@/admin/widgets/notifications/ui/StaffNotificationsBell";
 import { buildPublicCardUrl } from "@/admin/shared/lib/card-urls";
 import type { Company } from "@/admin/entities/company/model/types";
-import type { AdminOrder } from "@/admin/entities/order/model/types";
+import type { FulfillmentStage } from "@/lib/fulfillment/state-machine";
 
-export type DesignerFilterTab = "production" | "all" | "trial" | "pro" | "free";
+export type DesignerSidebarTab =
+  | "production"
+  | "employee_ids"
+  | "directory";
+
+export type DesignerStageFilter =
+  | "sent_to_designer"
+  | "printed_ready"
+  | "posted"
+  | "delivered"
+  | "all";
+
+export interface FulfillmentItemDTO {
+  id: string;
+  jobId: string;
+  profileId: string;
+  targetType: "primary" | "employee" | "branch";
+  employeeId?: string | null;
+  branchId?: string | null;
+  displayName: string;
+  designation?: string | null;
+  phone?: string | null;
+  photoUrl?: string | null;
+  publicCardUrl: string;
+  designMode: "company_template" | "custom_upload" | "team_assist";
+  designFileUrl?: string | null;
+  designNotes?: string | null;
+  isPrinted: boolean;
+}
+
+export interface FulfillmentJobDTO {
+  id: string;
+  profileId: string;
+  orderId?: string | null;
+  jobType: "pro_initial" | "free_trial" | "team_addon" | "primary_addon" | "reprint";
+  stage: FulfillmentStage;
+  cardQuantity: number;
+  masterTemplateUrl?: string | null;
+  designNotes?: string | null;
+  shippingAddress?: Record<string, any>;
+  courierName?: string | null;
+  trackingNumber?: string | null;
+  lastUpdatedByRole?: string | null;
+  lastUpdatedByName?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  isSyntheticTrial?: boolean;
+  company?: {
+    id: string;
+    businessName: string;
+    ownerName: string;
+    phone?: string | null;
+    email?: string | null;
+    username?: string | null;
+    slug?: string | null;
+    subscriptionPlan?: string;
+    logoUrl?: string | null;
+    defaultCardTemplateUrl?: string | null;
+  } | null;
+  items: FulfillmentItemDTO[];
+}
+
+const qrThumbCache = new Map<string, string>();
 
 function getInitials(name: string): string {
   if (!name) return "NI";
@@ -46,598 +111,583 @@ function getInitials(name: string): string {
     .join("");
 }
 
-// Global in-memory cache for generated thumbnail QR data URLs
-const qrThumbCache = new Map<string, string>();
-
-/* ------------------------------------------------------------------ */
-/*  Row Component for Browse Companies (Single unified sleek layout)  */
-/* ------------------------------------------------------------------ */
-
-interface DesignerCompanyRowProps {
-  company: Company;
-  onViewDetails: (company: Company) => void;
-}
-
-const DesignerCompanyRow: React.FC<DesignerCompanyRowProps> = ({
-  company,
-  onViewDetails,
-}) => {
-  const ownerSlug = company.username || company.slug || company.id;
-  const cardUrl = buildPublicCardUrl(ownerSlug);
-  const dlName = `qr-${(company.username || company.businessName).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(() => qrThumbCache.get(cardUrl) || null);
-  const [isGenerating, setIsGenerating] = useState<boolean>(!qrThumbCache.has(cardUrl));
-  const [downloading, setDownloading] = useState<boolean>(false);
-  const [copied, setCopied] = useState<boolean>(false);
+function useQrThumbnail(url: string) {
+  const [dataUrl, setDataUrl] = useState<string | null>(() => qrThumbCache.get(url) || null);
+  const [generating, setGenerating] = useState<boolean>(!qrThumbCache.has(url));
 
   useEffect(() => {
-    if (qrThumbCache.has(cardUrl)) {
-      setQrDataUrl(qrThumbCache.get(cardUrl)!);
-      setIsGenerating(false);
+    if (!url) return;
+    if (qrThumbCache.has(url)) {
+      setDataUrl(qrThumbCache.get(url)!);
+      setGenerating(false);
       return;
     }
-
-    let isMounted = true;
-    setIsGenerating(true);
-
-    // Fast 120px thumbnail (< 1ms per card)
-    QRCode.toDataURL(cardUrl, {
+    let mounted = true;
+    setGenerating(true);
+    QRCode.toDataURL(url, {
       width: 120,
       margin: 1,
       errorCorrectionLevel: "M",
-      color: {
-        dark: "#000000",
-        light: "#ffffff",
-      },
+      color: { dark: "#000000", light: "#ffffff" },
     })
-      .then((dataUrl) => {
-        qrThumbCache.set(cardUrl, dataUrl);
-        if (isMounted) {
-          setQrDataUrl(dataUrl);
-          setIsGenerating(false);
+      .then((res) => {
+        qrThumbCache.set(url, res);
+        if (mounted) {
+          setDataUrl(res);
+          setGenerating(false);
         }
       })
-      .catch((err) => {
-        console.error("Failed to generate QR for:", cardUrl, err);
-        if (isMounted) setIsGenerating(false);
+      .catch(() => {
+        if (mounted) setGenerating(false);
       });
-
     return () => {
-      isMounted = false;
+      mounted = false;
     };
-  }, [cardUrl]);
+  }, [url]);
 
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(cardUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error("Failed to copy URL:", err);
-    }
-  };
+  return { dataUrl, generating };
+}
 
-  const handleDownload = async () => {
-    try {
-      setDownloading(true);
-      // High-res 512x512 with Level H error correction generated strictly on-demand
-      const highRes = await QRCode.toDataURL(cardUrl, {
-        width: 512,
-        margin: 2,
-        errorCorrectionLevel: "H",
-        color: {
-          dark: "#000000",
-          light: "#ffffff",
-        },
-      });
-      const a = document.createElement("a");
-      a.href = highRes;
-      a.download = `${dlName}.png`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    } catch (err) {
-      console.error("Failed to generate high-res QR for download:", err);
-    } finally {
-      setDownloading(false);
-    }
-  };
+async function downloadHighResQr(url: string, filename: string) {
+  const highRes = await QRCode.toDataURL(url, {
+    width: 512,
+    margin: 2,
+    errorCorrectionLevel: "H",
+    color: { dark: "#000000", light: "#ffffff" },
+  });
+  const a = document.createElement("a");
+  a.href = highRes;
+  a.download = `${filename}.png`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
 
-  const planBadge =
-    company.subscriptionPlan === "pro"
-      ? { label: "Pro Plan", style: "border-[var(--foreground)]/30 text-[var(--foreground)] font-semibold" }
-      : company.subscriptionPlan === "trial"
-      ? { label: "Free Trial", style: "border-amber-500/40 text-amber-500 font-semibold" }
-      : { label: "Free Tier", style: "border-[var(--border)] text-[var(--muted-foreground)]" };
+/* ------------------------------------------------------------------ */
+/*  Reusable QR & URL Action Row for Employee/Branch Print Items      */
+/* ------------------------------------------------------------------ */
+
+const PrintItemCard: React.FC<{
+  item: FulfillmentItemDTO;
+  masterTemplateUrl?: string | null;
+  companySlug: string;
+}> = ({ item, masterTemplateUrl, companySlug }) => {
+  const { dataUrl, generating } = useQrThumbnail(item.publicCardUrl);
+  const [copied, setCopied] = useState(false);
+  const [downloadingQr, setDownloadingQr] = useState(false);
+
+  const effectiveDesignUrl =
+    item.designMode === "custom_upload"
+      ? item.designFileUrl
+      : item.designMode === "company_template"
+      ? item.designFileUrl || masterTemplateUrl
+      : null;
+
+  const dlName = `qr-${companySlug}-${item.displayName}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-");
 
   return (
-    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 p-3.5 rounded-[5px] border border-[var(--border)] bg-[var(--card)] hover:border-[var(--foreground)]/30 transition-all shadow-xs">
-      {/* 1. Identity Block */}
-      <div className="flex items-center gap-3 min-w-0 flex-1">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[5px] border border-[var(--border)] bg-[var(--accent)]/50 text-xs font-bold text-[var(--foreground)] overflow-hidden">
-          {company.logoUrl ? (
-            <img src={company.logoUrl} alt={company.businessName} className="h-full w-full object-cover" />
+    <div className="rounded-[5px] border border-[var(--border)] bg-[var(--background)] p-3.5 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+      {/* Identity + Photo Download */}
+      <div className="flex items-start gap-3 min-w-0 flex-1">
+        <div className="relative h-11 w-11 shrink-0 rounded-[5px] border border-[var(--border)] bg-[var(--accent)] overflow-hidden flex items-center justify-center text-xs font-bold text-[var(--foreground)]">
+          {item.photoUrl ? (
+            <img src={item.photoUrl} alt={item.displayName} className="h-full w-full object-cover" />
           ) : (
-            <span>{getInitials(company.businessName)}</span>
+            <span>{getInitials(item.displayName)}</span>
+          )}
+        </div>
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs font-semibold text-[var(--foreground)] truncate">
+              {item.displayName}
+            </span>
+            <span className="rounded-[4px] border border-[var(--border)] bg-[var(--card)] px-1.5 py-0.5 font-mono text-[9px] uppercase text-[var(--muted-foreground)]">
+              {item.targetType}
+            </span>
+            <span className="rounded-[4px] border border-[var(--border)] bg-[var(--accent)] px-1.5 py-0.5 font-mono text-[9px] text-[var(--foreground)]">
+              {item.designMode === "company_template"
+                ? "Company Template"
+                : item.designMode === "custom_upload"
+                ? "Custom Upload"
+                : "Team Design"}
+            </span>
+          </div>
+          <p className="text-[11px] text-[var(--muted-foreground)] truncate">
+            {item.designation || "Card Holder"}
+            {item.phone ? ` • ${item.phone}` : ""}
+          </p>
+          {item.designNotes && (
+            <p className="text-[11px] text-[var(--foreground)] italic">
+              Note: &ldquo;{item.designNotes}&rdquo;
+            </p>
+          )}
+
+          {/* Asset Downloads */}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            {item.photoUrl && (
+              <a
+                href={item.photoUrl}
+                target="_blank"
+                rel="noreferrer"
+                download
+                className="inline-flex items-center gap-1 rounded-[4px] border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--accent)] px-2 py-1 text-[10px] font-medium text-[var(--foreground)]"
+              >
+                <ImageIcon size={11} />
+                <span>Photo</span>
+                <Download size={10} />
+              </a>
+            )}
+            {effectiveDesignUrl && (
+              <a
+                href={effectiveDesignUrl}
+                target="_blank"
+                rel="noreferrer"
+                download
+                className="inline-flex items-center gap-1 rounded-[4px] border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--accent)] px-2 py-1 text-[10px] font-medium text-[var(--foreground)]"
+              >
+                <FileText size={11} />
+                <span>{item.designMode === "custom_upload" ? "Custom Artwork" : "Master Template"}</span>
+                <Download size={10} />
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* URL + 512px QR */}
+      <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 shrink-0">
+        <div className="flex items-center gap-1.5 rounded-[4px] border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 max-w-[260px]">
+          <span className="font-mono text-[10px] text-[var(--muted-foreground)] truncate select-all">
+            {item.publicCardUrl}
+          </span>
+          <button
+            type="button"
+            onClick={async () => {
+              await navigator.clipboard.writeText(item.publicCardUrl);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            }}
+            className="shrink-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)] cursor-pointer"
+            title="Copy card URL"
+          >
+            {copied ? <Check size={11} className="text-emerald-500" /> : <Copy size={11} />}
+          </button>
+          <a
+            href={item.publicCardUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="shrink-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+            title="Open live card"
+          >
+            <ExternalLink size={11} />
+          </a>
+        </div>
+
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] bg-white p-0.5 border border-[var(--border)]">
+          {generating ? (
+            <Loader2 size={12} className="animate-spin text-neutral-400" />
+          ) : dataUrl ? (
+            <img src={dataUrl} alt={`QR ${item.displayName}`} className="h-full w-full object-contain" />
+          ) : (
+            <QrCode size={15} className="text-neutral-400" />
           )}
         </div>
 
+        <button
+          type="button"
+          disabled={!dataUrl || downloadingQr}
+          onClick={async () => {
+            setDownloadingQr(true);
+            try {
+              await downloadHighResQr(item.publicCardUrl, dlName);
+            } finally {
+              setDownloadingQr(false);
+            }
+          }}
+          className="inline-flex items-center gap-1.5 rounded-[5px] border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--accent)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--foreground)] cursor-pointer disabled:opacity-50"
+        >
+          {downloadingQr ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+          <span>QR 512px</span>
+        </button>
+      </div>
+    </div>
+  );
+};
+
+/* ------------------------------------------------------------------ */
+/*  Primary / Trial Production Card                                   */
+/* ------------------------------------------------------------------ */
+
+const DesignerProductionJobCard: React.FC<{
+  job: FulfillmentJobDTO;
+  company?: Company;
+  busyStage: boolean;
+  onTransition: (job: FulfillmentJobDTO, stage: FulfillmentStage) => void;
+  onOpenPostedModal: (job: FulfillmentJobDTO) => void;
+  onViewCompany: (company: Company) => void;
+}> = ({ job, company, busyStage, onTransition, onOpenPostedModal, onViewCompany }) => {
+  const ownerSlug = company?.username || company?.slug || job.company?.username || job.company?.slug || job.profileId;
+  const cardUrl = buildPublicCardUrl(ownerSlug);
+  const { dataUrl, generating } = useQrThumbnail(cardUrl);
+  const [copied, setCopied] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  const bizName = company?.businessName || job.company?.businessName || "Unnamed Business";
+  const ownerName = company?.ownerName || job.company?.ownerName || "Owner";
+  const phone = company?.phoneNumber || company?.phone || job.company?.phone || job.shippingAddress?.phone;
+  const cardDetails = job.shippingAddress?.cardDetails;
+  const designFileUrl = job.masterTemplateUrl || cardDetails?.fileUrl || job.items[0]?.designFileUrl;
+
+  const jobTypeBadge =
+    job.jobType === "free_trial"
+      ? "Free Trial"
+      : job.jobType === "team_addon"
+      ? `Team Batch (${job.cardQuantity})`
+      : job.jobType === "primary_addon"
+      ? `Extra Primary (${job.cardQuantity})`
+      : "Pro Card";
+
+  return (
+    <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4 space-y-4">
+      {/* Header Row */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[5px] border border-[var(--border)] bg-[var(--accent)] font-headline text-xs font-bold text-[var(--foreground)] overflow-hidden">
+            {company?.logoUrl || job.company?.logoUrl ? (
+              <img src={(company?.logoUrl || job.company?.logoUrl)!} alt="" className="h-full w-full object-cover" />
+            ) : (
+              getInitials(bizName)
+            )}
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h4 className="font-headline text-sm font-bold text-[var(--foreground)] truncate">
+                {bizName}
+              </h4>
+              <span className="rounded-[4px] border border-[var(--border)] bg-[var(--accent)] px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase text-[var(--foreground)]">
+                {jobTypeBadge}
+              </span>
+              <span className="rounded-[4px] border border-[var(--border)] bg-[var(--background)] px-1.5 py-0.5 font-mono text-[9px] text-[var(--muted-foreground)]">
+                {job.cardQuantity} {job.cardQuantity === 1 ? "Card" : "Cards"}
+              </span>
+            </div>
+            <p className="text-[11px] text-[var(--muted-foreground)] mt-0.5">
+              Owner: <span className="font-medium text-[var(--foreground)]">{ownerName}</span>
+              {phone ? ` • ${phone}` : ""}
+              {job.courierName || job.trackingNumber
+                ? ` • Courier: ${job.courierName || ""} ${job.trackingNumber || ""}`
+                : ""}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {company && (
+            <button
+              type="button"
+              onClick={() => onViewCompany(company)}
+              className="rounded-[5px] border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--accent)] px-2.5 py-1.5 text-xs font-medium text-[var(--foreground)] cursor-pointer"
+            >
+              Details &amp; Status
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Assets + QR Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <div className="rounded-[5px] border border-[var(--border)] bg-[var(--background)] p-3.5 space-y-2.5">
+          <div className="flex items-center justify-between border-b border-[var(--border)] pb-2">
+            <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+              Design &amp; Print Specs
+            </span>
+            {designFileUrl && (
+              <a
+                href={designFileUrl}
+                target="_blank"
+                rel="noreferrer"
+                download
+                className="inline-flex items-center gap-1 rounded-[4px] bg-[var(--foreground)] text-[var(--background)] px-2.5 py-1 text-[10px] font-semibold hover:opacity-90"
+              >
+                <Download size={11} />
+                <span>Download Artwork</span>
+              </a>
+            )}
+          </div>
+
+          <div className="text-xs space-y-1.5">
+            {cardDetails?.companyName && (
+              <p className="text-[var(--foreground)]">
+                <span className="text-[var(--muted-foreground)]">Card Name: </span>
+                <span className="font-semibold">{cardDetails.companyName}</span>
+              </p>
+            )}
+            {(job.designNotes || cardDetails?.designNotes) && (
+              <p className="text-[var(--foreground)] italic">
+                &ldquo;{job.designNotes || cardDetails?.designNotes}&rdquo;
+              </p>
+            )}
+            {!designFileUrl && !job.designNotes && !cardDetails?.designNotes && (
+              <p className="text-[11px] text-[var(--muted-foreground)]">
+                Use verified company profile logo, name, and details for card layout.
+              </p>
+            )}
+            {job.shippingAddress?.city && (
+              <p className="flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)] pt-1 border-t border-[var(--border)]">
+                <MapPin size={11} />
+                <span>
+                  Ship to: {job.shippingAddress.fullName || ownerName} • {job.shippingAddress.city}
+                  {job.shippingAddress.state ? `, ${job.shippingAddress.state}` : ""}
+                  {job.shippingAddress.pincode ? ` (${job.shippingAddress.pincode})` : ""}
+                </span>
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-[5px] border border-[var(--border)] bg-[var(--background)] p-3.5 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[5px] bg-white p-1 border border-[var(--border)]">
+              {generating ? (
+                <Loader2 size={14} className="animate-spin text-neutral-400" />
+              ) : dataUrl ? (
+                <img src={dataUrl} alt={`QR ${bizName}`} className="h-full w-full object-contain" />
+              ) : (
+                <QrCode size={18} className="text-neutral-400" />
+              )}
+            </div>
+            <div className="min-w-0 flex-1 space-y-1">
+              <span className="text-[10px] font-mono uppercase text-[var(--muted-foreground)] block">
+                NFC Card QR Target (512px Level H)
+              </span>
+              <div className="flex items-center gap-1.5 rounded-[4px] border border-[var(--border)] bg-[var(--card)] px-2 py-1">
+                <span className="font-mono text-[10px] text-[var(--muted-foreground)] truncate flex-1 select-all">
+                  {cardUrl}
+                </span>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(cardUrl);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1500);
+                  }}
+                  className="text-[var(--muted-foreground)] hover:text-[var(--foreground)] cursor-pointer"
+                >
+                  {copied ? <Check size={11} className="text-emerald-500" /> : <Copy size={11} />}
+                </button>
+                <a href={cardUrl} target="_blank" rel="noreferrer" className="text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
+                  <ExternalLink size={11} />
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            disabled={!dataUrl || downloading}
+            onClick={async () => {
+              setDownloading(true);
+              try {
+                await downloadHighResQr(cardUrl, `qr-${ownerSlug}`);
+              } finally {
+                setDownloading(false);
+              }
+            }}
+            className="shrink-0 inline-flex items-center gap-1.5 rounded-[5px] border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-[var(--foreground)] cursor-pointer disabled:opacity-50"
+          >
+            {downloading ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+            <span>QR</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Designer Fulfillment Stage Actions (Auto-Syncs to Admin) */}
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[var(--border)]">
+        <span className="font-mono text-[10px] text-[var(--muted-foreground)]">
+          Updated {formatDate(job.updatedAt)}
+          {job.lastUpdatedByRole ? ` • by ${job.lastUpdatedByRole}` : ""}
+        </span>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {job.stage === "sent_to_designer" && (
+            <button
+              type="button"
+              disabled={busyStage}
+              onClick={() => onTransition(job, "printed_ready")}
+              className="inline-flex items-center gap-1.5 rounded-[5px] bg-[var(--foreground)] text-[var(--background)] px-3 py-1.5 text-xs font-semibold hover:opacity-90 cursor-pointer disabled:opacity-50"
+            >
+              {busyStage ? <Loader2 size={12} className="animate-spin" /> : <Printer size={12} />}
+              <span>Mark Card Printed</span>
+            </button>
+          )}
+
+          {(job.stage === "sent_to_designer" || job.stage === "printed_ready") && (
+            <button
+              type="button"
+              disabled={busyStage}
+              onClick={() => onOpenPostedModal(job)}
+              className="inline-flex items-center gap-1.5 rounded-[5px] border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-[var(--foreground)] cursor-pointer disabled:opacity-50"
+            >
+              <Truck size={12} />
+              <span>Mark Card Posted</span>
+            </button>
+          )}
+
+          {(job.stage === "sent_to_designer" || job.stage === "printed_ready" || job.stage === "posted") && (
+            <button
+              type="button"
+              disabled={busyStage}
+              onClick={() => onTransition(job, "delivered")}
+              className="inline-flex items-center gap-1.5 rounded-[5px] border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-[var(--foreground)] cursor-pointer disabled:opacity-50"
+            >
+              <CheckCircle2 size={12} />
+              <span>Mark Card Delivered</span>
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ------------------------------------------------------------------ */
+/*  Directory Row                                                      */
+/* ------------------------------------------------------------------ */
+
+const DirectoryCompanyRow: React.FC<{
+  company: Company;
+  onViewDetails: (c: Company) => void;
+}> = ({ company, onViewDetails }) => {
+  const ownerSlug = company.username || company.slug || company.id;
+  const cardUrl = buildPublicCardUrl(ownerSlug);
+  const { dataUrl, generating } = useQrThumbnail(cardUrl);
+  const [copied, setCopied] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  return (
+    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 p-3.5 rounded-[5px] border border-[var(--border)] bg-[var(--card)] hover:border-[var(--foreground)]/30 transition-all">
+      <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[5px] border border-[var(--border)] bg-[var(--accent)] text-xs font-bold text-[var(--foreground)] overflow-hidden">
+          {company.logoUrl ? (
+            <img src={company.logoUrl} alt={company.businessName} className="h-full w-full object-cover" />
+          ) : (
+            getInitials(company.businessName)
+          )}
+        </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-xs text-[var(--foreground)] truncate max-w-[200px] sm:max-w-[280px]">
+            <span className="font-semibold text-xs text-[var(--foreground)] truncate">
               {company.businessName}
             </span>
-            <span className={`font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded-[4px] border ${planBadge.style}`}>
-              {planBadge.label}
+            <span className="rounded-[4px] border border-[var(--border)] bg-[var(--accent)] px-1.5 py-0.5 font-mono text-[9px] uppercase text-[var(--foreground)]">
+              {company.subscriptionPlan === "pro"
+                ? "Pro"
+                : company.subscriptionPlan === "trial"
+                ? "Free Trial"
+                : "Free"}
             </span>
           </div>
           <p className="font-mono text-[11px] text-[var(--muted-foreground)] truncate mt-0.5">
-            Owner: {company.ownerName}
-            {company.phoneNumber || company.phone ? ` • ${company.phoneNumber || company.phone}` : ""}
-            {company.assignedIdCount ? ` • ${company.assignedIdCount} Team Member${company.assignedIdCount === 1 ? "" : "s"}` : ""}
+            {company.ownerName}
+            {company.assignedIdCount ? ` • ${company.assignedIdCount} Team IDs` : ""}
           </p>
         </div>
       </div>
 
-      {/* 2. Public Card URL Pill */}
-      <div className="flex items-center gap-1.5 min-w-0 lg:w-[38%] rounded-[4px] border border-[var(--border)] bg-[var(--background)] px-2.5 py-1.5">
-        <span className="font-mono text-[11px] text-[var(--muted-foreground)] truncate flex-1 select-all" title={cardUrl}>
-          {cardUrl}
-        </span>
-        <button
-          onClick={handleCopy}
-          className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[3px] hover:bg-[var(--accent)] text-[10px] font-mono text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors cursor-pointer"
-          title="Copy URL"
-        >
-          {copied ? (
-            <>
-              <Check size={11} className="text-emerald-500" />
-              <span className="text-emerald-500 font-semibold">Copied</span>
-            </>
-          ) : (
-            <>
-              <Copy size={11} />
-              <span>Copy</span>
-            </>
-          )}
-        </button>
-        <a
-          href={cardUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="shrink-0 inline-flex items-center justify-center h-5 w-5 rounded-[3px] hover:bg-[var(--accent)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
-          title="Open profile in new tab"
-        >
-          <ExternalLink size={11} />
-        </a>
-      </div>
-
-      {/* 3. QR Thumbnail & Production Actions */}
-      <div className="flex items-center gap-2 justify-end shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-[var(--border)]">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] bg-white p-0.5 border border-[var(--border)] shadow-2xs">
-          {isGenerating ? (
-            <Loader2 size={13} className="animate-spin text-neutral-400" />
-          ) : qrDataUrl ? (
-            <img src={qrDataUrl} alt={`QR ${company.businessName}`} className="h-full w-full object-contain" />
-          ) : (
-            <QrCode size={16} className="text-neutral-400" />
-          )}
-        </div>
-
-        <button
-          onClick={handleDownload}
-          disabled={!qrDataUrl || isGenerating || downloading}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[5px] border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--accent)] text-xs font-semibold text-[var(--foreground)] transition-colors cursor-pointer disabled:opacity-50"
-          title="Download 512x512 High-Res PNG"
-        >
-          {downloading ? (
-            <Loader2 size={13} className="animate-spin text-[var(--foreground)]" />
-          ) : (
-            <Download size={13} />
-          )}
-          <span>{downloading ? "Generating..." : "Download QR"}</span>
-        </button>
-
-        <button
-          onClick={() => onViewDetails(company)}
-          className="inline-flex items-center gap-1 px-3 py-2 rounded-[5px] border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--accent)] text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors cursor-pointer"
-          title="View card assets, team members & design details"
-        >
-          <span>Assets & Team</span>
-          <ExternalLink size={11} />
-        </button>
-      </div>
-    </div>
-  );
-};
-
-/* ------------------------------------------------------------------ */
-/*  Order Card Component for In Production Queue                      */
-/* ------------------------------------------------------------------ */
-
-interface InProductionOrderCardProps {
-  order: AdminOrder;
-  company?: Company;
-  onViewCompany: (company: Company) => void;
-}
-
-const InProductionOrderCard: React.FC<InProductionOrderCardProps> = ({
-  order,
-  company,
-  onViewCompany,
-}) => {
-  const ownerSlug = company?.username || company?.slug || company?.id || order.profileId;
-  const cardUrl = buildPublicCardUrl(ownerSlug);
-  const dlName = `qr-${(company?.username || order.businessName).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-  const cardDetails = order.cardDetails || order.shippingAddress?.cardDetails;
-  const finalDesignUrl = order.designUrl || cardDetails?.fileUrl;
-
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(() => qrThumbCache.get(cardUrl) || null);
-  const [isGenerating, setIsGenerating] = useState<boolean>(!qrThumbCache.has(cardUrl));
-  const [downloading, setDownloading] = useState<boolean>(false);
-  const [copied, setCopied] = useState<boolean>(false);
-
-  const phoneRaw = order.phone || cardDetails?.contactNumber || company?.phoneNumber || company?.phone;
-  const cleanPhone = phoneRaw ? phoneRaw.replace(/[^0-9]/g, "") : "";
-  const waLink = cleanPhone ? `https://wa.me/91${cleanPhone.slice(-10)}` : null;
-
-  useEffect(() => {
-    if (qrThumbCache.has(cardUrl)) {
-      setQrDataUrl(qrThumbCache.get(cardUrl)!);
-      setIsGenerating(false);
-      return;
-    }
-
-    let isMounted = true;
-    setIsGenerating(true);
-
-    // Fast 120px thumbnail (< 1ms)
-    QRCode.toDataURL(cardUrl, {
-      width: 120,
-      margin: 1,
-      errorCorrectionLevel: "M",
-      color: {
-        dark: "#000000",
-        light: "#ffffff",
-      },
-    })
-      .then((dataUrl) => {
-        qrThumbCache.set(cardUrl, dataUrl);
-        if (isMounted) {
-          setQrDataUrl(dataUrl);
-          setIsGenerating(false);
-        }
-      })
-      .catch((err) => {
-        console.error("Failed to generate QR for order:", cardUrl, err);
-        if (isMounted) setIsGenerating(false);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [cardUrl]);
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(cardUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error("Failed to copy URL:", err);
-    }
-  };
-
-  const handleDownload = async () => {
-    try {
-      setDownloading(true);
-      // High-res 512x512 with Level H error correction generated strictly on-demand
-      const highRes = await QRCode.toDataURL(cardUrl, {
-        width: 512,
-        margin: 2,
-        errorCorrectionLevel: "H",
-        color: {
-          dark: "#000000",
-          light: "#ffffff",
-        },
-      });
-      const a = document.createElement("a");
-      a.href = highRes;
-      a.download = `${dlName}.png`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    } catch (err) {
-      console.error("Failed to generate high-res QR for download:", err);
-    } finally {
-      setDownloading(false);
-    }
-  };
-
-  const isTeamOrder = order.orderType === "team_addon" || (order.cardQuantity && order.cardQuantity > 1);
-
-  return (
-    <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-4 shadow-xs">
-      {/* 1. Header Bar: Order Identity & Meta */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border)] pb-3.5">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h4 className="font-headline text-sm font-bold text-[var(--foreground)]">
-              {order.businessName}
-            </h4>
-            <span className="font-mono text-[9px] uppercase px-2 py-0.5 rounded-[4px] border border-[var(--border)] bg-[var(--accent)] font-semibold text-[var(--foreground)]">
-              IN PRODUCTION
-            </span>
-            <span className="font-mono text-[11px] text-[var(--muted-foreground)]">
-              Order #{order.id.slice(0, 8).toUpperCase()}
-            </span>
-            <span className="font-mono text-[10px] text-[var(--muted-foreground)]">
-              • Placed on {formatDate(order.createdAt)}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-3 text-xs text-[var(--muted-foreground)] flex-wrap">
-            <span>Customer: <strong className="text-[var(--foreground)] font-medium">{order.ownerName}</strong></span>
-            {order.email && <span>• {order.email}</span>}
-            {phoneRaw && (
-              <span className="flex items-center gap-1.5 font-mono">
-                • {phoneRaw}
-                {waLink && (
-                  <a
-                    href={waLink}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[3px] border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--accent)] text-[10px] font-sans text-emerald-500 font-semibold transition-colors"
-                    title="Verify artwork with customer on WhatsApp"
-                  >
-                    <MessageSquare size={10} />
-                    <span>WhatsApp</span>
-                  </a>
-                )}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Right side: Order Type & View Details */}
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="font-mono text-xs px-2 py-1 rounded-[4px] border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] font-semibold">
-            {isTeamOrder ? `Team Cards (${order.cardQuantity} Cards)` : "Pro NFC Card (1 Card)"}
+      <div className="flex items-center gap-2 justify-end shrink-0">
+        <div className="flex items-center gap-1.5 rounded-[4px] border border-[var(--border)] bg-[var(--background)] px-2 py-1 max-w-[240px]">
+          <span className="font-mono text-[10px] text-[var(--muted-foreground)] truncate select-all">
+            {cardUrl}
           </span>
-
-          {company && (
-            <button
-              onClick={() => onViewCompany(company)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[5px] border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--accent)] text-xs text-[var(--foreground)] font-medium transition-colors cursor-pointer"
-            >
-              <span>Full Profile</span>
-              <ExternalLink size={11} />
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={async () => {
+              await navigator.clipboard.writeText(cardUrl);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            }}
+            className="text-[var(--muted-foreground)] hover:text-[var(--foreground)] cursor-pointer"
+          >
+            {copied ? <Check size={11} className="text-emerald-500" /> : <Copy size={11} />}
+          </button>
         </div>
-      </div>
 
-      {/* 2. Main Two-Column Production Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Left Column: Customer Design Asset / Artwork Specifications */}
-        <div className="rounded-[5px] border border-[var(--border)] bg-[var(--background)] p-4 space-y-3">
-          <div className="flex items-center justify-between border-b border-[var(--border)] pb-2">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)] font-semibold block">
-              Customer Artwork & Engraving Specs
-            </span>
-            {finalDesignUrl && (
-              <span className="font-mono text-[10px] text-emerald-500 font-semibold">
-                Uploaded Asset Available
-              </span>
-            )}
-          </div>
-
-          {finalDesignUrl ? (
-            <div className="flex items-start gap-3.5">
-              <a
-                href={finalDesignUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="block h-20 w-32 shrink-0 rounded-[4px] border border-[var(--border)] overflow-hidden bg-white/5 hover:opacity-90 transition-opacity"
-                title="Click to view full size artwork"
-              >
-                <img
-                  src={finalDesignUrl}
-                  alt="Customer Card Artwork"
-                  className="h-full w-full object-cover"
-                />
-              </a>
-              <div className="space-y-2 flex-1 min-w-0">
-                <p className="text-xs text-[var(--foreground)] font-medium">
-                  Customer uploaded visiting card design.
-                </p>
-                <p className="text-[11px] text-[var(--muted-foreground)] leading-snug">
-                  Use for physical card UV printing or laser engraving alignment.
-                </p>
-                <a
-                  href={finalDesignUrl}
-                  target="_blank"
-                  download
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--accent)] text-xs font-semibold text-[var(--foreground)] transition-colors cursor-pointer"
-                >
-                  <Download size={12} />
-                  <span>Download Artwork File</span>
-                </a>
-              </div>
-            </div>
-          ) : cardDetails ? (
-            <div className="space-y-2.5 text-xs">
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                {cardDetails.companyName && (
-                  <div>
-                    <span className="text-[10px] text-[var(--muted-foreground)] uppercase font-mono block">Company Name</span>
-                    <span className="font-medium text-[var(--foreground)]">{cardDetails.companyName}</span>
-                  </div>
-                )}
-                {cardDetails.ownerName && (
-                  <div>
-                    <span className="text-[10px] text-[var(--muted-foreground)] uppercase font-mono block">Cardholder Name</span>
-                    <span className="font-medium text-[var(--foreground)]">{cardDetails.ownerName}</span>
-                  </div>
-                )}
-                {cardDetails.contactNumber && (
-                  <div>
-                    <span className="text-[10px] text-[var(--muted-foreground)] uppercase font-mono block">Contact Phone</span>
-                    <span className="font-mono font-medium text-[var(--foreground)]">{cardDetails.contactNumber}</span>
-                  </div>
-                )}
-                {cardDetails.companyAddress && (
-                  <div>
-                    <span className="text-[10px] text-[var(--muted-foreground)] uppercase font-mono block">Address</span>
-                    <span className="text-[11px] text-[var(--foreground)] line-clamp-1">{cardDetails.companyAddress}</span>
-                  </div>
-                )}
-              </div>
-
-              {cardDetails.designNotes && (
-                <div className="rounded-[4px] border border-[var(--border)] bg-[var(--card)] p-2.5">
-                  <span className="text-[10px] text-[var(--muted-foreground)] uppercase font-mono block">Customer Instructions</span>
-                  <p className="text-xs text-[var(--foreground)] italic mt-0.5 leading-relaxed">&ldquo;{cardDetails.designNotes}&rdquo;</p>
-                </div>
-              )}
-
-              {cardDetails.logoUrl && (
-                <div className="flex items-center justify-between pt-2 border-t border-[var(--border)]">
-                  <div className="flex items-center gap-2">
-                    <img
-                      src={cardDetails.logoUrl}
-                      alt="Logo"
-                      className="h-8 w-8 rounded-[4px] object-cover border border-[var(--border)]"
-                    />
-                    <span className="text-xs text-[var(--muted-foreground)]">High-Res Brand Logo</span>
-                  </div>
-                  <a
-                    href={cardDetails.logoUrl}
-                    target="_blank"
-                    download
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[4px] border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--accent)] text-xs font-medium text-[var(--foreground)]"
-                  >
-                    <Download size={11} />
-                    <span>Download Logo</span>
-                  </a>
-                </div>
-              )}
-            </div>
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[4px] bg-white p-0.5 border border-[var(--border)]">
+          {generating ? (
+            <Loader2 size={12} className="animate-spin text-neutral-400" />
+          ) : dataUrl ? (
+            <img src={dataUrl} alt="" className="h-full w-full object-contain" />
           ) : (
-            <div className="p-4 text-xs text-[var(--muted-foreground)] rounded-[4px] border border-dashed border-[var(--border)] text-center">
-              No custom artwork file uploaded. Use company name, logo & details from verified profile.
-            </div>
-          )}
-
-          {/* Shipping destination quick reference */}
-          {order.shippingAddress && (order.shippingAddress.city || order.shippingAddress.state) && (
-            <div className="pt-2 border-t border-[var(--border)] flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)]">
-              <MapPin size={12} className="shrink-0" />
-              <span>
-                Ship to: {order.shippingAddress.fullName || order.ownerName} • {order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.pincode ? `(${order.shippingAddress.pincode})` : ""}
-              </span>
-            </div>
+            <QrCode size={14} className="text-neutral-400" />
           )}
         </div>
 
-        {/* Right Column: Print-Ready QR Code & Link Verification */}
-        <div className="rounded-[5px] border border-[var(--border)] bg-[var(--background)] p-4 flex flex-col justify-between space-y-3">
-          <div>
-            <div className="flex items-center justify-between border-b border-[var(--border)] pb-2">
-              <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)] font-semibold block">
-                NFC Smart Card QR Target (512x512 PNG)
-              </span>
-              <span className="font-mono text-[10px] text-[var(--muted-foreground)]">
-                Error Correction: Level H
-              </span>
-            </div>
+        <button
+          type="button"
+          disabled={!dataUrl || downloading}
+          onClick={async () => {
+            setDownloading(true);
+            try {
+              await downloadHighResQr(cardUrl, `qr-${ownerSlug}`);
+            } finally {
+              setDownloading(false);
+            }
+          }}
+          className="inline-flex items-center gap-1 rounded-[5px] border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--accent)] px-2.5 py-1.5 text-xs font-semibold text-[var(--foreground)] cursor-pointer"
+        >
+          <Download size={12} />
+          <span>QR</span>
+        </button>
 
-            <div className="flex items-center gap-4 mt-3">
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[5px] bg-white p-1 border border-[var(--border)] shadow-xs">
-                {isGenerating ? (
-                  <Loader2 size={16} className="animate-spin text-neutral-400" />
-                ) : qrDataUrl ? (
-                  <img src={qrDataUrl} alt={`QR code for ${order.businessName}`} className="h-full w-full object-contain" />
-                ) : (
-                  <QrCode size={22} className="text-neutral-400" />
-                )}
-              </div>
-
-              <div className="space-y-1.5 min-w-0 flex-1">
-                <span className="text-xs font-semibold text-[var(--foreground)] block">
-                  Primary Card Print Asset
-                </span>
-                <div className="flex items-center gap-1.5 rounded-[4px] border border-[var(--border)] bg-[var(--card)] px-2.5 py-1">
-                  <span className="font-mono text-[11px] text-[var(--muted-foreground)] truncate flex-1 select-all" title={cardUrl}>
-                    {cardUrl}
-                  </span>
-                  <button
-                    onClick={handleCopy}
-                    className="shrink-0 inline-flex items-center gap-1 text-[10px] font-mono text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-                  >
-                    {copied ? <Check size={11} className="text-emerald-500" /> : <Copy size={11} />}
-                  </button>
-                  <a
-                    href={cardUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="shrink-0 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-                  >
-                    <ExternalLink size={11} />
-                  </a>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="pt-3 border-t border-[var(--border)] flex items-center gap-2">
-            <button
-              onClick={handleDownload}
-              disabled={!qrDataUrl || isGenerating || downloading}
-              className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-[5px] bg-[var(--foreground)] text-[var(--background)] text-xs font-semibold hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50"
-            >
-              {downloading ? (
-                <Loader2 size={13} className="animate-spin text-[var(--background)]" />
-              ) : (
-                <Download size={13} />
-              )}
-              <span>{downloading ? "Generating Print QR..." : "Download High-Res Print QR"}</span>
-            </button>
-
-            {isTeamOrder && company && (
-              <button
-                onClick={() => onViewCompany(company)}
-                className="inline-flex items-center gap-1.5 py-2.5 px-3 rounded-[5px] border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--accent)] text-xs font-medium text-[var(--foreground)] transition-colors cursor-pointer shrink-0"
-                title="View and download individual high-res QR codes for each team member"
-              >
-                <Users size={13} />
-                <span>Team QRs ({order.cardQuantity})</span>
-              </button>
-            )}
-          </div>
-        </div>
+        <button
+          type="button"
+          onClick={() => onViewDetails(company)}
+          className="inline-flex items-center gap-1 rounded-[5px] border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--accent)] px-2.5 py-1.5 text-xs font-medium text-[var(--foreground)] cursor-pointer"
+        >
+          <span>Manage</span>
+          <ChevronRight size={12} />
+        </button>
       </div>
     </div>
   );
 };
 
 /* ------------------------------------------------------------------ */
-/*  Main Designer Dashboard View Component                            */
+/*  Main Designer Console (Matches Admin & Partner Shell 1:1)         */
 /* ------------------------------------------------------------------ */
 
 export const DesignerDashboardView: React.FC = () => {
   const router = useRouter();
   const [userEmail, setUserEmail] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
-  const [activeTab, setActiveTab] = useState<DesignerFilterTab>("production");
+  const [activeTab, setActiveTab] = useState<DesignerSidebarTab>("directory");
+  const [stageFilter, setStageFilter] = useState<DesignerStageFilter>("sent_to_designer");
+  const [sortBy, setSortBy] = useState<"recent" | "a_z" | "z_a">("recent");
   const [search, setSearch] = useState<string>("");
 
-  // Data
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [orders, setOrders] = useState<AdminOrder[]>([]);
+  const [jobs, setJobs] = useState<FulfillmentJobDTO[]>([]);
+  const [busyJobId, setBusyJobId] = useState<string | null>(null);
 
-  // Selected company modal in read-only mode
+  // Employee IDs Company Drill-down state
+  const [selectedEmpCompanyId, setSelectedEmpCompanyId] = useState<string | null>(null);
+
+  // Posted Modal (optional Courier / Tracking Number)
+  const [postedTargetJob, setPostedTargetJob] = useState<FulfillmentJobDTO | null>(null);
+  const [courierName, setCourierName] = useState("");
+  const [trackingNumber, setTrackingNumber] = useState("");
+
+  // Confirmation Modal for Mark Card Printed & Mark Card Delivered
+  const [confirmStageModal, setConfirmStageModal] = useState<{
+    job: FulfillmentJobDTO;
+    stage: "printed_ready" | "delivered";
+    title: string;
+    description: string;
+  } | null>(null);
+
+  // Company Detail Modal
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
 
@@ -646,14 +696,14 @@ export const DesignerDashboardView: React.FC = () => {
     const silent = typeof opts === "object" ? Boolean(opts?.silent) : false;
     if (!silent) setLoading(true);
     try {
-      const [compRes, ordRes] = await Promise.all([
+      const [compRes, fulRes] = await Promise.all([
         fetchAdminCompanies(forceRefresh),
-        fetchAdminOrders(forceRefresh),
+        fetch("/api/staff/fulfillment", { cache: "no-store" }).then((r) => r.json()),
       ]);
       setCompanies(compRes.companies || []);
-      setOrders(ordRes.orders || []);
+      setJobs(fulRes.jobs || []);
     } catch (err) {
-      console.error("[Designer] Failed to load assets:", err);
+      console.error("[Designer] Failed to load workspace:", err);
     } finally {
       if (!silent) setLoading(false);
     }
@@ -677,384 +727,827 @@ export const DesignerDashboardView: React.FC = () => {
     router.replace(isSubdomain ? "/login" : "/admin/login");
   };
 
-  // Orders in Production ("on_work")
-  const inProductionOrders = useMemo(() => {
-    return orders.filter((o) => {
-      if (o.status !== "on_work") return false;
-      if (!search.trim()) return true;
-      const q = search.toLowerCase();
-      return (
-        o.businessName?.toLowerCase().includes(q) ||
-        o.ownerName?.toLowerCase().includes(q) ||
-        o.id.toLowerCase().includes(q) ||
-        (o.phone && o.phone.includes(q))
-      );
-    });
-  }, [orders, search]);
+  // Merge DB fulfillment_jobs + any Free Trial / Pro companies marked `sent_to_designer` without a job row yet
+  const unifiedJobs = useMemo(() => {
+    const existingProfileJobs = new Set(jobs.map((j) => `${j.profileId}:${j.jobType}`));
+    const synthetic: FulfillmentJobDTO[] = [];
 
-  // Filtered companies based on active tab
-  const filteredCompanies = useMemo(() => {
-    return companies.filter((c) => {
-      if (search.trim()) {
-        const q = search.toLowerCase();
-        const matchesName = c.businessName?.toLowerCase().includes(q);
-        const matchesOwner = c.ownerName?.toLowerCase().includes(q);
-        const matchesEmail = c.email?.toLowerCase().includes(q);
-        const matchesUsername = c.username?.toLowerCase().includes(q);
-        if (!matchesName && !matchesOwner && !matchesEmail && !matchesUsername) {
-          return false;
+    for (const c of companies) {
+      const cp = c.cardProcess || {};
+      const sent = Boolean(cp.customer_responded_designing?.completed);
+      if (!sent) continue;
+
+      const jobType = c.subscriptionPlan === "trial" ? "free_trial" : "pro_initial";
+      if (existingProfileJobs.has(`${c.id}:${jobType}`)) continue;
+
+      const stage: FulfillmentStage = cp.card_delivered?.completed
+        ? "delivered"
+        : cp.card_posted?.completed
+        ? "posted"
+        : cp.card_printed_approved?.completed
+        ? "printed_ready"
+        : "sent_to_designer";
+
+      const ownerSlug = c.username || c.slug || c.id;
+      synthetic.push({
+        id: `profile-${c.id}`,
+        profileId: c.id,
+        jobType,
+        stage,
+        cardQuantity: 1,
+        masterTemplateUrl: c.defaultCardTemplateUrl || null,
+        createdAt: c.createdAt,
+        updatedAt: cp.customer_responded_designing?.updated_at || c.createdAt,
+        isSyntheticTrial: true,
+        company: {
+          id: c.id,
+          businessName: c.businessName,
+          ownerName: c.ownerName,
+          phone: c.phoneNumber || c.phone,
+          email: c.email,
+          username: c.username,
+          slug: c.slug,
+          subscriptionPlan: c.subscriptionPlan,
+          logoUrl: c.logoUrl || c.avatarUrl,
+          defaultCardTemplateUrl: c.defaultCardTemplateUrl,
+        },
+        items: [
+          {
+            id: `primary-${c.id}`,
+            jobId: `profile-${c.id}`,
+            profileId: c.id,
+            targetType: "primary",
+            displayName: c.businessName,
+            designation: `Owner: ${c.ownerName}`,
+            phone: c.phoneNumber || c.phone,
+            photoUrl: c.avatarUrl,
+            publicCardUrl: buildPublicCardUrl(ownerSlug),
+            designMode: c.defaultCardTemplateUrl ? "company_template" : "team_assist",
+            designFileUrl: c.defaultCardTemplateUrl || null,
+            isPrinted: stage !== "sent_to_designer",
+          },
+        ],
+      });
+    }
+
+    return [...jobs, ...synthetic];
+  }, [jobs, companies]);
+
+  const handleStageTransition = async (
+    job: FulfillmentJobDTO,
+    targetStage: FulfillmentStage,
+    extra?: { courierName?: string; trackingNumber?: string }
+  ) => {
+    setBusyJobId(job.id);
+    try {
+      if (job.isSyntheticTrial || job.id.startsWith("profile-")) {
+        const stepKey =
+          targetStage === "printed_ready"
+            ? "card_printed_approved"
+            : targetStage === "posted"
+            ? "card_posted"
+            : "card_delivered";
+        const res = await fetch(`/api/admin/companies/${job.profileId}/card-process`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ stepKey, completed: true }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "Failed to update stage");
+        }
+      } else {
+        const res = await fetch(`/api/staff/fulfillment/${job.id}/stage`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            stage: targetStage,
+            courierName: extra?.courierName || null,
+            trackingNumber: extra?.trackingNumber || null,
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "Failed to update stage");
         }
       }
 
-      if (activeTab === "trial") {
-        return c.subscriptionPlan === "trial";
-      }
-      if (activeTab === "pro") {
-        return c.subscriptionPlan === "pro";
-      }
-      if (activeTab === "free") {
-        return c.subscriptionPlan === "free";
-      }
-      return true; // "all"
-    });
-  }, [companies, activeTab, search]);
+      await loadAllData({ silent: true, forceRefresh: true });
+    } catch (err: any) {
+      alert(err.message || "Could not update card status");
+    } finally {
+      setBusyJobId(null);
+    }
+  };
 
-  // Aggregate stats
-  const onWorkOrdersCount = useMemo(() => orders.filter((o) => o.status === "on_work").length, [orders]);
-  const proCount = useMemo(() => companies.filter((c) => c.subscriptionPlan === "pro").length, [companies]);
-  const trialCount = useMemo(() => companies.filter((c) => c.subscriptionPlan === "trial").length, [companies]);
-  const freeCount = useMemo(() => companies.filter((c) => c.subscriptionPlan === "free").length, [companies]);
+  const matchesSearch = useCallback(
+    (biz?: string, owner?: string, phone?: string | null) => {
+      if (!search.trim()) return true;
+      const q = search.toLowerCase();
+      return (
+        Boolean(biz?.toLowerCase().includes(q)) ||
+        Boolean(owner?.toLowerCase().includes(q)) ||
+        Boolean(phone?.includes(q))
+      );
+    },
+    [search]
+  );
+
+  // Employee & Branch IDs grouped by Company
+  const employeeIdGroups = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        profileId: string;
+        company?: Company;
+        businessName: string;
+        ownerName: string;
+        logoUrl?: string | null;
+        masterTemplateUrl?: string | null;
+        jobs: FulfillmentJobDTO[];
+        items: FulfillmentItemDTO[];
+        pendingCount: number;
+      }
+    >();
+
+    for (const job of unifiedJobs) {
+      if (job.stage === "awaiting_customer" || job.stage === "cancelled") continue;
+      const empOrBranchItems = job.items.filter(
+        (it) => it.targetType === "employee" || it.targetType === "branch"
+      );
+      if (job.jobType !== "team_addon" && empOrBranchItems.length === 0) continue;
+
+      const comp = companies.find((c) => c.id === job.profileId);
+      const bizName = comp?.businessName || job.company?.businessName || "Company";
+      const ownerName = comp?.ownerName || job.company?.ownerName || "Owner";
+
+      if (!matchesSearch(bizName, ownerName, comp?.phone || job.company?.phone)) continue;
+
+      const existing = map.get(job.profileId) || {
+        profileId: job.profileId,
+        company: comp,
+        businessName: bizName,
+        ownerName,
+        logoUrl: comp?.logoUrl || job.company?.logoUrl,
+        masterTemplateUrl: job.masterTemplateUrl || comp?.defaultCardTemplateUrl || null,
+        jobs: [],
+        items: [],
+        pendingCount: 0,
+      };
+
+      existing.jobs.push(job);
+      // Fallback: if team_addon has items not yet generated in fulfillment_job_items, synthesize from company.employees
+      if (empOrBranchItems.length > 0) {
+        existing.items.push(...empOrBranchItems);
+      } else if (comp?.employees && comp.employees.length > 0) {
+        const ownerSlug = comp.username || comp.slug || comp.id;
+        for (const emp of comp.employees) {
+          if (!existing.items.some((i) => i.employeeId === emp.id)) {
+            existing.items.push({
+              id: `emp-${emp.id}`,
+              jobId: job.id,
+              profileId: comp.id,
+              targetType: "employee",
+              employeeId: emp.id,
+              displayName: emp.name,
+              designation: emp.designation,
+              phone: emp.phone,
+              photoUrl: emp.avatarUrl,
+              publicCardUrl: buildPublicCardUrl(ownerSlug, emp.slug || emp.id),
+              designMode: comp.defaultCardTemplateUrl ? "company_template" : "team_assist",
+              designFileUrl: comp.defaultCardTemplateUrl || null,
+              isPrinted: job.stage !== "sent_to_designer",
+            });
+          }
+        }
+      }
+      if (job.stage === "sent_to_designer") {
+        existing.pendingCount += Math.max(1, empOrBranchItems.length || job.cardQuantity);
+      }
+      map.set(job.profileId, existing);
+    }
+
+    return Array.from(map.values());
+  }, [unifiedJobs, companies, matchesSearch]);
+
+  const inProductionJobs = useMemo(
+    () =>
+      unifiedJobs.filter(
+        (j) =>
+          j.stage === "sent_to_designer" &&
+          matchesSearch(j.company?.businessName, j.company?.ownerName, j.company?.phone)
+      ),
+    [unifiedJobs, matchesSearch]
+  );
+  const printedReadyJobs = useMemo(
+    () =>
+      unifiedJobs.filter(
+        (j) =>
+          j.stage === "printed_ready" &&
+          matchesSearch(j.company?.businessName, j.company?.ownerName, j.company?.phone)
+      ),
+    [unifiedJobs, matchesSearch]
+  );
+  const postedJobs = useMemo(
+    () =>
+      unifiedJobs.filter(
+        (j) =>
+          j.stage === "posted" &&
+          matchesSearch(j.company?.businessName, j.company?.ownerName, j.company?.phone)
+      ),
+    [unifiedJobs, matchesSearch]
+  );
+  const deliveredJobs = useMemo(
+    () =>
+      unifiedJobs.filter(
+        (j) =>
+          j.stage === "delivered" &&
+          matchesSearch(j.company?.businessName, j.company?.ownerName, j.company?.phone)
+      ),
+    [unifiedJobs, matchesSearch]
+  );
+
+  const filteredDirectory = useMemo(() => {
+    const list = companies.filter((c) =>
+      matchesSearch(c.businessName, c.ownerName, c.phoneNumber || c.phone)
+    );
+    return [...list].sort((a, b) => {
+      if (sortBy === "a_z") return (a.businessName || "").localeCompare(b.businessName || "");
+      if (sortBy === "z_a") return (b.businessName || "").localeCompare(a.businessName || "");
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  }, [companies, matchesSearch, sortBy]);
+
+  const selectedEmpGroup = useMemo(
+    () => employeeIdGroups.find((g) => g.profileId === selectedEmpCompanyId) || null,
+    [employeeIdGroups, selectedEmpCompanyId]
+  );
+
+  const navItems: { id: DesignerSidebarTab; label: string; icon: React.ReactNode; count?: number }[] = [
+    { id: "directory", label: "All Card QRs", icon: <QrCode size={15} />, count: companies.length },
+    { id: "production", label: "Production Queue", icon: <Package size={15} />, count: inProductionJobs.length },
+    { id: "employee_ids", label: "Employee & Branch IDs", icon: <Users size={15} />, count: employeeIdGroups.length },
+  ];
+
+  const activeStageJobs = useMemo(() => {
+    if (stageFilter === "all") {
+      return [...inProductionJobs, ...printedReadyJobs, ...postedJobs, ...deliveredJobs];
+    }
+    if (stageFilter === "sent_to_designer") return inProductionJobs;
+    if (stageFilter === "printed_ready") return printedReadyJobs;
+    if (stageFilter === "posted") return postedJobs;
+    return deliveredJobs;
+  }, [stageFilter, inProductionJobs, printedReadyJobs, postedJobs, deliveredJobs]);
+
+  const stageFilterLabels: Record<DesignerStageFilter, string> = {
+    sent_to_designer: "In Production",
+    printed_ready: "Printed & Ready",
+    posted: "Card Posted",
+    delivered: "Delivered",
+    all: "All Production Jobs",
+  };
 
   return (
-    <div className="flex min-h-screen flex-col bg-[var(--background)] text-[var(--foreground)]">
-      {/* 1. Sleek Studio Header */}
-      <header className="sticky top-0 z-30 border-b border-[var(--border)] bg-[var(--card)]/95 backdrop-blur-md px-5 py-3.5">
-        <div className="flex items-center justify-between gap-4 max-w-7xl mx-auto w-full">
-          <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-[5px] bg-[var(--foreground)] text-[var(--background)]">
-              <Printer size={15} strokeWidth={2.2} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="font-headline text-sm font-bold tracking-tight text-[var(--foreground)]">
-                  Designer Studio
-                </h1>
-              </div>
-              <p className="text-[11px] text-[var(--muted-foreground)] leading-none mt-0.5">
-                Print asset downloads, physical card engraving specs, and QR targets
-              </p>
-            </div>
+    <div className="flex h-screen w-full overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
+      {/* Left Fixed Sidebar (Exact Admin / Partner Console Shell) */}
+      <aside className="hidden md:flex flex-col w-64 h-screen border-r border-[var(--border)] bg-[var(--card)] p-5 shrink-0 justify-between select-none">
+        <div>
+          <div className="pb-6 border-b border-[var(--border)]">
+            <h1 className="font-headline text-base font-bold text-[var(--foreground)] tracking-tight">
+              Namma Info
+            </h1>
+            <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)] block mt-0.5">
+              Designer Console
+            </span>
+          </div>
+
+          <nav className="mt-6 space-y-1">
+            {navItems.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  setActiveTab(item.id);
+                  if (item.id !== "employee_ids") setSelectedEmpCompanyId(null);
+                }}
+                className={`flex w-full items-center justify-between rounded-[5px] px-3 py-2 text-xs font-medium cursor-pointer ${
+                  activeTab === item.id
+                    ? "bg-[var(--foreground)] text-[var(--background)]"
+                    : "text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+                }`}
+              >
+                <span className="flex items-center gap-2.5 truncate">
+                  {item.icon}
+                  <span className="truncate">{item.label}</span>
+                </span>
+                {typeof item.count === "number" && (
+                  <span
+                    className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-[4px] ${
+                      activeTab === item.id
+                        ? "bg-[var(--background)] text-[var(--foreground)]"
+                        : "bg-[var(--accent)] text-[var(--muted-foreground)]"
+                    }`}
+                  >
+                    {item.count}
+                  </span>
+                )}
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        <div className="border-t border-[var(--border)] pt-4 space-y-2">
+          {userEmail && (
+            <p className="font-mono text-[10px] text-[var(--muted-foreground)] truncate px-1">
+              {userEmail}
+            </p>
+          )}
+          <button
+            onClick={handleSignOut}
+            className="flex w-full items-center justify-between rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs font-medium text-[var(--muted-foreground)] hover:text-red-600 dark:hover:text-red-400 hover:bg-[var(--accent)] transition-colors cursor-pointer"
+          >
+            <span className="flex items-center gap-2">
+              <LogOut size={14} />
+              <span>Log Out</span>
+            </span>
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <div className="flex flex-1 flex-col h-screen overflow-y-scroll min-w-0">
+        {/* Sticky Header (1:1 with AdminHeader) */}
+        <header className="sticky top-0 z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-[var(--border)] bg-[var(--card)] px-6 py-4 gap-3 shrink-0">
+          <div>
+            <h2 className="font-headline text-lg font-bold text-[var(--foreground)]">
+              {navItems.find((i) => i.id === activeTab)?.label || "Designer Studio"}
+            </h2>
+            <p className="text-xs text-[var(--muted-foreground)]">
+              Card artwork, employee ID templates, 512px QR downloads, and print/dispatch status sync.
+            </p>
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] border border-[var(--border)] bg-[var(--background)] text-xs">
-              <ShieldCheck size={12} className="text-emerald-500" />
-              <span className="font-mono text-[11px] text-[var(--muted-foreground)]">
-                {userEmail || "Designer Operator"}
-              </span>
-            </div>
+            <StaffNotificationsBell
+              title="Designer Queue Alerts"
+              onSelectNotification={(n) => {
+                if (n.profile_id) {
+                  setActiveTab("production");
+                  setStageFilter("sent_to_designer");
+                }
+              }}
+            />
             <AdminThemeToggle />
             <button
-              onClick={handleSignOut}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[5px] border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--accent)] text-xs text-[var(--muted-foreground)] hover:text-rose-500 transition-colors cursor-pointer"
-              title="Sign Out"
+              onClick={() => loadAllData(true)}
+              disabled={loading}
+              className="flex items-center gap-1.5 rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-xs font-medium text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors disabled:opacity-50 cursor-pointer"
             >
-              <LogOut size={13} />
-              <span className="hidden sm:inline">Sign Out</span>
+              <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+              <span>Refresh</span>
             </button>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* 2. Main Studio Workspace */}
-      <main className="flex-1 p-5 sm:p-6 max-w-7xl w-full mx-auto space-y-5">
-        {/* Quick Metric Strip */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div
-            onClick={() => setActiveTab("production")}
-            className={`p-3.5 rounded-[5px] border transition-all cursor-pointer ${
-              activeTab === "production"
-                ? "border-[var(--foreground)] bg-[var(--accent)]/40 shadow-xs"
-                : "border-[var(--border)] bg-[var(--card)] hover:border-[var(--foreground)]/30"
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)] font-semibold">
-                In Production Queue
-              </span>
-              <Package size={14} className="text-[var(--muted-foreground)]" />
-            </div>
-            <div className="mt-2 flex items-baseline gap-2">
-              <span className="font-headline text-2xl font-bold text-[var(--foreground)] leading-none">
-                {onWorkOrdersCount}
-              </span>
-              <span className="font-mono text-[10px] text-[var(--muted-foreground)]">
-                {onWorkOrdersCount === 1 ? "Active Order" : "Active Orders"}
-              </span>
-            </div>
-          </div>
-
-          <div
-            onClick={() => setActiveTab("pro")}
-            className={`p-3.5 rounded-[5px] border transition-all cursor-pointer ${
-              activeTab === "pro"
-                ? "border-[var(--foreground)] bg-[var(--accent)]/40 shadow-xs"
-                : "border-[var(--border)] bg-[var(--card)] hover:border-[var(--foreground)]/30"
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)] font-semibold">
-                Pro Plan Accounts
-              </span>
-              <QrCode size={14} className="text-[var(--muted-foreground)]" />
-            </div>
-            <div className="mt-2 flex items-baseline gap-2">
-              <span className="font-headline text-2xl font-bold text-[var(--foreground)] leading-none">
-                {proCount}
-              </span>
-              <span className="font-mono text-[10px] text-[var(--muted-foreground)]">
-                Verified Cards
-              </span>
-            </div>
-          </div>
-
-          <div
-            onClick={() => setActiveTab("trial")}
-            className={`p-3.5 rounded-[5px] border transition-all cursor-pointer ${
-              activeTab === "trial"
-                ? "border-[var(--foreground)] bg-[var(--accent)]/40 shadow-xs"
-                : "border-[var(--border)] bg-[var(--card)] hover:border-[var(--foreground)]/30"
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)] font-semibold">
-                100-Day Free Trials
-              </span>
-              <Clock size={14} className="text-[var(--muted-foreground)]" />
-            </div>
-            <div className="mt-2 flex items-baseline gap-2">
-              <span className="font-headline text-2xl font-bold text-[var(--foreground)] leading-none">
-                {trialCount}
-              </span>
-              <span className="font-mono text-[10px] text-[var(--muted-foreground)]">
-                Active Digital Cards
-              </span>
-            </div>
-          </div>
+        {/* Mobile Tab Strip */}
+        <div className="flex md:hidden gap-1.5 overflow-x-auto border-b border-[var(--border)] bg-[var(--card)] px-4 py-2">
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setActiveTab(item.id)}
+              className={`shrink-0 rounded-[5px] px-3 py-1.5 text-xs font-semibold ${
+                activeTab === item.id
+                  ? "bg-[var(--foreground)] text-[var(--background)]"
+                  : "border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)]"
+              }`}
+            >
+              {item.label} ({item.count ?? 0})
+            </button>
+          ))}
         </div>
 
-        {/* Filter Navigation & Search Bar */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
-          {/* Tabs with crisp micro counters */}
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-            <button
-              onClick={() => setActiveTab("production")}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-[5px] text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
-                activeTab === "production"
-                  ? "bg-[var(--foreground)] text-[var(--background)] shadow-xs"
-                  : "border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              <Package size={13} />
-              <span>In Production</span>
-              <span className={`font-mono text-[10px] px-1.5 py-0.2 rounded-[3px] ${
-                activeTab === "production" ? "bg-[var(--background)] text-[var(--foreground)] font-bold" : "bg-[var(--accent)] text-[var(--muted-foreground)]"
-              }`}>
-                {onWorkOrdersCount}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab("all")}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-[5px] text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
-                activeTab === "all"
-                  ? "bg-[var(--foreground)] text-[var(--background)] shadow-xs"
-                  : "border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              <span>All Accounts</span>
-              <span className={`font-mono text-[10px] px-1.5 py-0.2 rounded-[3px] ${
-                activeTab === "all" ? "bg-[var(--background)] text-[var(--foreground)] font-bold" : "bg-[var(--accent)] text-[var(--muted-foreground)]"
-              }`}>
-                {companies.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab("pro")}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-[5px] text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
-                activeTab === "pro"
-                  ? "bg-[var(--foreground)] text-[var(--background)] shadow-xs"
-                  : "border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              <span>Pro Plan</span>
-              <span className={`font-mono text-[10px] px-1.5 py-0.2 rounded-[3px] ${
-                activeTab === "pro" ? "bg-[var(--background)] text-[var(--foreground)] font-bold" : "bg-[var(--accent)] text-[var(--muted-foreground)]"
-              }`}>
-                {proCount}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab("trial")}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-[5px] text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
-                activeTab === "trial"
-                  ? "bg-[var(--foreground)] text-[var(--background)] shadow-xs"
-                  : "border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              <span>Free Trial</span>
-              <span className={`font-mono text-[10px] px-1.5 py-0.2 rounded-[3px] ${
-                activeTab === "trial" ? "bg-[var(--background)] text-[var(--foreground)] font-bold" : "bg-[var(--accent)] text-[var(--muted-foreground)]"
-              }`}>
-                {trialCount}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab("free")}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-[5px] text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
-                activeTab === "free"
-                  ? "bg-[var(--foreground)] text-[var(--background)] shadow-xs"
-                  : "border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              <span>Free Tier</span>
-              <span className={`font-mono text-[10px] px-1.5 py-0.2 rounded-[3px] ${
-                activeTab === "free" ? "bg-[var(--background)] text-[var(--foreground)] font-bold" : "bg-[var(--accent)] text-[var(--muted-foreground)]"
-              }`}>
-                {freeCount}
-              </span>
-            </button>
-          </div>
-
-          {/* Search bar & Refresh */}
-          <div className="flex items-center gap-2">
-            <div className="relative min-w-[260px]">
-              <Search
-                size={13}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
-              />
-              <input
-                type="text"
-                placeholder="Search business, owner, order, or slug..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--card)] pl-9 pr-3 py-1.5 text-xs text-[var(--foreground)] outline-none focus:border-[var(--foreground)] transition-colors"
-              />
-            </div>
-
-            <Button variant="secondary" size="sm" onClick={() => loadAllData(true)} disabled={loading} title="Reload Assets">
-              <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
-            </Button>
-          </div>
-        </div>
-
-        {/* View Mode 1: In Production Orders */}
-        {activeTab === "production" ? (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-headline text-sm font-bold text-[var(--foreground)]">
-                  Active Production Orders
-                </h3>
-                <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
-                  Print orders approved and moved to production. Download artwork files, logos, and high-resolution QR codes.
-                </p>
-              </div>
-              <span className="font-mono text-xs text-[var(--muted-foreground)]">
-                Showing {inProductionOrders.length} {inProductionOrders.length === 1 ? "order" : "orders"}
-              </span>
-            </div>
-
-            {loading ? (
-              <div className="p-14 text-center text-xs text-[var(--muted-foreground)] rounded-[5px] border border-[var(--border)] bg-[var(--card)]">
-                <Loader2 size={18} className="animate-spin inline-block mr-2" />
-                Loading production queue...
-              </div>
-            ) : inProductionOrders.length === 0 ? (
-              <div className="flex flex-col items-center justify-center rounded-[5px] border border-dashed border-[var(--border)] bg-[var(--card)] py-16 text-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-[5px] bg-[var(--accent)] text-[var(--muted-foreground)] mb-3">
-                  <Package size={22} />
-                </div>
-                <h4 className="font-headline text-sm font-semibold text-[var(--foreground)]">
-                  No Orders Currently in Production
-                </h4>
-                <p className="text-xs text-[var(--muted-foreground)] mt-1 max-w-sm">
-                  Orders marked as <strong>In Production</strong> in the Orders panel will appear here with customer artwork and print targets.
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-4">
-                {inProductionOrders.map((order) => {
-                  const company = companies.find((c) => c.id === order.profileId);
+        <main className="flex-1 space-y-5 p-6 w-full pb-16">
+          {/* KPI Stage Filter Strip (shown inside Production Queue — never conflicts with sidebar!) */}
+          {activeTab === "production" && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {[
+                  { id: "sent_to_designer" as DesignerStageFilter, label: "In Production", count: inProductionJobs.length },
+                  { id: "printed_ready" as DesignerStageFilter, label: "Printed & Ready", count: printedReadyJobs.length },
+                  { id: "posted" as DesignerStageFilter, label: "Card Posted", count: postedJobs.length },
+                  { id: "delivered" as DesignerStageFilter, label: "Delivered", count: deliveredJobs.length },
+                ].map((kpi) => {
+                  const isActive = stageFilter === kpi.id;
                   return (
-                    <InProductionOrderCard
-                      key={order.id}
-                      order={order}
-                      company={company}
-                      onViewCompany={(c) => {
-                        setSelectedCompany(c);
-                        setIsDetailOpen(true);
-                      }}
-                    />
+                    <button
+                      key={kpi.id}
+                      type="button"
+                      onClick={() => setStageFilter(kpi.id)}
+                      className={`text-left rounded-[5px] border p-4 cursor-pointer ${
+                        isActive
+                          ? "border-[var(--foreground)] bg-[var(--accent)]/40"
+                          : "border-[var(--border)] bg-[var(--card)] hover:border-[var(--foreground)]/40"
+                      }`}
+                    >
+                      <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--muted-foreground)] block">
+                        {kpi.label}
+                      </span>
+                      <span className="font-headline text-2xl font-bold text-[var(--foreground)] mt-1 block">
+                        {kpi.count}
+                      </span>
+                    </button>
                   );
                 })}
               </div>
-            )}
-          </div>
-        ) : (
-          /* View Mode 2: Browse Companies */
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-headline text-sm font-bold text-[var(--foreground)]">
-                  {activeTab === "all"
-                    ? "All Registered Accounts & QR Codes"
-                    : activeTab === "pro"
-                    ? "Pro Plan Digital Cards"
-                    : activeTab === "trial"
-                    ? "100-Day Free Trial Digital Cards"
-                    : "Free Tier Digital Cards"}
-                </h3>
-                <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
-                  Inspect public card URLs and download 512x512 high-resolution QR codes for physical card printing.
-                </p>
+
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-1.5 overflow-x-auto">
+                  {(["sent_to_designer", "printed_ready", "posted", "delivered", "all"] as DesignerStageFilter[]).map((f) => (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => setStageFilter(f)}
+                      className={`rounded-[5px] px-2.5 py-1 text-xs font-medium cursor-pointer whitespace-nowrap ${
+                        stageFilter === f
+                          ? "bg-[var(--foreground)] text-[var(--background)]"
+                          : "border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                      }`}
+                    >
+                      {stageFilterLabels[f]}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <span className="font-mono text-xs text-[var(--muted-foreground)]">
-                Showing {filteredCompanies.length} accounts
-              </span>
+            </div>
+          )}
+
+          {/* Search & Sort Controls */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="relative flex-1 min-w-[240px] max-w-md">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]" />
+              <input
+                type="text"
+                placeholder="Search company, owner, or phone..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--card)] pl-9 pr-3 py-2 text-xs text-[var(--foreground)] outline-none focus:border-[var(--foreground)]"
+              />
             </div>
 
-            {loading ? (
-              <div className="p-14 text-center text-xs text-[var(--muted-foreground)] rounded-[5px] border border-[var(--border)] bg-[var(--card)]">
-                <Loader2 size={18} className="animate-spin inline-block mr-2" />
-                Loading accounts...
+            {activeTab === "directory" && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+                  Sort:
+                </span>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as "recent" | "a_z" | "z_a")}
+                  className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-xs font-medium text-[var(--foreground)] outline-none cursor-pointer"
+                >
+                  <option value="recent">Recent Sign-ups</option>
+                  <option value="a_z">Alphabetical (A–Z)</option>
+                  <option value="z_a">Alphabetical (Z–A)</option>
+                </select>
               </div>
-            ) : filteredCompanies.length === 0 ? (
-              <div className="p-12 text-center text-xs text-[var(--muted-foreground)] rounded-[5px] border border-dashed border-[var(--border)] bg-[var(--card)]">
-                No accounts match the current filter.
+            )}
+          </div>
+
+          {loading ? (
+            <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-12 text-center text-xs text-[var(--muted-foreground)]">
+              <Loader2 size={18} className="animate-spin inline-block mr-2" />
+              Loading designer queue...
+            </div>
+          ) : activeTab === "employee_ids" ? (
+            selectedEmpGroup ? (
+              /* Company Employee ID Print Sheet */
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-4">
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedEmpCompanyId(null)}
+                      className="rounded-[5px] border border-[var(--border)] bg-[var(--background)] p-2 hover:bg-[var(--accent)] cursor-pointer"
+                    >
+                      <ArrowLeft size={14} />
+                    </button>
+                    <div>
+                      <h3 className="font-headline text-sm font-bold text-[var(--foreground)]">
+                        {selectedEmpGroup.businessName} — Employee &amp; Branch Print Sheet
+                      </h3>
+                      <p className="text-[11px] text-[var(--muted-foreground)]">
+                        {selectedEmpGroup.items.length} card item{selectedEmpGroup.items.length === 1 ? "" : "s"} • Owner: {selectedEmpGroup.ownerName}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {selectedEmpGroup.masterTemplateUrl && (
+                      <a
+                        href={selectedEmpGroup.masterTemplateUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        download
+                        className="inline-flex items-center gap-1.5 rounded-[5px] border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-[var(--foreground)]"
+                      >
+                        <FileText size={13} />
+                        <span>Download Master Template</span>
+                      </a>
+                    )}
+                    {selectedEmpGroup.jobs[0] && selectedEmpGroup.jobs[0].stage === "sent_to_designer" && (
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        isLoading={busyJobId === selectedEmpGroup.jobs[0].id}
+                        onClick={() =>
+                          setConfirmStageModal({
+                            job: selectedEmpGroup.jobs[0],
+                            stage: "printed_ready",
+                            title: "Confirm Card Batch Printed",
+                            description: `Mark ${selectedEmpGroup.businessName} (${selectedEmpGroup.items.length || selectedEmpGroup.jobs[0].cardQuantity} card${(selectedEmpGroup.items.length || selectedEmpGroup.jobs[0].cardQuantity) === 1 ? "" : "s"}) as printed and ready for dispatch? This syncs immediately with Admin.`,
+                          })
+                        }
+                      >
+                        Mark Batch Printed
+                      </Button>
+                    )}
+                    {selectedEmpGroup.jobs[0] &&
+                      ["sent_to_designer", "printed_ready"].includes(selectedEmpGroup.jobs[0].stage) && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => setPostedTargetJob(selectedEmpGroup.jobs[0])}
+                        >
+                          Mark Posted
+                        </Button>
+                      )}
+                    {selectedEmpGroup.jobs[0] &&
+                      ["sent_to_designer", "printed_ready", "posted"].includes(selectedEmpGroup.jobs[0].stage) && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          isLoading={busyJobId === selectedEmpGroup.jobs[0].id}
+                          onClick={() =>
+                            setConfirmStageModal({
+                              job: selectedEmpGroup.jobs[0],
+                              stage: "delivered",
+                              title: "Confirm Card Delivered",
+                              description: `Mark ${selectedEmpGroup.businessName}'s card batch as delivered to the customer? This updates Admin, Partner, and Customer tracking immediately.`,
+                            })
+                          }
+                        >
+                          Mark Delivered
+                        </Button>
+                      )}
+                  </div>
+                </div>
+
+                {selectedEmpGroup.items.length === 0 ? (
+                  <div className="rounded-[5px] border border-dashed border-[var(--border)] bg-[var(--card)] p-10 text-center text-xs text-[var(--muted-foreground)]">
+                    Owner has purchased slots, waiting for employee details or template assignment.
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {selectedEmpGroup.items.map((item) => (
+                      <PrintItemCard
+                        key={item.id}
+                        item={item}
+                        masterTemplateUrl={selectedEmpGroup.masterTemplateUrl}
+                        companySlug={
+                          selectedEmpGroup.company?.username ||
+                          selectedEmpGroup.company?.slug ||
+                          selectedEmpGroup.profileId
+                        }
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : employeeIdGroups.length === 0 ? (
+              <div className="rounded-[5px] border border-dashed border-[var(--border)] bg-[var(--card)] py-14 text-center space-y-2">
+                <Users size={26} className="mx-auto text-[var(--muted-foreground)] opacity-50" />
+                <p className="text-sm font-semibold text-[var(--foreground)]">
+                  No Employee or Branch IDs in Production
+                </p>
+                <p className="text-xs text-[var(--muted-foreground)] max-w-md mx-auto">
+                  When owners purchase team/branch slots and Admin marks them sent to designer, companies appear here grouped by organization.
+                </p>
               </div>
             ) : (
-              <div className="space-y-2.5">
-                {filteredCompanies.map((company) => (
-                  <DesignerCompanyRow
-                    key={company.id}
+              <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] divide-y divide-[var(--border)]">
+                {employeeIdGroups.map((group) => (
+                  <button
+                    key={group.profileId}
+                    type="button"
+                    onClick={() => setSelectedEmpCompanyId(group.profileId)}
+                    className="w-full text-left p-4 hover:bg-[var(--accent)]/40 transition-colors flex items-center justify-between gap-3 cursor-pointer"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[5px] border border-[var(--border)] bg-[var(--accent)] text-xs font-bold overflow-hidden">
+                        {group.logoUrl ? (
+                          <img src={group.logoUrl} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          getInitials(group.businessName)
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-xs text-[var(--foreground)] truncate">
+                            {group.businessName}
+                          </span>
+                          <span className="rounded-[4px] border border-[var(--border)] bg-[var(--background)] px-1.5 py-0.5 font-mono text-[10px] font-semibold">
+                            {group.items.length} Card{group.items.length === 1 ? "" : "s"}
+                          </span>
+                          {group.masterTemplateUrl && (
+                            <span className="rounded-[4px] border border-[var(--border)] bg-[var(--accent)] px-1.5 py-0.5 font-mono text-[9px] text-[var(--foreground)]">
+                              Master Template Attached
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-[var(--muted-foreground)] mt-0.5">
+                          Owner: {group.ownerName}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 text-xs font-medium text-[var(--muted-foreground)]">
+                      <span>Open Print Sheet</span>
+                      <ChevronRight size={14} />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )
+          ) : activeTab === "directory" ? (
+            <div className="space-y-2.5">
+              {filteredDirectory.map((company) => (
+                <DirectoryCompanyRow
+                  key={company.id}
+                  company={company}
+                  onViewDetails={(c) => {
+                    setSelectedCompany(c);
+                    setIsDetailOpen(true);
+                  }}
+                />
+              ))}
+            </div>
+          ) : activeStageJobs.length === 0 ? (
+            <div className="rounded-[5px] border border-dashed border-[var(--border)] bg-[var(--card)] py-14 text-center space-y-2">
+              <Package size={26} className="mx-auto text-[var(--muted-foreground)] opacity-50" />
+              <p className="text-sm font-semibold text-[var(--foreground)]">
+                No Cards in {stageFilterLabels[stageFilter]}
+              </p>
+              <p className="text-xs text-[var(--muted-foreground)] max-w-md mx-auto">
+                Cards marked &ldquo;Customer responded and card sent to designer&rdquo; by Admin (Pro or Free Trial) automatically appear in In Production.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {activeStageJobs.map((job) => {
+                const company = companies.find((c) => c.id === job.profileId);
+                return (
+                  <DesignerProductionJobCard
+                    key={job.id}
+                    job={job}
                     company={company}
-                    onViewDetails={(c) => {
+                    busyStage={busyJobId === job.id}
+                    onTransition={(j, stage) => {
+                      const biz = company?.businessName || j.company?.businessName || "this customer";
+                      if (stage === "printed_ready") {
+                        setConfirmStageModal({
+                          job: j,
+                          stage: "printed_ready",
+                          title: "Confirm Card Printed",
+                          description: `Are you sure you want to mark ${biz}'s card (${j.cardQuantity} card${j.cardQuantity === 1 ? "" : "s"}) as printed and ready for dispatch? This syncs immediately with Admin.`,
+                        });
+                      } else if (stage === "delivered") {
+                        setConfirmStageModal({
+                          job: j,
+                          stage: "delivered",
+                          title: "Confirm Card Delivered",
+                          description: `Are you sure you want to mark ${biz}'s card as delivered? This updates Admin, Partner, and Customer order tracking.`,
+                        });
+                      } else {
+                        handleStageTransition(j, stage);
+                      }
+                    }}
+                    onOpenPostedModal={(j) => {
+                      setCourierName(j.courierName || "");
+                      setTrackingNumber(j.trackingNumber || "");
+                      setPostedTargetJob(j);
+                    }}
+                    onViewCompany={(c) => {
                       setSelectedCompany(c);
                       setIsDetailOpen(true);
                     }}
                   />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </main>
+                );
+              })}
+            </div>
+          )}
+        </main>
+      </div>
 
-      {/* Read-Only Company Details Modal for Designer */}
+      {/* Optional Courier & Tracking Modal on "Mark Card Posted" */}
+      {postedTargetJob && (
+        <Modal
+          isOpen={Boolean(postedTargetJob)}
+          onClose={() => setPostedTargetJob(null)}
+          title="Mark Card Posted"
+          description="Courier & tracking details are optional — you can confirm dispatch right away."
+          maxWidth="sm"
+        >
+          <div className="space-y-3">
+            <div>
+              <label className="block font-mono text-[10px] uppercase text-[var(--muted-foreground)] mb-1">
+                Courier Partner (Optional)
+              </label>
+              <input
+                type="text"
+                value={courierName}
+                onChange={(e) => setCourierName(e.target.value)}
+                placeholder="e.g. DTDC, BlueDart, India Post"
+                className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs text-[var(--foreground)] outline-none focus:border-[var(--foreground)]"
+              />
+            </div>
+            <div>
+              <label className="block font-mono text-[10px] uppercase text-[var(--muted-foreground)] mb-1">
+                Tracking / AWB Number (Optional)
+              </label>
+              <input
+                type="text"
+                value={trackingNumber}
+                onChange={(e) => setTrackingNumber(e.target.value)}
+                placeholder="e.g. D89123456"
+                className="w-full rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] outline-none focus:border-[var(--foreground)]"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border)]">
+              <Button variant="secondary" size="sm" onClick={() => setPostedTargetJob(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                isLoading={busyJobId === postedTargetJob.id}
+                onClick={async () => {
+                  const target = postedTargetJob;
+                  setPostedTargetJob(null);
+                  await handleStageTransition(target, "posted", {
+                    courierName: courierName.trim() || undefined,
+                    trackingNumber: trackingNumber.trim() || undefined,
+                  });
+                }}
+              >
+                Confirm Card Posted
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Confirmation Modal for Printed & Delivered */}
+      {confirmStageModal && (
+        <Modal
+          isOpen={Boolean(confirmStageModal)}
+          onClose={() => !busyJobId && setConfirmStageModal(null)}
+          title={confirmStageModal.title}
+          maxWidth="sm"
+        >
+          <div className="space-y-4">
+            <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
+              {confirmStageModal.description}
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border)]">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setConfirmStageModal(null)}
+                disabled={Boolean(busyJobId)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                isLoading={busyJobId === confirmStageModal.job.id}
+                onClick={async () => {
+                  const target = confirmStageModal;
+                  setConfirmStageModal(null);
+                  await handleStageTransition(target.job, target.stage);
+                }}
+              >
+                {confirmStageModal.stage === "printed_ready"
+                  ? "Yes, Mark Card Printed"
+                  : "Yes, Mark Card Delivered"}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Designer Company Detail Modal (Can mark Printed/Posted/Delivered, cannot edit billing) */}
       {selectedCompany && (
         <CompanyDetailModal
           company={selectedCompany}
@@ -1063,8 +1556,8 @@ export const DesignerDashboardView: React.FC = () => {
             setIsDetailOpen(false);
             setSelectedCompany(null);
           }}
-          onRefresh={loadAllData}
-          readOnly={true}
+          onRefresh={() => loadAllData({ silent: true, forceRefresh: true })}
+          userRole="designer"
         />
       )}
     </div>

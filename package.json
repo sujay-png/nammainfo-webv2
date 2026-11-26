@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "node --experimental-strip-types --import ./tests/register-alias.mjs --test tests/unit/*.test.ts tests/api/*.test.ts",
+    "test:e2e": "node --experimental-strip-types --import ./tests/register-alias.mjs --test tests/e2e/*.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

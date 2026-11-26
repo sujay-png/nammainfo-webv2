@@ -146,7 +146,7 @@ export const AdminOrdersView: React.FC<AdminOrdersViewProps> = ({
   }, [orders, filters]);
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div className="flex-1 overflow-y-scroll">
       {/* View Header */}
       <div className="sticky top-0 z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-[var(--border)] bg-[var(--card)] px-6 py-4 gap-3 shrink-0">
         <div>

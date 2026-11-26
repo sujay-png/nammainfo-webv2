@@ -95,11 +95,24 @@ export default function DashboardShell({
       } catch {}
       flushPendingSaves();
 
-      // Employees use their company's colour theme; nothing else to set up.
+      // Employees use their company's colour theme; still check if they are an active Partner.
       if ((user.user_metadata as { role?: string } | undefined)?.role === "employee") {
         const { data: rec } = await supabase.rpc("my_employee_record");
         const ownerTheme = (Array.isArray(rec) ? rec[0] : rec)?.owner_theme as string | undefined;
         if (ownerTheme && ownerTheme !== colorTheme) setColorTheme(ownerTheme);
+        const { data: empProf } = await supabase
+          .from("profiles")
+          .select("is_partner, is_campaign_manager, role")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (
+          (empProf as any)?.is_partner ||
+          empProf?.is_campaign_manager ||
+          empProf?.role === "partner" ||
+          empProf?.role === "campaign_manager"
+        ) {
+          setIsCampaignManager(true);
+        }
         return;
       }
 

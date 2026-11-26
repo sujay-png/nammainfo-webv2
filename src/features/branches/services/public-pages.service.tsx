@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { createCachedPublicClient } from "@/supabase/server";
+import { createAdminClient } from "@/supabase/admin";
 import GatedProfileView from "@/components/GatedProfileView";
 import { getMembership } from "@/lib/membership";
 import type { Card, Employee, Profile, Review } from "@/supabase/database-types";
@@ -115,3 +116,25 @@ export function membershipGate(profile: Profile) {
 export function publicHandle(profile: Profile, openedWith: string) {
   return profile.username || openedWith;
 }
+
+/** Check whether an employee with a login account is an active Partner. */
+export const resolveEmployeePartnerStatus = cache(async (userId?: string | null): Promise<boolean> => {
+  if (!userId) return false;
+  try {
+    const admin = createAdminClient();
+    const { data } = await admin
+      .from("profiles")
+      .select("is_partner, is_campaign_manager, role")
+      .eq("id", userId)
+      .maybeSingle();
+    if (!data) return false;
+    return Boolean(
+      (data as any).is_partner ||
+        data.is_campaign_manager ||
+        data.role === "partner" ||
+        data.role === "campaign_manager"
+    );
+  } catch {
+    return false;
+  }
+});

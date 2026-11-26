@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { requireAdminAuth } from "@/admin/shared/lib/admin-auth";
 import { saveAdminNotes } from "@/admin/shared/lib/admin-notes";
+import { createFulfillmentAndFollowupsForTrial } from "@/lib/fulfillment/service";
 
 export const dynamic = "force-dynamic";
 
@@ -69,6 +70,7 @@ export async function POST(request: Request) {
         status: "unattended",
         notes: `100-day Free Trial approved on ${now.toLocaleDateString("en-IN")}. Day 30 follow-up scheduled.`,
       });
+      await createFulfillmentAndFollowupsForTrial(supabase, companyId, now.toISOString());
     }
 
     if (updateErr) {

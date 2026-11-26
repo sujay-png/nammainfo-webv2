@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireAdminAuth, requireStaffAuth } from "@/admin/shared/lib/admin-auth";
 import type { OrderStatus, OrderType, DesignMode, AdminOrder, OrderStats } from "@/admin/entities/order/model/types";
+import { legacyOrderStatusToStage, stageToLegacyOrderStatus } from "@/lib/fulfillment/state-machine";
+import { transitionFulfillmentJobStage } from "@/lib/fulfillment/service";
 
 export const dynamic = "force-dynamic";
 
@@ -68,11 +70,31 @@ export async function GET(request: Request) {
       }
     }
 
-    // 3. Transform to clean AdminOrder model with dynamic fulfillment status
+    // 2b. Fetch canonical fulfillment_jobs keyed by order_id so each batch keeps its own status
+    const jobByOrderId = new Map<string, any>();
+    try {
+      const orderIds = rawOrders.map((o: any) => o.id);
+      if (orderIds.length > 0) {
+        const { data: jobsData } = await supabase
+          .from("fulfillment_jobs")
+          .select("id, order_id, stage")
+          .in("order_id", orderIds);
+        for (const j of jobsData || []) {
+          if (j.order_id) jobByOrderId.set(j.order_id, j);
+        }
+      }
+    } catch {
+      // ignore if fulfillment_jobs not yet migrated
+    }
+
+    // 3. Transform to clean AdminOrder model with per-order fulfillment status
     const orders: AdminOrder[] = rawOrders.map((o: any) => {
       const profile = profileMap.get(o.profile_id);
       const shipping = (o.shipping_address || {}) as any;
-      const computedStatus = deriveDynamicOrderStatus(o.status, profile?.card_process);
+      const linkedJob = jobByOrderId.get(o.id);
+      const computedStatus: OrderStatus = linkedJob
+        ? stageToLegacyOrderStatus(linkedJob.stage)
+        : deriveDynamicOrderStatus(o.status, profile?.card_process);
 
       return {
         id: o.id,
@@ -161,12 +183,39 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "orderId and status are required" }, { status: 400 });
     }
 
-    const allowedStatuses: OrderStatus[] = ["under_review", "on_work", "delivered"];
+    const allowedStatuses: OrderStatus[] = [
+      "under_review",
+      "on_work",
+      "card_designed",
+      "ready_to_dispatch",
+      "out_for_delivery",
+      "delivered",
+      "cancelled",
+    ];
     if (!allowedStatuses.includes(status)) {
       return NextResponse.json(
         { error: `Invalid status. Allowed values: ${allowedStatuses.join(", ")}` },
         { status: 400 }
       );
+    }
+
+    // Sync via fulfillment_job if linked
+    const { data: linkedJob } = await supabase
+      .from("fulfillment_jobs")
+      .select("id")
+      .eq("order_id", orderId)
+      .maybeSingle();
+
+    if (linkedJob?.id) {
+      const res = await transitionFulfillmentJobStage(supabase, {
+        jobId: linkedJob.id,
+        toStage: legacyOrderStatusToStage(status),
+        actor: { id: auth.userId, role: "admin" },
+      });
+      if (!res.ok) {
+        return NextResponse.json({ error: res.error }, { status: res.status });
+      }
+      return NextResponse.json({ success: true, orderId, status });
     }
 
     const { error: updateError } = await supabase

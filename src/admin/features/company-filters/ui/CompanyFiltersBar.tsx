@@ -1,6 +1,10 @@
 import React from "react";
 import { Search, X } from "lucide-react";
-import type { CompanyFilters, CompanyFilterTab } from "@/admin/entities/company/model/types";
+import type {
+  CompanyFilters,
+  CompanyFilterTab,
+  CompanySortOption,
+} from "@/admin/entities/company/model/types";
 
 interface CompanyFiltersBarProps {
   filters: CompanyFilters;
@@ -77,8 +81,28 @@ export const CompanyFiltersBar: React.FC<CompanyFiltersBarProps> = ({
           })}
         </div>
 
-        <div className="font-mono text-xs text-[var(--muted-foreground)]">
-          Showing <span className="font-semibold text-[var(--foreground)]">{totalFiltered}</span> companies
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+              Sort:
+            </span>
+            <select
+              value={filters.sortBy || "recent"}
+              onChange={(e) =>
+                onChange({ ...filters, sortBy: e.target.value as CompanySortOption })
+              }
+              className="rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-2.5 py-1 text-xs font-medium text-[var(--foreground)] outline-none cursor-pointer"
+            >
+              <option value="recent">Recent Sign-ups</option>
+              <option value="a_z">Alphabetical (A–Z)</option>
+              <option value="z_a">Alphabetical (Z–A)</option>
+              <option value="expiring_soon">Expiring Soon</option>
+            </select>
+          </div>
+
+          <div className="font-mono text-xs text-[var(--muted-foreground)]">
+            Showing <span className="font-semibold text-[var(--foreground)]">{totalFiltered}</span> companies
+          </div>
         </div>
       </div>
     </div>

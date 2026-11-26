@@ -183,6 +183,24 @@ export default function BranchEditor({
     setSaving(false);
     if (!res.ok) return setError(res.error);
 
+    // Sync branch print card specification & notify Admin
+    try {
+      await fetch("/api/team/card-spec", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "submit_card_spec",
+          targetType: "branch",
+          targetId: res.data.id,
+          designMode: draft.card_design_mode || "company_template",
+          designFileUrl: draft.card_design_url || null,
+          designNotes: draft.card_design_notes || null,
+        }),
+      });
+    } catch {
+      // ignore non-blocking print spec sync errors
+    }
+
     // Tidy up photos this branch no longer uses.
     for (const f of ["cover_url", "logo_url"] as const) {
       const before = branch?.[f];
@@ -504,6 +522,72 @@ export default function BranchEditor({
               className="h-5 w-5 accent-[var(--foreground)]"
             />
           </label>
+
+          {/* Physical NFC Card Print Spec for this Branch */}
+          <Section
+            title="Physical Branch Card Design"
+            hint="Choose whether this branch uses your reusable Company Master Template or custom artwork."
+          >
+            <select
+              value={d.card_design_mode || "company_template"}
+              onChange={(e) =>
+                set("card_design_mode", e.target.value as "company_template" | "custom_upload" | "team_assist")
+              }
+              className={inputCls}
+            >
+              <option value="company_template">
+                Use Company Master Template{profile.default_card_template_url ? " (Saved)" : ""}
+              </option>
+              <option value="custom_upload">Upload Custom Artwork for This Branch</option>
+              <option value="team_assist">Design by Namma Info Team</option>
+            </select>
+
+            {d.card_design_mode === "custom_upload" && (
+              <div className="space-y-2">
+                {d.card_design_url && (
+                  <a
+                    href={d.card_design_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs underline text-[var(--foreground)] block"
+                  >
+                    View uploaded branch card artwork
+                  </a>
+                )}
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  onChange={async (e) => {
+                    const f = e.target.files?.[0];
+                    if (!f) return;
+                    setUploading("card_design_url");
+                    try {
+                      const sb = (await import("@/supabase/client")).createClient();
+                      const ext = f.name.split(".").pop() || "png";
+                      const path = `${profile.id}/card-designs/branch_${Date.now()}.${ext}`;
+                      const { error: upErr } = await sb.storage
+                        .from("profile-media")
+                        .upload(path, f, { upsert: true });
+                      if (!upErr) {
+                        const { data } = sb.storage.from("profile-media").getPublicUrl(path);
+                        set("card_design_url", data.publicUrl);
+                      }
+                    } finally {
+                      setUploading(null);
+                    }
+                  }}
+                  className="text-xs"
+                />
+              </div>
+            )}
+
+            <input
+              value={d.card_design_notes ?? ""}
+              onChange={(e) => set("card_design_notes", e.target.value || null)}
+              placeholder="Optional print notes for this branch card..."
+              className={inputCls}
+            />
+          </Section>
         </div>
 
         <div className="border-t border-[var(--border)] px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">

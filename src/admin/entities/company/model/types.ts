@@ -37,11 +37,24 @@ export interface Company {
   trialFollowUpStatus?: "unattended" | "attended" | null;
   trialFollowUpNotes?: string | null;
   profileCompletionPercentage?: number;
-  role?: "user" | "admin" | "designer" | "campaign_manager" | null;
+  role?: "user" | "admin" | "designer" | "campaign_manager" | "partner" | null;
   isCampaignManager?: boolean;
   referredBy?: string | null;
   referredByCode?: string | null;
-  cardProcess?: Record<string, { completed?: boolean; updated_at?: string | null }>;
+  referredByName?: string | null;
+  defaultCardTemplateUrl?: string | null;
+  nextFollowupAt?: string | null;
+  nextFollowupNote?: string | null;
+  cardProcess?: Record<
+    string,
+    {
+      completed?: boolean;
+      updated_at?: string | null;
+      updated_by_id?: string | null;
+      updated_by_role?: string | null;
+      updated_by_name?: string | null;
+    }
+  >;
   employees?: AdminEmployee[];
 }
 
@@ -50,10 +63,12 @@ export interface CompanyWithEmployees extends Company {
 }
 
 export type CompanyFilterTab = "all" | "trial" | "pro" | "expired";
+export type CompanySortOption = "recent" | "a_z" | "z_a" | "expiring_soon";
 
 export interface CompanyFilters {
   search: string;
   tab: CompanyFilterTab;
+  sortBy?: CompanySortOption;
 }
 
 export interface AdminStats {

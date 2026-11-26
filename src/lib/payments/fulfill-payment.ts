@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/supabase/admin";
 import { getRazorpayClient } from "@/lib/razorpay";
 import { revalidatePath } from "next/cache";
+import { createFulfillmentJobForOrder, createStaffNotification } from "@/lib/fulfillment/service";
 
 /**
  * Applies a successful Razorpay payment to the customer's account.
@@ -249,6 +250,50 @@ export async function fulfillPayment(input: FulfillInput): Promise<FulfillResult
     }
   } catch (refRewardErr) {
     console.error("[Fulfill Payment] Referral reward error:", refRewardErr);
+  }
+
+  try {
+    const { data: paidProfile } = await admin
+      .from("profiles")
+      .select("business_name, owner_name")
+      .eq("id", userId)
+      .maybeSingle();
+    const bizName = paidProfile?.business_name || paidProfile?.owner_name || "Customer";
+
+    if (orderType === "pro_initial" || orderType === "team_addon" || orderType === "primary_card_addon") {
+      await createFulfillmentJobForOrder(admin, {
+        profileId: userId,
+        orderId: order.id,
+        orderType,
+        cardQuantity,
+        designUrl: input.designUrl,
+        designMode: input.designMode,
+        shippingAddress: input.shippingAddress,
+      });
+    }
+
+    const orderLabel =
+      orderType === "pro_initial"
+        ? "New Pro Upgrade"
+        : orderType === "team_addon"
+        ? `Team Card Slots (+${cardQuantity})`
+        : orderType === "primary_card_addon"
+        ? `Extra Primary Card (+${cardQuantity})`
+        : "Annual Subscription Renewal";
+
+    await createStaffNotification(admin, {
+      recipientRole: "admin",
+      eventType: `payment_${orderType}`,
+      severity: orderType === "renewal" ? "info" : "action_required",
+      title: `${orderLabel}: ${bizName}`,
+      message: `${bizName} completed ₹${totalAmount.toLocaleString("en-IN")} payment (${cardQuantity} card${cardQuantity === 1 ? "" : "s"}).`,
+      entityType: "order",
+      entityId: order.id,
+      profileId: userId,
+      dedupeKey: `payment_${input.razorpayPaymentId}`,
+    });
+  } catch (notifyErr) {
+    console.warn("[Fulfill Payment] Fulfillment/Notification hook warning:", notifyErr);
   }
 
   try {

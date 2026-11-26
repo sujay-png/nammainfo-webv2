@@ -67,9 +67,9 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
         );
       case "card_designed":
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] bg-sky-500/10 text-sky-700 dark:text-sky-400 border border-sky-500/20 font-mono text-[10px] font-semibold uppercase tracking-wider">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] bg-[var(--accent)] text-[var(--foreground)] border border-[var(--border)] font-mono text-[10px] font-semibold uppercase tracking-wider">
             <CreditCard size={11} />
-            <span>Card Designed</span>
+            <span>Sent to Designer</span>
           </span>
         );
       case "on_work":

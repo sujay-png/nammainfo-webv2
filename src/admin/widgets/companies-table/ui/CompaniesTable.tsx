@@ -127,6 +127,11 @@ export const CompaniesTable: React.FC<CompaniesTableProps> = ({
                         <p className="truncate text-[11px] text-[var(--muted-foreground)]">
                           {company.ownerName}
                         </p>
+                        {(company.referredByName || company.referredByCode) && (
+                          <span className="mt-1 inline-flex items-center gap-1 rounded-[4px] border border-[var(--border)] bg-[var(--accent)] px-1.5 py-0.5 font-mono text-[9px] font-medium text-[var(--foreground)]">
+                            Partner: {company.referredByName || company.referredByCode}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </td>

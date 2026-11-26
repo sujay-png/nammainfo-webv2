@@ -39,9 +39,9 @@ export default function RenewalModal({
   if (!isOpen) return null;
 
   const isTrial = profile.subscription_plan === "trial";
-  const primaryCards = Number(profile.primary_card_count ?? 1);
-  const totalCards = primaryCards + employeesCount;
-  const cost = calculateRenewalCost(primaryCards, employeesCount);
+  const extraPhysicalPrimaryCards = Math.max(0, Number(profile.primary_card_count ?? 1) - 1);
+  const totalCards = 1 + employeesCount;
+  const cost = calculateRenewalCost(1, employeesCount);
 
   const handleRenewalPayment = async () => {
     setLoading(true);
@@ -204,12 +204,17 @@ export default function RenewalModal({
             <div className="flex items-center justify-between border-b border-[var(--border)] pb-2.5">
               <div>
                 <span className="font-semibold text-[var(--foreground)] block">
-                  {primaryCards > 1 ? `${primaryCards}x Primary Business Cards` : "1x Primary Business Card"}
+                  1x Primary Business Subscription
                 </span>
-                <span className="text-[11px] text-[var(--muted-foreground)]">Pro plan & custom vanity profile URL</span>
+                <span className="text-[11px] text-[var(--muted-foreground)]">
+                  Pro plan & custom vanity profile URL
+                  {extraPhysicalPrimaryCards > 0
+                    ? ` (includes ${extraPhysicalPrimaryCards} extra one-time physical card${extraPhysicalPrimaryCards === 1 ? "" : "s"} — no renewal fee)`
+                    : ""}
+                </span>
               </div>
               <span className="font-mono font-bold text-[var(--foreground)]">
-                ₹{(primaryCards * cost.unitPrice).toLocaleString("en-IN")}
+                ₹{cost.unitPrice.toLocaleString("en-IN")}
               </span>
             </div>
 

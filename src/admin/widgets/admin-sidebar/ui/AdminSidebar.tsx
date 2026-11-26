@@ -1,11 +1,12 @@
 import React from "react";
-import { Building2, Package, UserPlus, LogOut, Handshake } from "lucide-react";
+import { Building2, Package, UserPlus, LogOut, Handshake, UserCheck } from "lucide-react";
 
 interface AdminSidebarProps {
   currentTab: string;
   onTabChange: (tab: string) => void;
   onSignOut?: () => void;
   ordersPendingCount?: number;
+  affiliatePendingCount?: number;
 }
 
 export const AdminSidebar: React.FC<AdminSidebarProps> = ({
@@ -13,6 +14,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   onTabChange,
   onSignOut,
   ordersPendingCount = 0,
+  affiliatePendingCount = 0,
 }) => {
   return (
     <aside className="flex flex-col w-64 h-screen border-r border-[var(--border)] bg-[var(--card)] p-5 shrink-0 justify-between select-none">
@@ -33,7 +35,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           {/* Companies & Subscriptions */}
           <button
             onClick={() => onTabChange("overview")}
-            className={`flex w-full items-center gap-3 rounded-[5px] px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
+            className={`flex w-full items-center gap-3 rounded-[5px] px-3 py-2 text-xs font-medium cursor-pointer ${
               currentTab === "overview"
                 ? "bg-[var(--foreground)] text-[var(--background)]"
                 : "text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
@@ -46,7 +48,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           {/* Orders & Fulfillment */}
           <button
             onClick={() => onTabChange("orders")}
-            className={`flex w-full items-center justify-between rounded-[5px] px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
+            className={`flex w-full items-center justify-between rounded-[5px] px-3 py-2 text-xs font-medium cursor-pointer ${
               currentTab === "orders"
                 ? "bg-[var(--foreground)] text-[var(--background)]"
                 : "text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
@@ -57,7 +59,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
               <span>Card Orders</span>
             </div>
             {ordersPendingCount > 0 && (
-              <span className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+              <span className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-[4px] ${
                 currentTab === "orders"
                   ? "bg-[var(--background)] text-[var(--foreground)]"
                   : "bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/25"
@@ -70,7 +72,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           {/* Partner Program */}
           <button
             onClick={() => onTabChange("campaigns")}
-            className={`flex w-full items-center gap-3 rounded-[5px] px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
+            className={`flex w-full items-center gap-3 rounded-[5px] px-3 py-2 text-xs font-medium cursor-pointer ${
               currentTab === "campaigns"
                 ? "bg-[var(--foreground)] text-[var(--background)]"
                 : "text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
@@ -80,10 +82,36 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
             <span>Partners</span>
           </button>
 
+          {/* Affiliate Requests */}
+          <button
+            onClick={() => onTabChange("affiliate_requests")}
+            className={`flex w-full items-center justify-between rounded-[5px] px-3 py-2 text-xs font-medium cursor-pointer ${
+              currentTab === "affiliate_requests"
+                ? "bg-[var(--foreground)] text-[var(--background)]"
+                : "text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <UserCheck size={15} />
+              <span>Affiliate Requests</span>
+            </div>
+            {affiliatePendingCount > 0 && (
+              <span
+                className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-[4px] border ${
+                  currentTab === "affiliate_requests"
+                    ? "border-[var(--background)]/30 bg-[var(--background)] text-[var(--foreground)]"
+                    : "border-[var(--border)] bg-[var(--background)] text-[var(--foreground)]"
+                }`}
+              >
+                {affiliatePendingCount}
+              </span>
+            )}
+          </button>
+
           {/* Account Creation (Staff Management) */}
           <button
             onClick={() => onTabChange("staff")}
-            className={`flex w-full items-center gap-3 rounded-[5px] px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
+            className={`flex w-full items-center gap-3 rounded-[5px] px-3 py-2 text-xs font-medium cursor-pointer ${
               currentTab === "staff"
                 ? "bg-[var(--foreground)] text-[var(--background)]"
                 : "text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"

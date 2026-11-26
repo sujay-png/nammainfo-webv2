@@ -37,6 +37,7 @@ export default function EmployeeProfileView({
   branch = null,
   branches = [],
   handle,
+  referralRef,
 }: {
   employee: Employee;
   /** The business. For a branch member, the branch is already merged in (applyBranch). */
@@ -49,6 +50,8 @@ export default function EmployeeProfileView({
   branches?: BranchSummary[];
   /** The business's link name (username, or the card link it was opened with). */
   handle?: string;
+  /** Referral attribution token (employee partner or owning business). */
+  referralRef?: string;
 }) {
   const ownerTheme = getTheme(owner.theme);
   const [themeMode, setThemeMode] = useState<"light" | "dark">("light");
@@ -242,6 +245,7 @@ export default function EmployeeProfileView({
         branch={branch}
         branches={branches}
         handle={linkName ?? undefined}
+        referralRef={referralRef}
         isEmployeeView
         hideHero
       />

@@ -11,8 +11,10 @@ import {
   loadPageData,
   membershipGate,
   publicHandle,
+  resolveEmployeePartnerStatus,
   resolveOwner,
 } from "@/features/branches/services/public-pages.service";
+import { buildEmployeeReferralRef } from "@/lib/affiliate/requests";
 
 /**
  * /<business>/<x> is either a BRANCH (nammainfo.in/abc/mangaluru) or a
@@ -99,7 +101,17 @@ export default async function BranchOrEmployeePage({ params }: { params: Params 
   const gate = membershipGate(owner);
   if (gate) return gate;
 
-  const { card, reviews, employees } = await loadPageData(owner.id, result.card);
+  const [{ card, reviews, employees }, employeeIsPartner] = await Promise.all([
+    loadPageData(owner.id, result.card),
+    resolveEmployeePartnerStatus((employee as any).user_id),
+  ]);
+  const referralRef =
+    buildEmployeeReferralRef({
+      employeeId: employee.id,
+      employeeIsPartner,
+      ownerHandle: handle,
+    }) ?? undefined;
+
   return (
     <EmployeeProfileView
       employee={employee}
@@ -109,6 +121,7 @@ export default async function BranchOrEmployeePage({ params }: { params: Params 
       employees={employees}
       branches={branches}
       handle={handle}
+      referralRef={referralRef}
     />
   );
 }

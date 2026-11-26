@@ -9,6 +9,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { SHOW_INSTALL_EVENT, isRunningAsApp } from "@/features/install-app/components/add-to-home-screen-popup";
 import Avatar from "@/components/ui/avatar";
 import Sheet, { ui } from "@/components/ui/sheet";
+import { AffiliateProgramSettings } from "@/features/affiliate/components/AffiliateProgramSettings";
 
 const group = "divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]";
 const row = "flex w-full items-center gap-3 px-4 py-3 text-left text-[15px] transition hover:bg-[var(--muted)]";
@@ -77,6 +78,8 @@ export default function EmployeeSettings() {
           );
         })}
       </div>
+
+      <AffiliateProgramSettings variant="employee" />
 
       <div className={`${group} mt-6`}>
         <button type="button" onClick={signOut} className={`${row} text-red-600 dark:text-red-400`}>

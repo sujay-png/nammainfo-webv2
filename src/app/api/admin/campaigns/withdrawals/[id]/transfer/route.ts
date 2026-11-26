@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdminAuth } from "@/admin/shared/lib/admin-auth";
+import { createStaffNotification } from "@/lib/fulfillment/service";
 
 export const dynamic = "force-dynamic";
 
@@ -82,6 +83,17 @@ export async function POST(
         }
       }
     }
+
+    await createStaffNotification(supabase, {
+      recipientRole: "partner",
+      recipientUserId: withdrawal.campaign_manager_id,
+      eventType: "partner_withdrawal_transferred",
+      severity: "info",
+      title: `Payout Transferred: ₹${transferAmount.toLocaleString("en-IN")}`,
+      message: `Admin transferred your withdrawal of ₹${transferAmount.toLocaleString("en-IN")}.`,
+      entityType: "withdrawal",
+      entityId: withdrawalId,
+    });
 
     return NextResponse.json({
       success: true,

@@ -88,6 +88,22 @@ export async function POST(request: Request) {
     }
 
     try {
+      await admin
+        .from("fulfillment_jobs")
+        .update({
+          stage: "delivered",
+          delivered_at: nowIso,
+          last_updated_by: user.id,
+          last_updated_by_role: "customer",
+          last_updated_by_name: "Customer Confirmed",
+          updated_at: nowIso,
+        })
+        .eq("order_id", orderId);
+    } catch {
+      // ignore if fulfillment_jobs not yet migrated
+    }
+
+    try {
       revalidatePath("/dashboard/orders");
       revalidatePath("/dashboard/home");
     } catch {

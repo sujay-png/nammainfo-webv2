@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { createAdminClient } from "@/supabase/admin";
+import { createStaffNotification } from "@/lib/fulfillment/service";
 
 export const dynamic = "force-dynamic";
 
@@ -78,7 +79,7 @@ export async function POST(req: Request) {
     // Verify manager
     const { data: profile } = await admin
       .from("profiles")
-      .select("id, is_partner, is_campaign_manager, role")
+      .select("id, owner_name, business_name, email, is_partner, is_campaign_manager, role")
       .eq("id", user.id)
       .single();
 
@@ -175,6 +176,21 @@ export async function POST(req: Request) {
       console.error("[Campaign Withdrawals POST] Error inserting:", insertErr);
       return NextResponse.json({ error: insertErr.message }, { status: 500 });
     }
+
+    const partnerName =
+      profile.business_name || profile.owner_name || profile.email || "Partner";
+    await createStaffNotification(admin, {
+      recipientRole: "admin",
+      eventType: "partner_withdrawal_requested",
+      severity: "action_required",
+      title: `Withdrawal Request: ${partnerName}`,
+      message: `${partnerName} requested a ₹${amount.toLocaleString("en-IN")} payout via ${
+        payoutMethod === "bank_transfer" ? "Bank Transfer" : "UPI"
+      }.`,
+      entityType: "withdrawal",
+      entityId: newWithdrawal.id,
+      profileId: user.id,
+    });
 
     return NextResponse.json({
       success: true,

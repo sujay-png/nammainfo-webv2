@@ -262,8 +262,8 @@ function ValidityCard({
   const endingSoon = !expired && daysLeft <= 15;
 
   const primaryCards = Number(profile.primary_card_count ?? 1);
-  const totalCards = primaryCards + employeesCount;
-  const renewalCost = calculateRenewalCost(primaryCards, employeesCount);
+  const totalCards = 1 + employeesCount;
+  const renewalCost = calculateRenewalCost(1, employeesCount);
 
   const tone = expired
     ? "border-rose-500/30 bg-rose-500/5"

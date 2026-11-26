@@ -66,18 +66,30 @@ export function calculateTeamAddonCost(
   };
 }
 
+/**
+ * Calculates annual renewal cost for the organization.
+ *
+ * IMPORTANT: Extra physical primary cards (purchased via ₹500 primary_card_addon)
+ * are a ONE-TIME hardware/print cost for the same primary business profile.
+ * On annual renewal, the owner renews 1 primary subscription + all active
+ * team & branch cards — never multiplying extra physical primary cards by ₹1,999.
+ */
 export function calculateRenewalCost(
-  primaryCards: number,
+  _primaryCards: number,
   activeTeamMembers: number
 ): {
   totalCards: number;
+  primarySubscriptions: number;
   unitPrice: number;
   totalAmount: number;
 } {
-  const totalCards = Math.max(1, primaryCards + activeTeamMembers);
+  const secondaryCount = Math.max(0, Number(activeTeamMembers) || 0);
+  const primarySubscriptions = 1;
+  const totalCards = primarySubscriptions + secondaryCount;
   const unitPrice = getCardUnitPrice(totalCards);
   return {
     totalCards,
+    primarySubscriptions,
     unitPrice,
     totalAmount: totalCards * unitPrice,
   };
