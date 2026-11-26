@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { lockScroll, unlockScroll } from "@/lib/scroll-lock";
 import { X } from "lucide-react";
 import clsx from "clsx";
 
@@ -32,12 +33,11 @@ export const Modal: React.FC<ModalProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
-    if (isOpen) {
-      document.body.style.overflow = "hidden";
-      window.addEventListener("keydown", handleKeyDown);
-    }
+    if (!isOpen) return;
+    lockScroll();
+    window.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.body.style.overflow = "unset";
+      unlockScroll();
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [isOpen, onClose]);

@@ -31,6 +31,7 @@ export const userManualToc: TocEntry[] = [
     { id: "profile-more", title: "Step 5: Social, gallery, payments, brochure" },
     { id: "profile-testimonials", title: "Step 6: Testimonials" },
     { id: "profile-clients", title: "Step 7: Our clients" },
+    { id: "profile-links", title: "Links, menu and price list buttons" },
     { id: "profile-reviews-link", title: "Step 8: Link Google reviews" },
     { id: "profile-complete", title: "Check your profile is complete" },
   ] },
@@ -51,6 +52,7 @@ export const userManualToc: TocEntry[] = [
   ] },
   { id: "saved", title: "Contacts and saved cards", children: [
     { id: "contacts", title: "Contacts" },
+    { id: "greet-whatsapp", title: "Greet a contact on WhatsApp" },
     { id: "saved-cards", title: "Saved cards" },
   ] },
   { id: "reviews", title: "Google reviews made easy", children: [
@@ -350,6 +352,28 @@ export default function UserManualContent() {
           </Steps>
         </Sub>
 
+        <Sub id="profile-links" title="Links, menu and price list buttons">
+          <p>Two ways to add your own buttons to your card:</p>
+          <div className={s.tableWrap}>
+            <table>
+              <thead><tr><th>Section on the Profile screen</th><th>What it adds</th><th>Good for</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Links on your card</strong></td><td>Up to 3 buttons right under <strong>Add to Contacts</strong>. Each has a name and a web address.</td><td>Book appointment, Order online, Instagram, Portfolio</td></tr>
+                <tr><td><strong>Menu, price list &amp; more</strong></td><td>Buttons next to the Brochure in <strong>Downloads &amp; Actions</strong>. Each has a name and either an <strong>uploaded file</strong> (PDF or photo, up to 10 MB) or a <strong>link</strong>.</td><td>Restaurants without a brochure: add a <em>Menu</em>. Shops: <em>Price list</em>, <em>Catalogue</em></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <Steps>
+            <Step>On the Profile screen, tap the pencil on <strong>Links on your card</strong> or <strong>Menu, price list &amp; more</strong>.</Step>
+            <Step>Type a button name, or tap a suggestion such as <em>Menu</em> or <em>Book appointment</em>.</Step>
+            <Step>Paste the link, or for a menu button choose <strong>Upload file</strong> and pick the PDF or photo.</Step>
+            <Step>Use the arrows to change the order, then tap <strong>Save</strong>.</Step>
+          </Steps>
+          <Callout kind="tip">
+            <p>You can send these buttons to customers too: they appear as options in <strong>Greet on WhatsApp</strong>.</p>
+          </Callout>
+        </Sub>
+
         <Sub id="profile-reviews-link" title="Step 8: Link Google reviews">
           <Steps>
             <Step>Open the <strong>Reviews</strong> section and tap <strong>Link Google Reviews</strong>.</Step>
@@ -527,6 +551,41 @@ export default function UserManualContent() {
             <li><strong>Delete contact</strong> (tap twice to confirm). This also deletes their card photos.</li>
           </ul>
           <p>If the same person opens your card again, Namma Info updates their entry instead of creating a duplicate.</p>
+        </Sub>
+
+        <Sub id="greet-whatsapp" title="Greet a contact on WhatsApp">
+          <p>
+            Open a contact in <strong>Saved → Contacts</strong> and tap <strong>Greet &lt;name&gt; on WhatsApp</strong>. You get five
+            ready messages. Tap <strong>Send on WhatsApp</strong> on one and WhatsApp opens with the message already typed: just press send.
+          </p>
+          <div className={s.tableWrap}>
+            <table>
+              <thead><tr><th>Message</th><th>What it says</th></tr></thead>
+              <tbody>
+                <tr><td>1. Greeting (always there)</td><td>&ldquo;Hey Kapil, Greetings from <em>your name, designation, company</em>. Thank you for connecting with me through nammainfo.in. Here is my company profile url for future reference: <em>your link</em>&rdquo;</td></tr>
+                <tr><td>2 to 5. Your own</td><td>A heading and a message you write once, plus any links from your profile: profile, brochure, menu and other buttons, website, Google review page or directions.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <Steps>
+            <Step>In the Greet sheet, tap <strong>Write message 2</strong> (or <strong>Edit</strong> on an existing one).</Step>
+            <Step>Start from a sample (<em>Our brochure</em>, <em>Thank you for visiting</em>, <em>Visit us</em>, <em>Special offer</em>) or write your own heading and message.</Step>
+            <Step>Tap <strong>+ Their name</strong>, <strong>+ My name</strong> or <strong>+ Company</strong> to insert words that fill in automatically.</Step>
+            <Step>Tick the links to add, for example <em>Brochure</em> or <em>Menu</em>, and tap <strong>Save</strong>.</Step>
+          </Steps>
+          <Callout kind="info">
+            <p>Messages are saved once and used for every contact. Team members see the same messages with their own name, designation and card link, but only the owner can change them.</p>
+          </Callout>
+          <p><strong>Sending your brochure or menu as the actual file:</strong></p>
+          <ul>
+            <li>On a phone, a message that includes your brochure or an uploaded file (menu, price list) shows <strong>Send with file</strong>. Tap it, choose <strong>WhatsApp</strong>, then pick the person&apos;s chat. The PDF goes as a real attachment with your message.</li>
+            <li>The message is also copied. If WhatsApp shows only the file, paste the message in the chat.</li>
+            <li><strong>Send as link instead</strong> opens their chat directly, with a short link such as <em>nammainfo.in/doc/yourname/brochure</em>. The link always opens your latest file, even after you replace it.</li>
+            <li>On a computer, messages are sent with the short links.</li>
+          </ul>
+          <Callout kind="tip">
+            <p>Team members&apos; cards now also show <strong>Share your details</strong> and <strong>Create your own Namma Info profile</strong> at the bottom. Details shared there go to that team member&apos;s contacts.</p>
+          </Callout>
         </Sub>
 
         <Sub id="saved-cards" title="Saved cards">

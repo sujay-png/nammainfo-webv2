@@ -19,6 +19,7 @@ import {
   Upload,
   Loader2,
   Camera,
+  HeartHandshake,
 } from "lucide-react";
 import { createClient } from "@/supabase/client";
 import { useAccount } from "@/hooks/use-account";
@@ -30,6 +31,7 @@ import Sheet, { ui } from "@/components/ui/sheet";
 import { deleteCardPhotos, getCardPhotoUrls } from "@/features/contacts/services/business-card-upload.service";
 import { listMyBranches } from "@/features/branches/services/branches.service";
 import type { Branch } from "@/features/branches/types";
+import GreetSheet from "@/features/whatsapp-greet/components/greet-sheet";
 import { saveContactFromUrl } from "@/features/save-contact/lib/save-contact";
 
 /* ------------------------------------------------------------------ */
@@ -601,6 +603,7 @@ function ContactSheet({
   const [eError, setEError] = useState<string | null>(null);
 
   const [showPhotoModal, setShowPhotoModal] = useState(false);
+  const [greeting, setGreeting] = useState(false);
 
   function saveDetails() {
     const name = eName.trim();
@@ -664,7 +667,14 @@ function ContactSheet({
         >
           <UserPlus size={17} /> Add to Contacts
         </button>
+        {contact.phone && (
+          <button type="button" onClick={() => setGreeting(true)} className={`${actionBtn} px-2 text-center`}>
+            <HeartHandshake size={17} />
+            <span className="leading-tight">Greet {(contact.name || "them").split(" ")[0]} on WhatsApp</span>
+          </button>
+        )}
       </div>
+      {greeting && <GreetSheet contact={contact} onClose={() => setGreeting(false)} />}
 
       {/* Business Card Section */}
       <div className="mt-4">

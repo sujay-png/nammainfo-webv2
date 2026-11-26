@@ -1,5 +1,6 @@
 "use client";
 
+import { useScrollLock } from "@/lib/scroll-lock";
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -111,15 +112,7 @@ export default function UpgradeToProModal({
     setMounted(true);
   }, []);
 
-  useEffect(() => {
-    if (isOpen) {
-      const originalOverflow = document.body.style.overflow;
-      document.body.style.overflow = "hidden";
-      return () => {
-        document.body.style.overflow = originalOverflow;
-      };
-    }
-  }, [isOpen]);
+  useScrollLock(isOpen);
 
   useEffect(() => {
     // Only reset modal state when transitioning from closed to open

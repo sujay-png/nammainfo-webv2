@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useScrollLock } from "@/lib/scroll-lock";
 import { X } from "lucide-react";
 
 /**
@@ -8,6 +10,9 @@ import { X } from "lucide-react";
  * Header (title + optional description + close), scrollable body, optional
  * sticky footer for actions.
  */
+/** Open sheets, oldest first (for Escape handling). */
+const openSheets: symbol[] = [];
+
 export default function Sheet({
   title,
   description,
@@ -25,18 +30,37 @@ export default function Sheet({
   dismissible?: boolean;
   zIndex?: number;
 }) {
+  // Shared lock: safe with sheets opened on top of sheets.
+  useScrollLock();
+
+  // Escape closes. The latest onClose is kept in a ref, so this listener
+  // isn't re-added on every render (onClose is usually an inline function).
+  // Only the top-most open sheet reacts, so Escape closes one at a time.
+  const closeRef = useRef(onClose);
+  closeRef.current = dismissible ? onClose : undefined;
   useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && dismissible && onClose?.();
+    const id = Symbol("sheet");
+    openSheets.push(id);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && openSheets[openSheets.length - 1] === id) closeRef.current?.();
+    };
     window.addEventListener("keydown", onKey);
     return () => {
-      document.body.style.overflow = prev;
       window.removeEventListener("keydown", onKey);
+      const i = openSheets.indexOf(id);
+      if (i >= 0) openSheets.splice(i, 1);
     };
-  }, [dismissible, onClose]);
+  }, []);
 
-  return (
+  // Render at the end of <body>, not where the sheet is written. A sheet
+  // opened from inside another sheet (Contact -> Greet on WhatsApp) would
+  // otherwise sit inside the first sheet's scrolling, animated panel and
+  // get clipped there instead of covering the screen.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
+
+  return createPortal(
     <div
       className="fixed inset-0 flex items-end justify-center bg-black/40 sm:items-center sm:p-4"
       style={{ zIndex }}
@@ -71,6 +95,8 @@ export default function Sheet({
         )}
       </div>
     </div>
+  ,
+    document.body
   );
 }
 

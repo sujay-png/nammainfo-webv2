@@ -1,5 +1,6 @@
 "use client";
 
+import { lockScroll, unlockScroll } from "@/lib/scroll-lock";
 import { useEffect, useRef, useState } from "react";
 import { Camera, Check, Lock, ScanLine, X } from "lucide-react";
 import { createClient } from "@/supabase/client";
@@ -187,14 +188,13 @@ export default function VisitorDetailsGate({
   // Lock scrolling behind the form & handle Escape key
   useEffect(() => {
     if (mode !== "form") return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    lockScroll();
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") skip();
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.body.style.overflow = prev;
+      unlockScroll();
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [mode]);

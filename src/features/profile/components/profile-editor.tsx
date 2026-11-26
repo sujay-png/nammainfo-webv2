@@ -15,6 +15,15 @@ import TestimonialsEditor from "@/features/testimonials/components/testimonials-
 import ClientsEditor from "@/features/clients/components/clients-editor";
 import { cleanTestimonials, type Testimonial } from "@/features/testimonials/types";
 import { cleanClients, type ClientItem } from "@/features/clients/types";
+import CustomLinksEditor from "@/features/custom-links/components/custom-links-editor";
+import CustomButtonsEditor from "@/features/custom-links/components/custom-buttons-editor";
+import {
+  cleanCustomButtons,
+  cleanCustomLinks,
+  MAX_CUSTOM_LINKS,
+  type CustomButton,
+  type CustomLink,
+} from "@/features/custom-links/types";
 import dynamic from "next/dynamic";
 
 const CropModal = dynamic(() => import("@/components/ui/image-crop-modal"), {
@@ -51,6 +60,7 @@ import {
   ChevronDown,
   Quote,
   Building2,
+  MousePointerClick,
 } from "lucide-react";
 
 type EditSection =
@@ -63,7 +73,9 @@ type EditSection =
   | "testimonials"
   | "clients"
   | "banking"
-  | "brochure";
+  | "brochure"
+  | "customLinks"
+  | "customButtons";
 
 function OwnerProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -635,6 +647,28 @@ function OwnerProfilePage() {
       </div>
 
       {/* About */}
+      {/* Links at the top of the card (needs migration 20261123) */}
+      {(() => {
+        const list = cleanCustomLinks((profile as Profile & { custom_links?: unknown }).custom_links);
+        return (
+          <Section title="Links on your card" icon={<Link2 size={16} />} onEdit={() => startEdit("customLinks")}>
+            {list.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {list.map((l) => (
+                  <span key={l.id} className="rounded-full bg-ink-50 px-2.5 py-1 text-xs font-medium text-ink-700">
+                    {l.label}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-ink-400">
+                Add up to {MAX_CUSTOM_LINKS} buttons under &ldquo;Add to Contacts&rdquo;, e.g. Book appointment or Order online
+              </p>
+            )}
+          </Section>
+        );
+      })()}
+
       <Section
         title="About"
         icon={<Briefcase size={16} />}
@@ -1119,6 +1153,28 @@ function OwnerProfilePage() {
         )}
       </Section>
 
+      {/* Custom buttons: menu, price list… (needs migration 20261123) */}
+      {(() => {
+        const list = cleanCustomButtons((profile as Profile & { custom_buttons?: unknown }).custom_buttons);
+        return (
+          <Section title="Menu, price list & more" icon={<MousePointerClick size={16} />} onEdit={() => startEdit("customButtons")}>
+            {list.length > 0 ? (
+              <div className="space-y-1.5">
+                {list.map((b) => (
+                  <div key={b.id} className="flex items-center gap-2.5 rounded-xl bg-ink-50 px-3 py-2">
+                    {b.kind === "file" ? <FileText size={14} className="text-ink-500" /> : <Link2 size={14} className="text-ink-500" />}
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{b.label}</span>
+                    <span className="text-[11px] text-ink-400">{b.kind === "file" ? "File" : "Link"}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-ink-400">No brochure? Add a Menu, Price list or Catalogue button (file or link)</p>
+            )}
+          </Section>
+        );
+      })()}
+
       {/* ============= EDIT SHEETS ============= */}
 
       {/* Basic Info Edit */}
@@ -1424,6 +1480,36 @@ function OwnerProfilePage() {
             onCancel={() => setEditing(null)}
             onSaved={(items: ClientItem[]) => {
               setProfile({ ...profile, clients: items } as Profile);
+              setEditing(null);
+            }}
+          />
+        </EditSheet>
+      )}
+
+      {/* Custom links Edit */}
+      {editing === "customLinks" && (
+        <EditSheet title="Links on your card" onClose={() => setEditing(null)}>
+          <CustomLinksEditor
+            profileId={profile.id}
+            initial={cleanCustomLinks((profile as Profile & { custom_links?: unknown }).custom_links)}
+            onCancel={() => setEditing(null)}
+            onSaved={(items: CustomLink[]) => {
+              setProfile({ ...profile, custom_links: items } as Profile);
+              setEditing(null);
+            }}
+          />
+        </EditSheet>
+      )}
+
+      {/* Custom buttons Edit */}
+      {editing === "customButtons" && (
+        <EditSheet title="Menu, price list & more" onClose={() => setEditing(null)}>
+          <CustomButtonsEditor
+            profileId={profile.id}
+            initial={cleanCustomButtons((profile as Profile & { custom_buttons?: unknown }).custom_buttons)}
+            onCancel={() => setEditing(null)}
+            onSaved={(items: CustomButton[]) => {
+              setProfile({ ...profile, custom_buttons: items } as Profile);
               setEditing(null);
             }}
           />

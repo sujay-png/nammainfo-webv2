@@ -1,5 +1,6 @@
 "use client";
 
+import { useScrollLock } from "@/lib/scroll-lock";
 import { useState, useMemo, useEffect } from "react";
 import { saveContactFromUrl } from "@/features/save-contact/lib/save-contact";
 import Link from "next/link";
@@ -53,6 +54,8 @@ import PublicClients from "@/features/clients/components/public-clients";
 import { cleanTestimonials } from "@/features/testimonials/types";
 import { cleanClients } from "@/features/clients/types";
 import PublicBranches from "@/features/branches/components/public-branches";
+import { PublicCustomButtons, PublicCustomLinks } from "@/features/custom-links/components/public-custom-links";
+import { cleanCustomButtons, cleanCustomLinks } from "@/features/custom-links/types";
 import type { Branch, BranchSummary } from "@/features/branches/types";
 import { branchPath, profilePath } from "@/features/branches/lib/paths";
 
@@ -685,6 +688,7 @@ export default function PublicProfileView({
   reviews,
   employees,
   isEmployeeView = false,
+  onShareDetails,
   hideHero = false,
   branch = null,
   branches = [],
@@ -695,8 +699,10 @@ export default function PublicProfileView({
   card: Card | null;
   reviews: Review[];
   employees: Employee[];
-  /** When true, hides visitor share details gate */
+  /** Embedded in a team member's card: no tap counting or auto-save here (the member's card does that). */
   isEmployeeView?: boolean;
+  /** On a team member's card: "Share your details" opens the member's own form, so the contact goes to them. */
+  onShareDetails?: () => void;
   /** When true, hides the hero/header section (used when embedded inside employee view) */
   hideHero?: boolean;
   /** The branch being shown. `profile` already has the branch merged in (applyBranch). */
@@ -812,6 +818,8 @@ export default function PublicProfileView({
   const galleryList = (profile.gallery as { url: string; category?: string; caption?: string }[]) ?? [];
   const testimonialList = cleanTestimonials((profile as { testimonials?: unknown }).testimonials);
   const clientList = cleanClients((profile as { clients?: unknown }).clients);
+  const customLinks = cleanCustomLinks((profile as { custom_links?: unknown }).custom_links);
+  const customButtons = cleanCustomButtons((profile as { custom_buttons?: unknown }).custom_buttons);
   const bankAccounts = (profile.bank_accounts as { bank_name?: string; account_holder?: string; account_number?: string; ifsc?: string; upi_id?: string; qr_url?: string }[]) ?? [];
 
   /* Dynamic label for services/products section */
@@ -969,6 +977,9 @@ export default function PublicProfileView({
               </a>
             )}
           </div>
+
+          {/* Owner's custom links (max 3), e.g. Book appointment */}
+          <PublicCustomLinks items={customLinks} />
 
           {/* Quick contact */}
           <div className="mt-4 grid grid-cols-3 gap-2 px-5">
@@ -1359,6 +1370,8 @@ export default function PublicProfileView({
                 <span className="text-xs font-medium text-[var(--foreground)]">Brochure</span>
               </a>
             )}
+            {/* Menu, price list… (custom buttons) */}
+            <PublicCustomButtons items={customButtons} />
           </div>
         </CollapsibleSection>
 
@@ -1384,11 +1397,11 @@ export default function PublicProfileView({
           </div>
         )}
 
-        {/* Share your details button — triggers visitor details popup */}
-        {!isEmployeeView && (
+        {/* Share your details: on the business page and on team members' cards */}
+        {(!isEmployeeView || onShareDetails) && (
           <button
             type="button"
-            onClick={() => setShowVisitorGate(true)}
+            onClick={() => (onShareDetails ? onShareDetails() : setShowVisitorGate(true))}
             className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[var(--border)] py-4 text-sm font-medium text-[var(--muted-foreground)] transition hover:border-[var(--foreground)] hover:text-[var(--foreground)]"
           >
             <Contact size={16} />
@@ -1592,13 +1605,7 @@ function ReviewCopiedSheet({
 }) {
   const [copiedAgain, setCopiedAgain] = useState(false);
 
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, []);
+  useScrollLock();
 
   const steps = googleUrl
     ? [
