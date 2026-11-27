@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/supabase/admin";
+import {
+  getCouponRewardAmount,
+  parseDiscountFromCouponCode,
+} from "@/lib/coupons/tiers";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +16,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Coupon code is required" }, { status: 400 });
     }
 
-    if (!rawCode.endsWith("500")) {
+    const tierFromCode = parseDiscountFromCouponCode(rawCode);
+    if (!tierFromCode) {
       return NextResponse.json({ error: "Invalid referral coupon code" }, { status: 400 });
     }
 
@@ -21,7 +26,7 @@ export async function POST(req: Request) {
     // Look up coupon
     const { data: coupon, error } = await supabase
       .from("campaign_coupons")
-      .select("id, code, discount_amount, campaign_manager_id")
+      .select("id, code, discount_amount, reward_amount, campaign_manager_id")
       .eq("code", rawCode)
       .maybeSingle();
 
@@ -32,10 +37,10 @@ export async function POST(req: Request) {
       );
     }
 
-    // Verify manager profile
+    // Verify partner profile
     const { data: manager } = await supabase
       .from("profiles")
-      .select("id, business_name, owner_name, is_campaign_manager")
+      .select("id, business_name, owner_name, is_partner, is_campaign_manager, role")
       .eq("id", coupon.campaign_manager_id)
       .maybeSingle();
 
@@ -46,12 +51,17 @@ export async function POST(req: Request) {
       );
     }
 
+    const discountAmount = Number(coupon.discount_amount) || tierFromCode;
+    const rewardAmount =
+      Number(coupon.reward_amount) || getCouponRewardAmount(discountAmount);
+
     return NextResponse.json({
       valid: true,
       code: coupon.code,
-      discountAmount: Number(coupon.discount_amount) || 500,
+      discountAmount,
+      rewardAmount,
       campaignManagerId: coupon.campaign_manager_id,
-      managerName: manager.business_name || manager.owner_name || "Campaign Manager",
+      managerName: manager.business_name || manager.owner_name || "Partner",
     });
   } catch (err: any) {
     console.error("[Coupon Validate API] Exception:", err);

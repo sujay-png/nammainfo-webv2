@@ -1,6 +1,7 @@
 "use client";
 
 import { useScrollLock } from "@/lib/scroll-lock";
+import { parseDiscountFromCouponCode } from "@/lib/coupons/tiers";
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -97,6 +98,9 @@ export default function UpgradeToProModal({
   const initialCoupon = profile.referred_by_code || null;
   const isPreApplied = Boolean(profile.referred_by_code);
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(initialCoupon);
+  const [appliedDiscountAmount, setAppliedDiscountAmount] = useState<number>(
+    parseDiscountFromCouponCode(initialCoupon) ?? 0
+  );
   const [couponInput, setCouponInput] = useState<string>("");
   const [isCouponExpanded, setIsCouponExpanded] = useState<boolean>(false);
   const [validatingCoupon, setValidatingCoupon] = useState<boolean>(false);
@@ -146,19 +150,23 @@ export default function UpgradeToProModal({
 
       // Initialize coupon from profile if explicitly present
       setAppliedCoupon(profile.referred_by_code || null);
+      setAppliedDiscountAmount(parseDiscountFromCouponCode(profile.referred_by_code) ?? 0);
       setCouponInput("");
       setCouponError(null);
       setIsCouponExpanded(false);
     }
     prevOpenRef.current = isOpen;
-  }, [isOpen]);
+  }, [isOpen, profile.referred_by_code]);
 
   if (!isOpen || !mounted) return null;
 
   const extraPrimaryCards = Math.max(0, primaryCardQuantity - 1);
   const extraCost = extraPrimaryCards * 500;
   const basePrice = 1999;
-  const couponDiscount = appliedCoupon || isPreApplied ? 500 : 0;
+  const couponDiscount =
+    appliedCoupon || isPreApplied
+      ? appliedDiscountAmount || parseDiscountFromCouponCode(appliedCoupon || profile.referred_by_code) || 500
+      : 0;
   const totalAmount = Math.max(0, basePrice + extraCost - couponDiscount);
 
   const handleApplyCoupon = async () => {
@@ -177,6 +185,7 @@ export default function UpgradeToProModal({
         throw new Error(data.error || "Invalid coupon code");
       }
       setAppliedCoupon(data.code);
+      setAppliedDiscountAmount(Number(data.discountAmount) || parseDiscountFromCouponCode(data.code) || 500);
       setIsCouponExpanded(false);
     } catch (err: any) {
       setCouponError(err.message || "Failed to validate coupon");
@@ -1048,7 +1057,7 @@ export default function UpgradeToProModal({
                     <CheckCircle2 size={13} />
                     <span>Referral Discount ({appliedCoupon || profile.referred_by_code || "Referral"} applied)</span>
                   </div>
-                  <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">-₹500</span>
+                  <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">-₹{couponDiscount}</span>
                 </div>
               ) : (
                 <div className="border-b border-[var(--border)] pb-2 text-xs">
@@ -1082,7 +1091,7 @@ export default function UpgradeToProModal({
                           type="text"
                           value={couponInput}
                           onChange={(e) => setCouponInput(e.target.value.toUpperCase().trim())}
-                          placeholder="e.g. ABC500"
+                          placeholder="e.g. ABC200, ABC300, ABC500"
                           className="flex-1 rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-xs font-mono font-bold uppercase tracking-wider outline-none focus:border-[var(--primary)]"
                         />
                         <button

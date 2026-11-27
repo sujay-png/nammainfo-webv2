@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { createAdminClient } from "@/supabase/admin";
+import {
+  formatTierCouponCode,
+  getCouponRewardAmount,
+  isValidCouponTier,
+  type CouponDiscountTier,
+} from "@/lib/coupons/tiers";
 
 export const dynamic = "force-dynamic";
 
@@ -48,18 +54,22 @@ export async function GET() {
       return NextResponse.json({ error: "Forbidden: Not an authorized Partner" }, { status: 403 });
     }
 
-    const { data: coupon, error } = await admin
+    const { data: coupons, error } = await admin
       .from("campaign_coupons")
       .select("*")
       .eq("campaign_manager_id", user.id)
-      .maybeSingle();
+      .order("discount_amount", { ascending: true });
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    const list = coupons || [];
+    const defaultCoupon = list.find((c: any) => Number(c.discount_amount) === 500) || list[0] || null;
+
     return NextResponse.json({
-      coupon: coupon || null,
+      coupons: list,
+      coupon: defaultCoupon,
       managerSlug: profile.slug || profile.username || profile.id,
     });
   } catch (err: any) {
@@ -115,21 +125,28 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    let prefix = (body.prefix || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const rawDiscount = Number(body.discountAmount ?? 500);
+    if (!isValidCouponTier(rawDiscount)) {
+      return NextResponse.json(
+        { error: "Discount tier must be 200, 300, or 500" },
+        { status: 400 }
+      );
+    }
+    const tier: CouponDiscountTier = rawDiscount;
+    const rawClean = (body.prefix || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
+    const basePrefix = rawClean.endsWith(String(tier))
+      ? rawClean.slice(0, -String(tier).length)
+      : rawClean;
 
-    if (!prefix || prefix.length < 2) {
+    if (!basePrefix || basePrefix.length < 2) {
       return NextResponse.json(
         { error: "Coupon prefix must contain at least 2 alphanumeric characters" },
         { status: 400 }
       );
     }
 
-    if (prefix.length > 12) {
-      prefix = prefix.slice(0, 12);
-    }
-
-    // Always append 500
-    const fullCode = prefix.endsWith("500") ? prefix : `${prefix}500`;
+    const fullCode = formatTierCouponCode(basePrefix, tier);
+    const rewardAmount = getCouponRewardAmount(tier);
 
     // Check if code is already taken by someone else
     const { data: existing } = await admin
@@ -145,18 +162,18 @@ export async function POST(req: Request) {
       );
     }
 
-    // Upsert single coupon for this manager
+    // Upsert coupon for this manager & discount tier
     const { data: saved, error: saveErr } = await admin
       .from("campaign_coupons")
       .upsert(
         {
           campaign_manager_id: user.id,
           code: fullCode,
-          discount_amount: 500,
-          reward_amount: 500,
+          discount_amount: tier,
+          reward_amount: rewardAmount,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: "campaign_manager_id" }
+        { onConflict: "campaign_manager_id,discount_amount" }
       )
       .select()
       .single();
@@ -166,10 +183,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: saveErr.message }, { status: 500 });
     }
 
+    const { data: allCoupons } = await admin
+      .from("campaign_coupons")
+      .select("*")
+      .eq("campaign_manager_id", user.id)
+      .order("discount_amount", { ascending: true });
+
     return NextResponse.json({
       success: true,
+      code: saved.code,
       coupon: saved,
-      message: `Coupon code ${fullCode} generated successfully!`,
+      coupons: allCoupons || [saved],
+      message: `₹${tier} off coupon ${fullCode} saved (you earn ₹${rewardAmount} per Pro conversion)!`,
     });
   } catch (err: any) {
     console.error("[Campaign Coupon POST] Exception:", err);

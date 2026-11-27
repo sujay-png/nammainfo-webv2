@@ -30,10 +30,15 @@ export async function GET(request: Request) {
     // 2. Fetch all coupons
     const { data: coupons } = await supabase
       .from("campaign_coupons")
-      .select("campaign_manager_id, code, discount_amount, reward_amount");
+      .select("campaign_manager_id, code, discount_amount, reward_amount")
+      .order("discount_amount", { ascending: true });
 
-    const couponMap = new Map<string, string>();
-    (coupons || []).forEach((c) => couponMap.set(c.campaign_manager_id, c.code));
+    const couponMap = new Map<string, string[]>();
+    (coupons || []).forEach((c) => {
+      const list = couponMap.get(c.campaign_manager_id) || [];
+      list.push(c.code);
+      couponMap.set(c.campaign_manager_id, list);
+    });
 
     // 3. Fetch all referrals
     const { data: allReferrals } = await supabase
@@ -104,7 +109,7 @@ export async function GET(request: Request) {
         businessName: m.business_name || "Business",
         email: m.email || "",
         phone: m.phone || "",
-        couponCode: couponMap.get(m.id) || null,
+        couponCode: couponMap.get(m.id)?.join(", ") || null,
         referralCount: refs.length,
         amountPending: pending,
         amountConverted: converted,

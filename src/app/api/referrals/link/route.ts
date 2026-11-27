@@ -3,6 +3,10 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { createAdminClient } from "@/supabase/admin";
 import { createStaffNotification } from "@/lib/fulfillment/service";
+import {
+  getCouponRewardAmount,
+  parseDiscountFromCouponCode,
+} from "@/lib/coupons/tiers";
 
 export const dynamic = "force-dynamic";
 
@@ -50,21 +54,26 @@ export async function POST(req: Request) {
       business_name?: string | null;
     } | null = null;
     let couponCode: string | null = null;
+    let couponRewardAmount: number | null = null;
 
     const profileCols =
       "id, is_partner, is_campaign_manager, role, business_name, owner_name, username, slug";
 
-    // Check if rawRef is a coupon code ending in 500
-    if (rawRef.toUpperCase().endsWith("500")) {
+    // Check if rawRef is a partner coupon code ending in 200, 300, or 500
+    const couponTier = parseDiscountFromCouponCode(rawRef);
+    if (couponTier) {
       const { data: cpn } = await admin
         .from("campaign_coupons")
-        .select("campaign_manager_id, code")
+        .select("campaign_manager_id, code, discount_amount, reward_amount")
         .eq("code", rawRef.toUpperCase())
         .maybeSingle();
 
       if (cpn) {
         referrer = { id: cpn.campaign_manager_id, is_partner: true, is_campaign_manager: true };
         couponCode = cpn.code;
+        couponRewardAmount =
+          Number((cpn as any).reward_amount) ||
+          getCouponRewardAmount(Number((cpn as any).discount_amount) || couponTier);
       }
     }
 
@@ -189,7 +198,7 @@ export async function POST(req: Request) {
     }
 
     // Determine if ref was a direct coupon or came via profile/card link
-    const isDirectCoupon = Boolean(rawRef.toUpperCase().endsWith("500") && couponCode);
+    const isDirectCoupon = Boolean(couponTier && couponCode);
 
     // 2. Update referee's profile: set referred_by (and only set referred_by_code if they directly used coupon)
     await admin
@@ -214,7 +223,7 @@ export async function POST(req: Request) {
         coupon_code: isDirectCoupon ? couponCode : null,
         source: isDirectCoupon ? "coupon" : "card",
         status: "pending",
-        amount_pending: isDirectCoupon ? 500 : 1000,
+        amount_pending: isDirectCoupon ? (couponRewardAmount ?? 500) : 1000,
         amount_converted: 0,
         amount_transferred: 0,
       });

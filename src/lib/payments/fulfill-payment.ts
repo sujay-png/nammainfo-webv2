@@ -2,6 +2,7 @@ import { createAdminClient } from "@/supabase/admin";
 import { getRazorpayClient } from "@/lib/razorpay";
 import { revalidatePath } from "next/cache";
 import { createFulfillmentJobForOrder, createStaffNotification } from "@/lib/fulfillment/service";
+import { getCouponRewardAmount, parseDiscountFromCouponCode } from "@/lib/coupons/tiers";
 
 /**
  * Applies a successful Razorpay payment to the customer's account.
@@ -186,10 +187,28 @@ export async function fulfillPayment(input: FulfillInput): Promise<FulfillResult
         .eq("referred_user_id", userId)
         .maybeSingle();
 
+      // Lookup coupon reward if a coupon code was applied on checkout or signup
+      const effectiveCouponCode = couponCodeFromOrder || existingRef?.coupon_code || null;
+      let matchedCoupon: { id: string; campaign_manager_id: string; code: string; discount_amount?: number; reward_amount?: number } | null = null;
+      if (effectiveCouponCode) {
+        const { data: cpn } = await admin
+          .from("campaign_coupons")
+          .select("id, campaign_manager_id, code, discount_amount, reward_amount")
+          .eq("code", effectiveCouponCode)
+          .maybeSingle();
+        if (cpn) matchedCoupon = cpn as any;
+      }
+
+      const couponReward = matchedCoupon
+        ? Number(matchedCoupon.reward_amount) ||
+          getCouponRewardAmount(Number(matchedCoupon.discount_amount) || parseDiscountFromCouponCode(matchedCoupon.code) || 500)
+        : effectiveCouponCode
+        ? getCouponRewardAmount(parseDiscountFromCouponCode(effectiveCouponCode) || 500)
+        : 1000;
+
       if (existingRef) {
-        // If coupon applied: referee got ₹500 off, partner gets ₹500.
-        // If NO coupon applied: referee paid full ₹1,999, partner gets ₹1,000!
-        const earnedCommission = couponCodeFromOrder ? 500 : 1000;
+        // Partner reward pool is ₹1,000 minus customer coupon discount (₹800 for ₹200 off, ₹700 for ₹300 off, ₹500 for ₹500 off, ₹1,000 with no coupon)
+        const earnedCommission = effectiveCouponCode ? couponReward : 1000;
         await admin
           .from("referrals")
           .update({
@@ -201,32 +220,24 @@ export async function fulfillPayment(input: FulfillInput): Promise<FulfillResult
             updated_at: now.toISOString(),
           })
           .eq("id", existingRef.id);
-      } else if (couponCodeFromOrder) {
-        const { data: cpn } = await admin
-          .from("campaign_coupons")
-          .select("id, campaign_manager_id, code")
-          .eq("code", couponCodeFromOrder)
-          .maybeSingle();
-
-        if (cpn && cpn.campaign_manager_id !== userId) {
-          await admin.from("referrals").insert({
-            campaign_manager_id: cpn.campaign_manager_id,
-            referred_user_id: userId,
-            coupon_code: cpn.code,
-            source: "coupon",
-            status: "converted",
-            amount_pending: 0,
-            amount_converted: 500,
-            converted_at: now.toISOString(),
-          });
-          await admin
-            .from("profiles")
-            .update({
-              referred_by: cpn.campaign_manager_id,
-              referred_by_code: cpn.code,
-            })
-            .eq("id", userId);
-        }
+      } else if (couponCodeFromOrder && matchedCoupon && matchedCoupon.campaign_manager_id !== userId) {
+        await admin.from("referrals").insert({
+          campaign_manager_id: matchedCoupon.campaign_manager_id,
+          referred_user_id: userId,
+          coupon_code: matchedCoupon.code,
+          source: "coupon",
+          status: "converted",
+          amount_pending: 0,
+          amount_converted: couponReward,
+          converted_at: now.toISOString(),
+        });
+        await admin
+          .from("profiles")
+          .update({
+            referred_by: matchedCoupon.campaign_manager_id,
+            referred_by_code: matchedCoupon.code,
+          })
+          .eq("id", userId);
       }
     } else if (orderType === "renewal") {
       const { data: refRow } = await admin

@@ -231,8 +231,20 @@ export async function GET() {
 
     const withdrawableBalance = Math.max(0, totalConvertedAmount - totalTransferred);
 
-    // Resolve public referral slug (including employee profile path for employee Partners)
-    let managerPublicSlug: string = managerProfile.slug || managerProfile.username || "";
+    // Resolve public referral slug (preferring live profile username / card slug, and employee path for employee Partners)
+    let managerPublicSlug: string = managerProfile.username || managerProfile.slug || "";
+    if (!managerPublicSlug) {
+      const { data: ownCard } = await admin
+        .from("cards")
+        .select("public_slug")
+        .eq("profile_id", user.id)
+        .eq("is_active", true)
+        .limit(1)
+        .maybeSingle();
+      if (ownCard?.public_slug) {
+        managerPublicSlug = ownCard.public_slug;
+      }
+    }
     let employeeDisplayName: string | null = null;
     let isEmployeePartner = managerProfile.account_type === "employee";
 

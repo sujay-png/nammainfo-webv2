@@ -35,12 +35,18 @@ import {
   Bell,
   Maximize2,
   ArrowLeft,
+  Lock,
 } from "lucide-react";
 import { Modal } from "@/admin/shared/ui/Modal";
 import { Badge } from "@/admin/shared/ui/Badge";
 import { Button } from "@/admin/shared/ui/Button";
 import { AdminThemeToggle } from "@/admin/shared/ui/AdminThemeToggle";
 import { formatDate } from "@/admin/shared/lib/formatters";
+import {
+  COUPON_DISCOUNT_TIERS,
+  getCouponRewardAmount,
+  type CouponDiscountTier,
+} from "@/lib/coupons/tiers";
 
 export interface ReferralUser {
   id: string;
@@ -150,13 +156,23 @@ export function PartnerDashboardView() {
   });
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
 
-  // Active coupon
-  const [couponCode, setCouponCode] = useState<string | null>(null);
-  const [couponPrefix, setCouponPrefix] = useState<string>("");
-  const [savingCoupon, setSavingCoupon] = useState<boolean>(false);
-  const [couponMsg, setCouponMsg] = useState<{ text: string; isError?: boolean } | null>(null);
+  // Active coupons by tier (₹200, ₹300, ₹500)
+  const [couponsByTier, setCouponsByTier] = useState<Record<CouponDiscountTier, string | null>>({
+    200: null,
+    300: null,
+    500: null,
+  });
+  const [tierPrefixes, setTierPrefixes] = useState<Record<CouponDiscountTier, string>>({
+    200: "",
+    300: "",
+    500: "",
+  });
+  const [savingTier, setSavingTier] = useState<CouponDiscountTier | null>(null);
+  const [tierMessages, setTierMessages] = useState<
+    Partial<Record<CouponDiscountTier, { text: string; isError?: boolean }>>
+  >({});
   const [copiedLink, setCopiedLink] = useState(false);
-  const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedTier, setCopiedTier] = useState<CouponDiscountTier | null>(null);
 
   // Filters & sorting
   const [searchQuery, setSearchQuery] = useState("");
@@ -268,11 +284,22 @@ export function PartnerDashboardView() {
       });
       setPartnerProfile(refData.manager || null);
 
-      if (couponData.coupon?.code) {
-        setCouponCode(couponData.coupon.code);
-        const prefix = couponData.coupon.code.replace(/500$/, "");
-        setCouponPrefix(prefix);
+      const loadedList: any[] = Array.isArray(couponData.coupons)
+        ? couponData.coupons
+        : couponData.coupon
+        ? [couponData.coupon]
+        : [];
+      const nextCodes: Record<CouponDiscountTier, string | null> = { 200: null, 300: null, 500: null };
+      const nextPrefixes: Record<CouponDiscountTier, string> = { 200: "", 300: "", 500: "" };
+      for (const c of loadedList) {
+        const tier = Number(c?.discount_amount) as CouponDiscountTier;
+        if ((tier === 200 || tier === 300 || tier === 500) && c?.code) {
+          nextCodes[tier] = c.code;
+          nextPrefixes[tier] = String(c.code).replace(new RegExp(`${tier}$`), "");
+        }
       }
+      setCouponsByTier(nextCodes);
+      setTierPrefixes(nextPrefixes);
     } catch (err: any) {
       console.error("[Partner Dashboard] Load error:", err);
       setError(err.message || "Failed to load partner dashboard data");
@@ -481,33 +508,55 @@ export function PartnerDashboardView() {
       });
   }, [referrals, statusFilter, searchQuery, sortBy]);
 
-  // Generate / Update Coupon Code
-  const handleSaveCoupon = async (e: React.FormEvent) => {
+  // Generate / Update Coupon Code for a specific tier (200 | 300 | 500)
+  const handleSaveCoupon = async (tier: CouponDiscountTier, e: React.FormEvent) => {
     e.preventDefault();
-    setCouponMsg(null);
-    const cleanPrefix = couponPrefix.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-    if (!cleanPrefix || cleanPrefix.length < 2) {
-      setCouponMsg({ text: "Please enter at least 2 alphanumeric characters for your prefix.", isError: true });
+    setTierMessages((prev) => ({ ...prev, [tier]: undefined }));
+    const cleanPrefix = (tierPrefixes[tier] || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const basePrefix = cleanPrefix.endsWith(String(tier))
+      ? cleanPrefix.slice(0, -String(tier).length)
+      : cleanPrefix;
+    if (!basePrefix || basePrefix.length < 2) {
+      setTierMessages((prev) => ({
+        ...prev,
+        [tier]: { text: "Enter at least 2 alphanumeric characters before the discount code.", isError: true },
+      }));
       return;
     }
 
-    setSavingCoupon(true);
+    setSavingTier(tier);
     try {
       const res = await fetch("/api/campaign/coupon", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prefix: cleanPrefix }),
+        body: JSON.stringify({ prefix: basePrefix, discountAmount: tier }),
       });
       const data = await res.json();
       if (!res.ok || data.error) {
         throw new Error(data.error || "Failed to save coupon code");
       }
-      setCouponCode(data.code);
-      setCouponMsg({ text: `Partner coupon ${data.code} successfully saved!`, isError: false });
+      const savedCode = data.code || data.coupon?.code;
+      setCouponsByTier((prev) => ({ ...prev, [tier]: savedCode || prev[tier] }));
+      if (savedCode) {
+        setTierPrefixes((prev) => ({
+          ...prev,
+          [tier]: String(savedCode).replace(new RegExp(`${tier}$`), ""),
+        }));
+      }
+      setTierMessages((prev) => ({
+        ...prev,
+        [tier]: {
+          text: data.message || `Coupon ${savedCode} saved!`,
+          isError: false,
+        },
+      }));
     } catch (err: any) {
-      setCouponMsg({ text: err.message || "Failed to update code", isError: true });
+      setTierMessages((prev) => ({
+        ...prev,
+        [tier]: { text: err.message || "Failed to update code", isError: true },
+      }));
     } finally {
-      setSavingCoupon(false);
+      setSavingTier(null);
     }
   };
 
@@ -678,15 +727,15 @@ export function PartnerDashboardView() {
                 <Tag size={15} />
                 <span>Coupon Generator</span>
               </div>
-              {couponCode && (
+              {Object.values(couponsByTier).filter(Boolean).length > 0 && (
                 <span
-                  className={`font-mono text-[9px] font-bold ${
+                  className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-[4px] border ${
                     activeTab === "coupon"
-                      ? "text-[var(--background)] opacity-90"
-                      : "text-emerald-600 dark:text-emerald-400"
+                      ? "border-[var(--background)]/30 bg-[var(--background)] text-[var(--foreground)]"
+                      : "border-[var(--border)] bg-[var(--background)] text-[var(--foreground)]"
                   }`}
                 >
-                  {couponCode}
+                  {Object.values(couponsByTier).filter(Boolean).length}/3
                 </span>
               )}
             </button>
@@ -1304,117 +1353,164 @@ export function PartnerDashboardView() {
           {/* TAB 2: COUPON GENERATOR                                                   */}
           {/* ========================================================================= */}
           {activeTab === "coupon" && (
-            <div className="max-w-2xl space-y-6">
-              {/* Generator Card */}
-              <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-6 shadow-xs space-y-5">
+            <div className="max-w-3xl space-y-6">
+              {/* 3-Tier Generator Card */}
+              <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-5 md:p-6 shadow-xs space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 border-b border-[var(--border)] pb-4">
+                  <div>
+                    <h3 className="font-headline text-base font-bold text-[var(--foreground)]">
+                      Partner Discount Coupons
+                    </h3>
+                    <p className="text-xs text-[var(--muted-foreground)] mt-1 leading-relaxed">
+                      Create up to three coupon codes for different customer discounts (<strong>₹200</strong>, <strong>₹300</strong>, or <strong>₹500</strong> off). Customer discount and your Pro conversion reward always total <strong>₹1,000</strong>.
+                    </p>
+                  </div>
+                  <span className="shrink-0 self-start rounded-[4px] border border-[var(--border)] bg-[var(--background)] px-2 py-1 font-mono text-[10px] font-semibold uppercase text-[var(--muted-foreground)]">
+                    {Object.values(couponsByTier).filter(Boolean).length} / 3 Active
+                  </span>
+                </div>
+
+                <div className="space-y-4">
+                  {COUPON_DISCOUNT_TIERS.map((tier) => {
+                    const activeCode = couponsByTier[tier];
+                    const prefixVal = tierPrefixes[tier] || "";
+                    const rewardAmt = getCouponRewardAmount(tier);
+                    const isSaving = savingTier === tier;
+                    const msg = tierMessages[tier];
+
+                    return (
+                      <form
+                        key={tier}
+                        onSubmit={(e) => handleSaveCoupon(tier, e)}
+                        className="rounded-[5px] border border-[var(--border)] bg-[var(--background)] p-4 space-y-3"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-[4px] border border-[var(--border)] bg-[var(--card)] px-2 py-0.5 font-mono text-[11px] font-bold text-[var(--foreground)]">
+                              ₹{tier} OFF
+                            </span>
+                            <span className="text-xs font-medium text-[var(--foreground)]">
+                              Customer saves ₹{tier}
+                            </span>
+                            <span className="text-xs text-[var(--muted-foreground)]">•</span>
+                            <span className="font-mono text-xs font-semibold text-[var(--foreground)]">
+                              You earn ₹{rewardAmt}
+                            </span>
+                          </div>
+
+                          {activeCode && (
+                            <div className="flex items-center gap-1.5">
+                              <span className="rounded-[4px] border border-[var(--border)] bg-[var(--card)] px-2 py-0.5 font-mono text-xs font-bold tracking-wider text-[var(--foreground)]">
+                                {activeCode}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(activeCode);
+                                  setCopiedTier(tier);
+                                  setTimeout(() => setCopiedTier((cur) => (cur === tier ? null : cur)), 2000);
+                                }}
+                                className="inline-flex items-center gap-1 rounded-[4px] border border-[var(--border)] bg-[var(--card)] px-2 py-0.5 text-[11px] font-semibold text-[var(--foreground)] hover:bg-[var(--accent)] cursor-pointer"
+                              >
+                                {copiedTier === tier ? <Check size={11} /> : <Copy size={11} />}
+                                <span>{copiedTier === tier ? "Copied" : "Copy"}</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                          <div className="flex-1 flex items-center rounded-[5px] border border-[var(--border)] bg-[var(--card)] focus-within:border-[var(--foreground)]">
+                            <input
+                              type="text"
+                              required
+                              maxLength={12}
+                              value={prefixVal}
+                              onChange={(e) => {
+                                const cleaned = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+                                setTierPrefixes((prev) => ({ ...prev, [tier]: cleaned }));
+                              }}
+                              placeholder="PREFIX"
+                              aria-label={`Prefix for ₹${tier} off coupon`}
+                              className="w-full bg-transparent px-3 py-2 text-sm font-mono font-bold uppercase tracking-wider text-[var(--foreground)] placeholder-[var(--muted-foreground)] outline-none"
+                            />
+                            <span className="border-l border-[var(--border)] bg-[var(--background)] px-3 py-2 font-mono font-bold text-sm text-[var(--muted-foreground)] select-none rounded-r-[4px]">
+                              {tier}
+                            </span>
+                          </div>
+
+                          <button
+                            type="submit"
+                            disabled={isSaving || !prefixVal.trim()}
+                            className="sm:w-32 rounded-[5px] bg-[var(--foreground)] text-[var(--background)] px-4 py-2 text-xs font-semibold hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition inline-flex items-center justify-center gap-1.5"
+                          >
+                            {isSaving && <Loader2 size={13} className="animate-spin" />}
+                            <span>{activeCode ? "Update" : "Generate"}</span>
+                          </button>
+                        </div>
+
+                        {msg && (
+                          <div
+                            className={`rounded-[4px] px-3 py-2 text-xs font-medium border ${
+                              msg.isError
+                                ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/25"
+                                : "bg-[var(--card)] text-[var(--foreground)] border-[var(--border)]"
+                            }`}
+                          >
+                            {msg.text}
+                          </div>
+                        )}
+                      </form>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Direct Profile Link Card (Locked — Non-Editable) */}
+              <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-5 md:p-6 shadow-xs space-y-4">
                 <div>
-                  <h3 className="font-headline text-base font-bold text-[var(--foreground)]">
-                    Create or Update Your Partner Coupon Code
+                  <h3 className="font-headline text-sm font-bold text-[var(--foreground)]">
+                    Your Namma Info Profile Link
                   </h3>
-                  <p className="text-xs text-[var(--muted-foreground)] mt-1 leading-relaxed">
-                    You can create one official coupon code for your partner account. All partner codes end in <strong>500</strong>. When referees apply your code at checkout, they receive ₹500 off their Pro upgrade and you receive ₹500.
+                  <p className="text-xs text-[var(--muted-foreground)] mt-0.5 leading-relaxed">
+                    Locked to your own Namma Info profile. When someone taps your card or opens this profile link and clicks <em>&quot;Create your own Namma Info profile&quot;</em>, they are automatically credited under your referrals.
                   </p>
                 </div>
 
-                <form onSubmit={handleSaveCoupon} className="space-y-4">
-                  <div>
-                    <label className="block text-[11px] font-mono uppercase font-semibold text-[var(--muted-foreground)] mb-1.5">
-                      Create Your Code
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <div className="relative flex-1 flex items-center rounded-[5px] border border-[var(--border)] bg-[var(--background)]">
-                        <input
-                          type="text"
-                          required
-                          value={couponPrefix}
-                          onChange={(e) => setCouponPrefix(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
-                          placeholder="PREFIX"
-                          className="w-full bg-transparent px-3 py-2 text-sm font-mono font-bold uppercase tracking-wider text-[var(--foreground)] outline-none"
-                        />
-                        <span className="pr-3 font-mono font-bold text-sm text-[var(--muted-foreground)] select-none">
-                          500
-                        </span>
-                      </div>
-                      <button
-                        type="submit"
-                        disabled={savingCoupon || !couponPrefix.trim()}
-                        className="rounded-[5px] bg-[var(--foreground)] text-[var(--background)] px-4 py-2 text-xs font-semibold hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-xs"
-                      >
-                        {savingCoupon ? <Loader2 size={14} className="animate-spin" /> : couponCode ? "Update Code" : "Generate Code"}
-                      </button>
-                    </div>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  <div
+                    className="flex flex-1 items-center gap-2 rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] opacity-90 select-all overflow-x-auto"
+                    aria-readonly="true"
+                  >
+                    <Lock size={12} className="shrink-0 text-[var(--muted-foreground)]" />
+                    <span className="truncate">{publicReferralLink}</span>
                   </div>
-
-                  {couponMsg && (
-                    <div
-                      className={`rounded-[4px] p-3 text-xs font-medium border ${
-                        couponMsg.isError
-                          ? "bg-rose-500/10 text-rose-500 border-rose-500/20"
-                          : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
-                      }`}
-                    >
-                      {couponMsg.text}
-                    </div>
-                  )}
-                </form>
-
-                {couponCode && (
-                  <div className="pt-4 border-t border-[var(--border)] flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <span className="text-[10px] font-mono uppercase text-[var(--muted-foreground)] font-semibold block">
-                        Your Active Code:
-                      </span>
-                      <span className="font-mono text-base font-bold text-emerald-600 dark:text-emerald-400 tracking-wider">
-                        {couponCode}
-                      </span>
-                    </div>
-
+                  <div className="flex items-center gap-2 shrink-0">
                     <button
                       type="button"
                       onClick={() => {
-                        navigator.clipboard.writeText(couponCode);
-                        setCopiedCode(true);
-                        setTimeout(() => setCopiedCode(false), 2000);
+                        navigator.clipboard.writeText(publicReferralLink);
+                        setCopiedLink(true);
+                        setTimeout(() => setCopiedLink(false), 2000);
                       }}
-                      className="inline-flex items-center gap-1.5 rounded-[4px] border border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-xs font-semibold text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors cursor-pointer"
+                      className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 rounded-[5px] bg-[var(--foreground)] text-[var(--background)] px-3.5 py-2 text-xs font-semibold hover:opacity-90 cursor-pointer transition shadow-xs"
                     >
-                      {copiedCode ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
-                      <span>{copiedCode ? "Copied Code" : "Copy Code"}</span>
+                      {copiedLink ? <Check size={13} /> : <Copy size={13} />}
+                      <span>{copiedLink ? "Copied" : "Copy Link"}</span>
                     </button>
+                    {partnerSlug && (
+                      <a
+                        href={publicReferralLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center rounded-[5px] border border-[var(--border)] bg-[var(--background)] p-2 text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors"
+                        title="Open your public profile"
+                        aria-label="Open your public profile"
+                      >
+                        <ExternalLink size={13} />
+                      </a>
+                    )}
                   </div>
-                )}
-              </div>
-
-              {/* Direct Referral Link Card */}
-              <div className="rounded-[5px] border border-[var(--border)] bg-[var(--card)] p-6 shadow-xs space-y-4">
-                <div>
-                  <h3 className="font-headline text-sm font-bold text-[var(--foreground)]">
-                    Share Your Public Profile Link
-                  </h3>
-                  <p className="text-xs text-[var(--muted-foreground)] mt-0.5 leading-relaxed">
-                    When someone taps your card or opens your link and clicks <em>"Create your own Namma Info profile"</em>, they are automatically placed under your referral.
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={publicReferralLink}
-                    className="flex-1 rounded-[5px] border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs font-mono text-[var(--foreground)] outline-none select-all"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(publicReferralLink);
-                      setCopiedLink(true);
-                      setTimeout(() => setCopiedLink(false), 2000);
-                    }}
-                    className="inline-flex items-center gap-1.5 rounded-[5px] bg-[var(--foreground)] text-[var(--background)] px-3.5 py-2 text-xs font-semibold hover:opacity-90 cursor-pointer transition shadow-xs"
-                  >
-                    {copiedLink ? <Check size={13} /> : <Copy size={13} />}
-                    <span>{copiedLink ? "Copied" : "Copy Link"}</span>
-                  </button>
                 </div>
               </div>
             </div>

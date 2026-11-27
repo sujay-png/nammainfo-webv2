@@ -28,12 +28,14 @@ export async function GET(
       return NextResponse.json({ error: "Campaign manager not found" }, { status: 404 });
     }
 
-    // 2. Fetch coupon
-    const { data: coupon } = await supabase
+    // 2. Fetch coupons (up to 3 tiers: ₹200, ₹300, ₹500)
+    const { data: coupons } = await supabase
       .from("campaign_coupons")
       .select("code, discount_amount, reward_amount")
       .eq("campaign_manager_id", managerId)
-      .maybeSingle();
+      .order("discount_amount", { ascending: true });
+    const couponList = coupons || [];
+    const coupon = couponList[0] || null;
 
     // 3. Fetch referrals for this manager
     const { data: referrals, error: refErr } = await supabase
@@ -143,7 +145,8 @@ export async function GET(
         phone: manager.phone || "",
         address: manager.address || "",
         createdAt: manager.created_at,
-        couponCode: coupon?.code || null,
+        couponCode: couponList.map((c: any) => c.code).join(", ") || null,
+        coupons: couponList,
       },
       stats: {
         referralCount: enrichedReferrals.length,

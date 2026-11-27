@@ -9,6 +9,7 @@ import {
   calculateTeamAddonCost,
   calculateRenewalCost,
 } from "@/lib/pricing";
+import { parseDiscountFromCouponCode } from "@/lib/coupons/tiers";
 
 export async function POST(req: Request) {
   try {
@@ -97,19 +98,20 @@ export async function POST(req: Request) {
         cardQuantity: res.cardQuantity,
       };
 
-      // Referral Discount check: ₹500 off ONLY if referee explicitly entered a valid coupon code ending in 500
+      // Referral Discount check: ₹200 / ₹300 / ₹500 off if referee entered a valid partner coupon code
       const requestedCoupon = (couponCode || profile.referred_by_code || "").trim().toUpperCase();
+      const couponTier = parseDiscountFromCouponCode(requestedCoupon);
 
-      if (requestedCoupon && requestedCoupon.endsWith("500")) {
+      if (requestedCoupon && couponTier) {
         const { data: cpn } = await supabase
           .from("campaign_coupons")
-          .select("id, code, campaign_manager_id")
+          .select("id, code, campaign_manager_id, discount_amount")
           .eq("code", requestedCoupon)
           .maybeSingle();
 
         if (cpn && cpn.campaign_manager_id !== user.id) {
           appliedCoupon = cpn;
-          discountAmount = 500;
+          discountAmount = Number((cpn as any).discount_amount) || couponTier;
         }
       }
 
